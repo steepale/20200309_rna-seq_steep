@@ -1,6 +1,6 @@
 Examination of Rat RNA-Seq Data: Examine Batch Effects
 ================
-Alec
+Alec Steep and Jiayu Zhang
 20200320
 
 # Goals of Analysis
