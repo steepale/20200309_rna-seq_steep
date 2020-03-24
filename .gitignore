@@ -5,3 +5,7 @@
 /.Rhistory
 /merged/*
 /raw/*
+.Rproj.user
+.Rhistory
+*.Rdata
+*.Rproj
