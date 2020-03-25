@@ -5,3 +5,8 @@
 /.Rhistory
 /merged/*
 /raw/*
+.Rproj.user
+.Rhistory
+*.Rdata
+*.Rproj
+/._20200317_qc-rna-seq-phase1_zhang.Rmd

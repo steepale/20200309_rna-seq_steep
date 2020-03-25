@@ -1,0 +1,82 @@
+---
+title: "20200317_qc-rna-seq"
+author: "Jiayu Zhang"
+date: "3/18/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+> script based on: tidyverse, DESeq2, ggplot2, ggfortify, devtools  
+> need import of Rdata from ../../../Data/phenotype/merged/merged_dmaqc_data2019-10-13.Rdata  
+
+
+#### QC by Stanford  
+> DESeq2::varianceStabilizingTransformation to the filtered counts matrix  
+
+**data import**  
+take Stanford batch 1 as an example:  
+
+```{r}
+# gene count 
+stf_b1_gc = read.table("../../../Data/rna-seq/stanford/batch_1/summary/rsem_genes_count.txt", header = T, row.names = 1, na.strings = "NA", check.names = F)
+
+# meta info
+stf_b1_meta = read.csv("../../../Data/rna-seq/stanford/batch_1/metadata/sample_metadata_20191010.csv", header = T, row.names = 1, na.strings = "NA", check.names = F)
+
+# feature info
+stf_b1_features = read.csv("../../../Data/rna-seq/stanford/batch_1/summary/rnaseq_qc_report.csv", header = T, row.names = 1, na.strings = "NA", check.names = F)
+
+# phenotype info (for now I just used the sex info)
+merged_dmaqc_data_sex = data.frame(cbind(merged_dmaqc_data$viallabel, merged_dmaqc_data$animal.registration.sex), row.names = 1)
+
+```
+  
+  **data filter**  
+  First narrow down the gc input to Tissue == Liver  
+  Second remove lowly expressed genes **not sure about order of 1 and 2 here, considering only 2 control group liver samples**
+```{r}
+# pick the samples that are from Liver 
+liver_id = row.names(stf_b1_meta[stf_b1_meta$Tissue == "Liver",])
+
+# pick the genes that appears more than 10 times on average in ref group
+liver_ctrl_id = row.names(stf_b1_meta[stf_b1_meta$Sample_category == "ref"& stf_b1_meta$Tissue == "Liver",])
+stf_b1_gc_liver_ctrl = stf_b1_gc[, liver_ctrl_id]
+good_gene_names = row.names(stf_b1_gc_liver_ctrl[rowMeans(stf_b1_gc_liver_ctrl) >= 10, ])
+
+stf_b1_gc_liver = stf_b1_gc[good_gene_names, liver_id]
+stf_b1_meta_liver = stf_b1_meta[liver_id, ]
+
+# same to the sex info
+merged_dmaqc_data_sex_liver = merged_dmaqc_data_sex[liver_id,, drop = F]
+```
+  
+  Third apply the DEseq2 transformation to the filtered counts matrix  
+```{r}
+# the vst function needs an input of matrix of all integers
+stf_b1_gc_liver_mt = as.matrix(stf_b1_gc_liver)
+storage.mode(stf_b1_gc_liver_mt) = "integer"
+stf_b1_gc_liver_vst = varianceStabilizingTransformation(stf_b1_gc_liver_mt)
+
+# to make a n*p matrix 
+stf_b1_gc_liver_vst = t(stf_b1_gc_liver_vst)
+```
+  
+  **PCA**
+  **not sure if to PCA gene counts**  
+```{r}
+stf_b1_gc_liver_pca = prcomp(stf_b1_gc_liver_vst, rank. = 11)
+summary(stf_b1_gc_liver_pca)
+```
+  Plot
+  
+```{r}
+autoplot(stf_b1_gc_liver_pca, data = merged_dmaqc_data_sex_liver, colour = "X2")
+```
+```{r}
+autoplot(stf_b1_gc_liver_pca, data = stf_b1_meta_liver, colour = "Sample_category")
+```
+  
+  
