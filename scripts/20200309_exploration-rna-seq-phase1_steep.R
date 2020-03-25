@@ -1,10 +1,14 @@
 #'---
-#' title: "Examination of Rat RNA-Seq Data: Examine Batch Effects"
-#' author: "Alec Steep and Jiayu Zhang"
+#' title: "PASS1A (Rat) RNA-Seq Data: Batch Effects"
+#' author: "Alec Steep and Jiayu Zhang" 
 #' date: "`r format.Date( Sys.Date(), '%Y%m%d' )`"
-#' output: 
+#' output:
+#'     html_document:
+#'         code_folding: hide
+#'         toc: true
+#'         highlight: zenburn
 #'     github_document: default
-#'     pdf_document: default
+#'     
 #'---
 
 #+ setup, include=FALSE
@@ -13,8 +17,14 @@ knitr::opts_chunk$set(warning = FALSE)
 knitr::opts_chunk$set(message = FALSE)
 knitr::opts_chunk$set(cache = FALSE)
 
-#' # Goals of Analysis
+#' ## Goals of Analysis
 #' * TODO: Add Step-by-step goals of analysis
+#' * Examine if data demonstrate technical batch fffects:
+#'     * Sequencing batch (sequence date and location)
+#' * Examine if data demonstrate biological batch effects:
+#'     * Influence from time of day and circadian rhythm
+#'     * Influence from feeding schedules
+#'     
 #' 
 #' ## Setup the Environment
 
@@ -37,10 +47,9 @@ WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
 pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2",
                 "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr",
                 "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt","feather",
-                "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms")
+                "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel")
 lapply(pacs...man, FUN = function(X) {
-        do.call("library", list(X)) 
-})
+        do.call("library", list(X)) })
 
 ############################################################
 ##### Functions ############################################
@@ -79,13 +88,11 @@ f_pmap_aslist <- function(df) {
 ################################################################################
 
 #' ## Load & Clean Data
-#' ##### Data Files to Load:
+#' ##### Data files to load:
 #' * RNA-Seq from Mt. Sanai
-#'     * 3 batches
-#'     * Metadata
+#'     * 3 sequencing batches & metadata
 #' * RNA-Seq from Stanford
-#'     * 2 Batches
-#'     * Metadata
+#'     * 2 sequencing batches & metadata
 
 #+ Load the Data
 
@@ -101,37 +108,108 @@ sanai_1 <- read.table(file = paste0(WD,'/sinai/batch_1/summary/featureCounts.txt
                       header = TRUE, sep = '\t', check.names = FALSE)
 # Sanai batch 2 read counts (320 samples)
 sanai_2 <- read.table(file = paste0(WD,'/sinai/batch_2/summary/featureCounts.txt'), 
-                      header = TRUE, sep = '\t', check.names = FALSE) %>% as_tibble()
+                      header = TRUE, sep = '\t', check.names = FALSE)
 # Sanai batch 3 read counts (80 samples)
 sanai_3 <- read.table(file = paste0(WD,'/sinai/batch_3/summary/featureCounts.txt'), 
-                      header = TRUE, sep = '\t', check.names = FALSE) %>% as_tibble()
+                      header = TRUE, sep = '\t', check.names = FALSE)
 
 # Sanai batch 1 meta data
 sanai_meta_1 <-  read.table(file = paste0(WD,'/sinai/batch_1/metadata/sample_metadata_20191010.csv'), 
                             header = TRUE, sep = ',', check.names = FALSE)
 # Sanai batch 2 meta data
 sanai_meta_2 <-  read.table(file = paste0(WD,'/sinai/batch_2/metadata/sample_metadata_20191010.csv'), 
-                            header = TRUE, sep = ',', check.names = FALSE) %>% as_tibble()
+                            header = TRUE, sep = ',', check.names = FALSE)
 # Sanai batch 3 meta data
 sanai_meta_3 <-  read.table(file = paste0(WD,'/sinai/batch_3/metadata/sample_metadata_20191010.csv'), 
-                            header = TRUE, sep = ',', check.names = FALSE) %>% as_tibble()
+                            header = TRUE, sep = ',', check.names = FALSE)
 
 # Stanford RNASeq
 ###################################
 
-# Sanford batch 1 read counts (320 samples)
+# Stanford batch 1 read counts (320 samples)
 sford_1 <- read.table(file = paste0(WD,'/stanford/batch_1/summary/rsem_genes_count.txt'), 
-                      header = TRUE, sep = '\t', check.names = FALSE) %>% as_tibble()
-# Sanford batch 2 read counts (320 samples)
+                      header = TRUE, sep = '\t', check.names = FALSE)
+# Stanford batch 2 read counts (320 samples)
 sford_2 <- read.table(file = paste0(WD,'/stanford/batch_2/summary/featureCounts.txt'), 
-                      header = TRUE, sep = '\t', check.names = FALSE) %>% as_tibble()
+                      header = TRUE, sep = '\t', check.names = FALSE)
 
-# Sanford batch 1 meta data
+# Stanford batch 1 meta data
 sford_meta_1 <-  read.table(file = paste0(WD,'/stanford/batch_1/metadata/sample_metadata_20191010.csv'), 
-                            header = TRUE, sep = ',', check.names = FALSE) %>% as_tibble()
-# Sanford batch 2 meta data
+                            header = TRUE, sep = ',', check.names = FALSE)
+# Stanford batch 2 meta data
 sford_meta_2 <-  read.table(file = paste0(WD,'/stanford/batch_2/metadata/sample_metadata_20191010.csv'), 
-                            header = TRUE, sep = ',', check.names = FALSE) %>% as_tibble()
+                            header = TRUE, sep = ',', check.names = FALSE)
+# Determine sequencing location and batch (batch by date)
+#str(sford_meta_1)
+#str(sford_meta_2)
+#str(sanai_meta_3)
+
+# Location under GET_site variable
+#summary(sford_meta_2$GET_site)
+#summary(sford_meta_2$GET_site)
+#summary(sanai_meta_1$GET_site)
+#summary(sanai_meta_2$GET_site)
+#summary(sanai_meta_3$GET_site)
+
+# Date (batch) under Seq_date variable
+#unique(sford_meta_1$Seq_date)
+#unique(sford_meta_2$Seq_date)
+#unique(sanai_meta_1$Seq_date)
+#unique(sanai_meta_2$Seq_date)
+#unique(sanai_meta_3$Seq_date)
+
+# Are the combination of these values unique?
+#sford_meta_1 %>% 
+#        select(vial_label, GET_site, Seq_date) %>%
+#        unique() %>% dim()
+#sford_meta_2 %>% 
+#        select(vial_label, GET_site, Seq_date) %>%
+#        unique() %>% dim()
+#sanai_meta_1 %>% 
+#        select(vial_label, GET_site, Seq_date) %>%
+#        unique() %>% dim()
+#sanai_meta_2 %>% 
+#        select(vial_label, GET_site, Seq_date) %>%
+#        unique() %>% dim()
+#sanai_meta_3 %>% 
+#        select(vial_label, GET_site, Seq_date) %>%
+#        unique() %>% dim()
+
+# Combine the Stanford and Mt. Sanai Data
+##########################################
+# Count Matrixes
+
+# Add custom annotation to column names
+colnames(sanai_1) <- paste0(colnames(sanai_1),'_SN1')
+colnames(sanai_2) <- paste0(colnames(sanai_2),'_SN2')
+colnames(sanai_3) <- paste0(colnames(sanai_3),'_SN3')
+colnames(sford_1) <- paste0(colnames(sford_1),'_SF1')
+colnames(sford_2) <- paste0(colnames(sford_2),'_SF2')
+sanai_meta_1$sample_key <- paste0(sanai_meta_1$vial_label, '_SN1')
+sanai_meta_2$sample_key <- paste0(sanai_meta_2$vial_label, '_SN2')
+sanai_meta_3$sample_key <- paste0(sanai_meta_3$vial_label, '_SN3')
+sford_meta_1$sample_key <- paste0(sford_meta_1$vial_label, '_SF1')
+sford_meta_2$sample_key <- paste0(sford_meta_2$vial_label, '_SF2')
+
+# Combine counts
+all.data.m <- cbind(sanai_1[,-1], sanai_2[,-1], sanai_3[,-1], sford_1[,-1], sford_2[,-1] ) %>% as.matrix()
+rownames(all.data.m) <- sanai_1[,1]
+# Convert counts to integers
+mode(all.data.m) <- "integer"
+
+# Combine metadata (convert factors to characters to prevent error)
+sanai_meta_1 <- data.frame(lapply(sanai_meta_1, as.character), stringsAsFactors=FALSE)
+sanai_meta_2 <- data.frame(lapply(sanai_meta_2, as.character), stringsAsFactors=FALSE)
+sanai_meta_3 <- data.frame(lapply(sanai_meta_3, as.character), stringsAsFactors=FALSE)
+sford_meta_1 <- data.frame(lapply(sford_meta_1, as.character), stringsAsFactors=FALSE)
+sford_meta_2 <- data.frame(lapply(sford_meta_2, as.character), stringsAsFactors=FALSE)
+meta <- bind_rows(sanai_meta_1, sanai_meta_2, sanai_meta_3, sford_meta_1, sford_meta_2)
+
+# Double check unique values
+#dim(meta)
+#meta %>% 
+#        select(vial_label, GET_site, Seq_date) %>%
+#        unique() %>% dim()
 
 # General Phenotype Data
 ##################################
@@ -141,7 +219,7 @@ gen_pheno <- read.table(file = pheno_file, header = TRUE, sep = '\t', check.name
 
 # Adjust column objects
 ########################
-sford_meta_1$vial_label <- as.factor(sford_meta_1$vial_label)
+meta$vial_label <- as.factor(meta$vial_label)
 
 # Adjust column objects
 ########################
@@ -202,7 +280,7 @@ gen_pheno <- gen_pheno %>%
                                  animal.registration.sex == '2' ~ 'Male'))
 gen_pheno$animal.registration.sex <- as.factor(gen_pheno$animal.registration.sex)
 
-#' # Incorporate Annotation from the phenotypic data
+#' ## Incorporate Annotation from Phenotypic Data
 
 #+ Incorporate Pheno
 ################################################################################
@@ -212,27 +290,60 @@ gen_pheno$animal.registration.sex <- as.factor(gen_pheno$animal.registration.sex
 # Replace the name of the vial label column (for sake of join)
 names(gen_pheno) <- str_replace(names(gen_pheno), 'viallabel', 'vial_label')
 
-# Perform a left join to incorporate phenotypic information
-status <- left_join(sford_meta_1, gen_pheno, by = 'vial_label') %>% as.data.frame()
+# To investigate if the "vial_label" key is indeed unique
+#meta$vial_label %>% length()
+#meta$vial_label %>% unique %>% length()
+#gen_pheno$vial_label %>% length()
+#gen_pheno$vial_label %>% unique %>% length()
 
-# Create a counts matrix
-sford_1 <- sford_1 %>% as.data.frame()
-row.names(sford_1) <- sford_1$gene_id
-all.data <- sford_1 %>% select(-gene_id)
-# Convert counts to integers
-all.data.m <- as.matrix(all.data)
-mode(all.data.m) <- "integer"
+# Perform a left join to incorporate phenotypic information
+status <- left_join(meta, gen_pheno, by = 'vial_label') %>% as.data.frame()
+#dim(status)
+
+# Adjust objects in columns as needed
+
+# Create new columns
+status <- status %>% 
+        mutate(Seq_batch = 
+                       case_when((GET_site == 'Stanford' & Seq_date == '190426') ~ "Stanford_1",
+                                 (GET_site == 'Stanford' & Seq_date == '190703') ~ "Stanford_2",
+                                 (GET_site == 'MSSM' & Seq_date == '190409') ~ "MSSM_1",
+                                 (GET_site == 'MSSM' & Seq_date == '190626') ~ "MSSM_2",
+                                 (GET_site == 'MSSM' & Seq_date == '190723') ~ "MSSM_3")
+               )
+#table(status$Seq_batch)
+
+# To factors
+factor_cols <- c("sample_key",
+                 "Seq_batch")
+for(fc in factor_cols){
+        status[[fc]] <- as.factor(status[[fc]])
+}
 
 # "It is absolutely critical that the columns of the count matrix and the rows of the 
 # column data (information about samples) are in the same order. DESeq2 will not make 
 # guesses as to which column of the count matrix belongs to which row of the column data, 
 # these must be provided to DESeq2 already in consistent order." ~ Mike Love
-rownames(status) <- status$vial_label
-all(rownames(status) %in% colnames(all.data.m))
-all(rownames(status) == colnames(all.data.m))
+
+# TODO: Come back and figure out about missing samples and annotation
+
+# Make sure that all values in status "sample_key" are unique
+#status$sample_key %>% length()
+#status$sample_key %>% unique %>% length()
+# Make sure that all columns in counts matrix are unique
+#colnames(all.data.m) %>% length()
+#colnames(all.data.m) %>% unique %>% length()
+
+rownames(status) <- status$sample_key
+#all(rownames(status) %in% colnames(all.data.m))
+#all(colnames(all.data.m) %in% rownames(status))
+#all(rownames(status) == colnames(all.data.m))
 all.data.m <- all.data.m[, rownames(status)]
+#' #### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
 all(rownames(status) == colnames(all.data.m))
 
+#' #### Data can easily be formatted for BioJupies if desired
+#' #+ BioJupies
 ##########################################################################
 ############ Annotate Data for BioJupies #################################
 ##########################################################################
@@ -249,11 +360,14 @@ all(rownames(status) == colnames(all.data.m))
 #write.table(biojupes, file = paste0('./data/',date,'_biojupiesmatrix_steep.txt'), quote = FALSE, row.names = FALSE, sep = '\t')
 ##########################################################################
 
-#' ## PCA Analysis
-#' TODO: Generate a summary of the inferences from PCA.
+#' ## PCA Visualization of Sequencing Batches (Unsupervised)
+#' TODO: Generate a summary of major inferences
 #' 
 
-#+ PCA Analysis (Unsupervised model)
+#+ PCA Sequencing Batches (Unsupervised)
+##########################################################################
+############ PCA Sequencing Batches (Unsupervised) #######################
+##########################################################################
 
 # Perform unsupervised clustering
 # Build model
@@ -270,9 +384,10 @@ dds <- DESeqDataSetFromMatrix(countData = count_data,
 # Filter genes with average count of 10 or less.
 # Reasoning from:
 #citation("PROPER")
-dds
+#dds
 keep <- rowSums(counts(dds))/ncol(dds) >= 10
 dds <- dds[keep,]
+#' #### Summary of counts and annotation data in a DESeqDataSet
 dds
 
 dds <- estimateSizeFactors(dds)
@@ -293,15 +408,156 @@ counts$genename <- mapIds(org.Rn.eg.db, counts$ensembl, "GENENAME", "ENSEMBL")
 counts$go <- mapIds(org.Rn.eg.db, counts$ensembl, "GO", "ENSEMBL")
 counts$path <- mapIds(org.Rn.eg.db, counts$ensembl, "PATH", "ENSEMBL")
 
-#' ### Primary variable of interest, unsupervised
-#' Let's examine our primary dichotomous relationship of interest--exercise vs control. How well does this relationship explain the variance in our data? Are there other factors influencing our data?
-names(status)
+#' #### Here We examine all samples by batch and tissue. In our experience, if there is no batch effect, then samples should cluster by tissue type. However, if samples cluster by "batch," which we define as sequencing date and location, then a batch effect might be occurring. 
+#' 
+#' #### When we examine groups by tissue, it's difficult to distinguish tissues colors, but it seems like mutliple tissues are represented in different clusters.
+DESeq2::plotPCA(rld, intgroup ="Tissue") +
+        guides(color=guide_legend(title="Tissues"))
+#' 
+#' #### When we visualize sequencing batches see that Stanford batch 1 is significantly isolated.
+DESeq2::plotPCA(rld, intgroup ="Seq_batch") +
+        guides(color=guide_legend(title="Batches"))
 
-# PCA Analysis (tissue)
-# Examine the Distribution of male and female samples in Liver
-rld.sub <- rld[ , (rld$Tissue %in% c("Liver") & 
-                           rld$animal.registration.sex %in% c("Female")) ]
+#' #### It's possible that certain tissues were isolated in certain batches. Let's examine what tissues were sequenced in respective batches.
 
-# Examine groups by exercise
-DESeq2::plotPCA(rld.sub, intgroup ="animal.key.anirandgroup") +
-        guides(color=guide_legend(title="Group"))
+# Create a contingency table of Tissues sequenced by batch
+ctable <- status %>%
+        select(Seq_batch,Tissue) %>% 
+        table() %>% as.data.frame()
+
+#' #### This balloon plot demonstrates that sample tissue types were not evenly distributed across batches of RNASeq data. The overlap between batches and tissues is far from ideal. Size of dots and color of dots demonstrate the same attribute: frequency.
+#' 
+# Create a balloon plot
+theme_set(theme_pubr())
+ggballoonplot(ctable, fill = "value") +
+        scale_fill_viridis_c(option = "C") +
+        ggtitle("Tissue Samples Distributed Across Sequencing Batches")
+
+#' #### Tissue types sequenced across multiple batches include:
+#' * Gastrocnemius
+#' * Heart
+#' * Kidney
+#' * Lung
+
+ctable %>% 
+        filter(Tissue %in% c("Gastrocnemius","Heart","Kidney","Lung")) %>%
+        ggballoonplot(fill = "value") + 
+        scale_fill_viridis_c(option = "C") +
+        ggtitle("Tissue Samples Distributed Across Sequencing Batches")
+
+#' #### Some of these above samples are "reference samples" sequenced across batches
+#' Note: Notice how the maximum frequency has dramatically decreased but the circle size has not.
+ref_table <- status %>%
+        filter(Sample_category == 'ref') %>%
+        select(Seq_batch,Tissue) %>% 
+        table() %>% as.data.frame()
+ref_table %>% 
+        ggballoonplot(fill = "value") + 
+        scale_fill_viridis_c(option = "C") +
+        ggtitle("Reference Sample Sequence Distribution Across Batches")
+
+#' #### We examine a PCA plot of **only** samples with tissues represented across mutliple batches.
+#' 
+#' ##### The tissue types in which samples cluster by batch:
+#' * Gastrocnemius
+#' 
+#' ##### The tissue types in which samples cluster by tissue:
+#' * Heart
+#' * Kidney
+#' * Lung
+rld.sub <- rld[ , (rld$Tissue %in% c("Gastrocnemius","Heart","Kidney","Lung")) ]
+pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("Tissue","Seq_batch"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=Seq_batch, shape=Tissue)) +
+        geom_point(size=3) +
+        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        coord_fixed() +
+        ggtitle("Tissues Sequenced Across More than One Batch")
+
+#' #### Gastrocnemius samples cluster by sequencing batch.
+#' 
+#' Note: variance is extreme.
+#' 
+#' Also shown: variance is not driven by sex.
+rld.sub <- rld[ , (rld$Tissue == "Gastrocnemius") ]
+pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("animal.registration.sex","Seq_batch"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.registration.sex, shape=Seq_batch)) +
+        geom_point(size=3) +
+        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        #coord_fixed() +
+        ggtitle("Gastrocnemius Samples Sequenced Across Batches")
+
+#' #### Heart samples cluster by sex. 
+#' 
+#' Grey samples represent reference samples (some distributed across sequencing sites).
+rld.sub <- rld[ , (rld$Tissue == "Heart") ]
+pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("animal.registration.sex","Seq_batch"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.registration.sex, shape=Seq_batch)) +
+        geom_point(size=3) +
+        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        #coord_fixed() +
+        ggtitle("Heart Samples Sequenced Across Batches")
+
+#' #### Kidney samples cluster by sex, but were all primarily sequenced in one batch (except for a pair of reference samples)
+rld.sub <- rld[ , (rld$Tissue == "Kidney") ]
+pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("animal.registration.sex","Seq_batch"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.registration.sex, shape=Seq_batch)) +
+        geom_point(size=3) +
+        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        coord_fixed() +
+        ggtitle("Kidney Samples Sequenced Across Batches")
+
+#' #### Lung samples cluster by sex. 
+rld.sub <- rld[ , (rld$Tissue == "Lung") ]
+pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("animal.registration.sex","Seq_batch"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.registration.sex, shape=Seq_batch)) +
+        geom_point(size=3) +
+        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        coord_fixed() +
+        ggtitle("Lung Samples Sequenced Across Batches")
+
+#' #### Now let's examine the distribution of **only** reference samples across tissues and batches.
+rld.sub <- rld[ , (rld$Sample_category == 'ref') ]
+pcaData <- DESeq2::plotPCA(rld.sub, 
+                           intgroup=c("animal.registration.sex","Seq_batch","Tissue"), 
+                           returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=Seq_batch)) +
+        geom_point(size=3) +
+        geom_text_repel(aes(label=Tissue)) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        coord_fixed() +
+        ggtitle("Reference Samples Sequenced Across Batches")
+
+#' #### Inference:
+#' These plots demonstrate agreement across most tissues sequenced across multiple batches. However, Gastocnemius was the only tissue and reference sample tissue to be sequenced across Stanford batch 1 and other batches (Mt. Sanai batch 1 & Stanford batch 2). These samples help suggest that samples from Stanford batch 1 are experiencing a heavy batch effect. All Stanford batch 1 samples cluster together, while other batches are more spread out by tissue. One might argue that the tissues in Stanford batch 1 are similar to one another (e.g. that they are fatty): White Adipose, Brown Adipose, Liver & Gastrocnemius. However, Gastrocnemius is not a fatty tissue whatsoever and the observation that a large amount of variance drives this muscle to cluster with fatty tissues **only in Stanford batch 1** suggests a strong batch effect. Finally, most of the variance in these data are driven by Stanford batch 1 samples.
+#' #### The TODOs:
+#' * Demonstrate a volcano plot showing how many genes 
+#' * Examine if the batch from Stanford 1 can be corrected for possible culprits:
+#'     * Sequencing machine
+#'     * Sequencing library
+#'     * Time from tissue collection to sequencing
+#'     * Experimental condition
+
+# #### Sesh:
+session_info()
+
+
+
+
+
