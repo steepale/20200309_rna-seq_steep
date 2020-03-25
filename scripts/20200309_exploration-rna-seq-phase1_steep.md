@@ -1,7 +1,7 @@
-20200309\_exploration-rna-seq-phase1\_steep.R
+PASS1A (Rat) RNA-Seq Data: Batch Effects
 ================
-Alec
-2020-03-25
+Alec Steep and Jiayu Zhang
+20200325
 
 ## Goals of Analysis
 
@@ -35,8 +35,7 @@ pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.d
                 "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt","feather",
                 "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel")
 lapply(pacs...man, FUN = function(X) {
-        do.call("library", list(X)) 
-})
+        do.call("library", list(X)) })
 ```
 
     ## [[1]]
@@ -694,255 +693,41 @@ sford_meta_1 <-  read.table(file = paste0(WD,'/stanford/batch_1/metadata/sample_
 sford_meta_2 <-  read.table(file = paste0(WD,'/stanford/batch_2/metadata/sample_metadata_20191010.csv'), 
                             header = TRUE, sep = ',', check.names = FALSE)
 # Determine sequencing location and batch (batch by date)
-str(sford_meta_1)
-```
+#str(sford_meta_1)
+#str(sford_meta_2)
+#str(sanai_meta_3)
 
-    ## 'data.frame':    320 obs. of  41 variables:
-    ##  $ vial_label       : num  9.00e+10 9.01e+10 9.00e+10 9.00e+10 9.01e+10 ...
-    ##  $ 2D_barcode       : num  8.01e+09 8.01e+09 8.01e+09 8.01e+09 8.01e+09 ...
-    ##  $ Species          : Factor w/ 1 level "rat": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ BID              : int  90009 90145 90032 90013 90126 90127 90110 90155 90144 90159 ...
-    ##  $ PID              : int  10028722 10378111 10033998 10032592 10314652 10192794 10274847 10207570 10327398 10193170 ...
-    ##  $ Tissue           : Factor w/ 4 levels "Brown Adipose",..: 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Sample_category  : Factor w/ 2 levels "ref","study": 2 2 2 2 2 2 2 2 2 2 ...
-    ##  $ GET_site         : Factor w/ 1 level "Stanford": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ RNA_extr_plate_ID: Factor w/ 4 levels "20190206_RNA_17062600",..: 4 4 4 4 4 4 4 4 4 4 ...
-    ##  $ RNA_extr_date    : Factor w/ 4 levels "2/22/19","2/6/19",..: 3 3 3 3 3 3 3 3 3 3 ...
-    ##  $ RNA_extr_conc    : num  71.5 119 74.8 77.3 131 78.3 117 129 101 101 ...
-    ##  $ RIN              : num  9.9 10 10 10 10 10 10 10 10 9.8 ...
-    ##  $ r_260_280        : num  NA NA NA NA NA NA NA NA NA NA ...
-    ##  $ r_260_230        : num  NA NA NA NA NA NA NA NA NA NA ...
-    ##  $ Lib_prep_date    : Factor w/ 4 levels "2/15/19","2/26/19",..: 3 3 3 3 3 3 3 3 3 3 ...
-    ##  $ Lib_RNA_conc     : int  4 4 4 4 4 4 4 4 4 4 ...
-    ##  $ Lib_RNA_vol      : int  50 50 50 50 50 50 50 50 50 50 ...
-    ##  $ Lib_robot        : Factor w/ 1 level "Biomek FX": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_vendor       : Factor w/ 1 level "NuGEN": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_type         : Factor w/ 1 level "Universal Plus mRNA-seq with ribosome and globin depletion": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_kit_id       : Factor w/ 1 level "9144-A01": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_batch_ID     : Factor w/ 4 levels "MOT00000001",..: 4 4 4 4 4 4 4 4 4 4 ...
-    ##  $ Lib_barcode_well : Factor w/ 80 levels "A1","A10","A2",..: 41 40 54 3 48 58 7 12 30 42 ...
-    ##  $ Lib_index_1      : Factor w/ 96 levels "AACACTGG","AACCGAAC",..: 28 66 44 17 90 58 35 21 23 62 ...
-    ##  $ Lib_index_2      : Factor w/ 96 levels "AACACCAC","AACCTACG",..: 16 31 80 27 47 25 4 18 17 6 ...
-    ##  $ Lib_adapter_1    : Factor w/ 1 level "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC[16bp]ATCTCGTATGCCGTCTTCTGCTTG": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_adapter_2    : Factor w/ 1 level "AATGATACGGCGACCACCGAGATCTACAC[8bp]ACACTCTTTCCCTACACGACGCTCTTCCGATCT": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_UMI_cycle_num: int  8 8 8 8 8 8 8 8 8 8 ...
-    ##  $ Lib_adapter_size : int  143 143 143 143 143 143 143 143 143 143 ...
-    ##  $ Lib_frag_size    : int  362 356 365 365 357 367 360 374 353 336 ...
-    ##  $ Lib_DNA_conc     : num  14.8 12.8 12.9 24.6 10.2 ...
-    ##  $ Lib_molarity     : num  15.7 15.6 18.9 23 21.2 ...
-    ##  $ Seq_platform     : Factor w/ 1 level "NovaSeq 6000": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Seq_date         : int  190426 190426 190426 190426 190426 190426 190426 190426 190426 190426 ...
-    ##  $ Seq_machine_ID   : Factor w/ 1 level "A00509": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Seq_flowcell_ID  : Factor w/ 1 level "HJVM3DSXX": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Seq_flowcell_run : int  27 27 27 27 27 27 27 27 27 27 ...
-    ##  $ Seq_flowcell_lane: int  4 4 4 4 4 4 4 4 4 4 ...
-    ##  $ Seq_flowcell_type: Factor w/ 1 level "S4": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Seq_length       : int  99 99 99 99 99 99 99 99 99 99 ...
-    ##  $ Seq_end_type     : int  2 2 2 2 2 2 2 2 2 2 ...
-
-``` r
-str(sford_meta_2)
-```
-
-    ## 'data.frame':    320 obs. of  41 variables:
-    ##  $ vial_label       : num  9.02e+10 9.01e+10 9.00e+10 9.00e+10 9.01e+10 ...
-    ##  $ 2D_barcode       : num  8.01e+09 8.01e+09 8.01e+09 8.01e+09 8.01e+09 ...
-    ##  $ Species          : Factor w/ 1 level "rat": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ BID              : int  90152 90148 90013 90005 90145 90138 90139 90120 90121 90150 ...
-    ##  $ PID              : int  10463658 10231870 10032592 10032673 10378111 10320032 10366458 10484655 10372776 10315705 ...
-    ##  $ Tissue           : Factor w/ 5 levels "Cortex","Gastrocnemius",..: 3 3 3 3 3 3 3 3 3 3 ...
-    ##  $ Sample_category  : Factor w/ 2 levels "ref","study": 2 2 2 2 2 2 2 2 2 2 ...
-    ##  $ GET_site         : Factor w/ 1 level "Stanford": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ RNA_extr_plate_ID: Factor w/ 4 levels "20190321_RNA_17062600",..: 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ RNA_extr_date    : Factor w/ 4 levels "3/21/19","5/15/19",..: 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ RNA_extr_conc    : num  169 180 138 137 122 146 133 159 138 118 ...
-    ##  $ RIN              : num  9.7 10 9.4 9.2 9.7 9.4 9.7 9.7 9.2 9.2 ...
-    ##  $ r_260_280        : num  NA NA NA 2.03 NA NA NA NA NA NA ...
-    ##  $ r_260_230        : num  NA NA NA 1.43 NA NA NA NA NA NA ...
-    ##  $ Lib_prep_date    : Factor w/ 4 levels "5/2/19","6/11/19",..: 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_RNA_conc     : int  4 4 4 4 4 4 4 4 4 4 ...
-    ##  $ Lib_RNA_vol      : int  50 50 50 50 50 50 50 50 50 50 ...
-    ##  $ Lib_robot        : Factor w/ 1 level "Biomek FX": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_vendor       : Factor w/ 1 level "NuGEN": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_type         : Factor w/ 1 level "Universal Plus mRNA-seq with ribosome and globin depletion": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_kit_id       : Factor w/ 1 level "9144-A01": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_batch_ID     : Factor w/ 4 levels "MOT00000009",..: 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_barcode_well : Factor w/ 80 levels "A1","A10","A2",..: 2 70 3 11 40 49 59 77 8 80 ...
-    ##  $ Lib_index_1      : Factor w/ 80 levels "AACACTGG","AACCGAAC",..: 60 18 52 8 62 70 42 11 80 66 ...
-    ##  $ Lib_index_2      : Factor w/ 80 levels "AACACCAC","AACCTACG",..: 61 71 36 56 12 44 70 59 25 40 ...
-    ##  $ Lib_adapter_1    : Factor w/ 1 level "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC[16bp]ATCTCGTATGCCGTCTTCTGCTTG": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_adapter_2    : Factor w/ 1 level "AATGATACGGCGACCACCGAGATCTACAC[8bp]ACACTCTTTCCCTACACGACGCTCTTCCGATCT": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_UMI_cycle_num: int  8 8 8 8 8 8 8 8 8 8 ...
-    ##  $ Lib_adapter_size : int  143 143 143 143 143 143 143 143 143 143 ...
-    ##  $ Lib_frag_size    : int  330 322 336 339 333 324 324 327 330 328 ...
-    ##  $ Lib_DNA_conc     : num  25.6 20.6 19 10.6 19 ...
-    ##  $ Lib_molarity     : num  32.85 25.08 18.43 9.35 21.53 ...
-    ##  $ Seq_platform     : Factor w/ 1 level "NovaSeq 6000": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Seq_date         : int  190703 190703 190703 190703 190703 190703 190703 190703 190703 190703 ...
-    ##  $ Seq_machine_ID   : Factor w/ 1 level "A00509": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Seq_flowcell_ID  : Factor w/ 1 level "BHLHC2DSXX": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Seq_flowcell_run : int  39 39 39 39 39 39 39 39 39 39 ...
-    ##  $ Seq_flowcell_lane: int  3 3 3 3 3 3 3 3 3 3 ...
-    ##  $ Seq_flowcell_type: Factor w/ 1 level "S4": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Seq_length       : int  99 99 99 99 99 99 99 99 99 99 ...
-    ##  $ Seq_end_type     : int  2 2 2 2 2 2 2 2 2 2 ...
-
-``` r
-str(sanai_meta_3)
-```
-
-    ## 'data.frame':    80 obs. of  41 variables:
-    ##  $ vial_label            : num  9e+10 9e+10 9e+10 9e+10 9e+10 ...
-    ##  $ 2D_barcode            : num  8.01e+09 8.01e+09 8.01e+09 8.01e+09 8.01e+09 ...
-    ##  $ Species               : Factor w/ 1 level "rat": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ BID                   : int  90001 90005 90007 90008 90009 90010 90011 90012 90013 90014 ...
-    ##  $ PID                   : Factor w/ 79 levels "10028056","10028137",..: 6 26 11 12 5 37 10 33 25 18 ...
-    ##  $ Tissue                : Factor w/ 1 level "Lung": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Sample_category       : Factor w/ 2 levels "ref","study": 2 2 2 2 2 2 2 2 2 2 ...
-    ##  $ GET_site              : Factor w/ 1 level "MSSM": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ RNA_extr_plate_ID     : int  10571163 10571163 10571163 10571163 10571163 10571163 10571163 10571163 10571163 10571163 ...
-    ##  $ RNA_extr_date         : Factor w/ 1 level "5/3/2019": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ RNA_extr_conc (ng/uL) : num  133 154 155 166 180 ...
-    ##  $ RIN                   : num  10 9.9 10 10 10 10 10 10 10 10 ...
-    ##  $ r_260_280             : num  2.03 NA NA NA NA NA NA NA NA 2.04 ...
-    ##  $ r_260_230             : num  2.03 NA NA NA NA NA NA NA NA 2.07 ...
-    ##  $ Lib_prep_date         : Factor w/ 2 levels "5/22/2019","6/3/2019": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_RNA_conc (ng/ul)  : int  8 8 8 8 8 8 8 8 8 8 ...
-    ##  $ Lib_RNA_vol (ul)      : int  25 25 25 25 25 25 25 25 25 25 ...
-    ##  $ Lib_robot             : Factor w/ 1 level "BioMek i7": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_vendor            : Factor w/ 1 level "NuGEN": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_type              : Factor w/ 1 level "Universal Plus mRNA-seq with ribosome and globin depletion": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_kit_id            : int  9133 9133 9133 9133 9133 9133 9133 9133 9133 9133 ...
-    ##  $ Lib_batch_ID          : Factor w/ 1 level "MOT_00013_mRN_SSP": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_barcode_well      : Factor w/ 80 levels "A1","A10","A2",..: 1 11 21 31 41 51 61 71 3 13 ...
-    ##  $ Lib_index_1           : Factor w/ 80 levels "AACACTGG","AACCGAAC",..: 45 8 47 4 65 10 26 59 52 77 ...
-    ##  $ Lib_index_2           : Factor w/ 80 levels "AAGGCTGA","ACAGACCT",..: 28 60 5 54 47 80 69 44 7 42 ...
-    ##  $ Lib_adapter_1         : Factor w/ 1 level "AGATCGGAAGAGCACACGTCTGAACTCCAGTCAC[16bp]ATCTCGTATGCCGTCTTCTGCTTG": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_adapter_2         : Factor w/ 1 level "AATGATACGGCGACCACCGAGATCTACAC[8bp]ACACTCTTTCCCTACACGACGCTCTTCCGATCT": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Lib_UMI_cycle_num (bp): int  8 8 8 8 8 8 8 8 8 8 ...
-    ##  $ Lib_adapter_size (bp) : int  143 143 143 143 143 143 143 143 143 143 ...
-    ##  $ Lib_frag_size (bp)    : int  347 355 359 354 358 359 367 351 360 357 ...
-    ##  $ Lib_DNA_conc (ng/uL)  : num  12.2 16.4 16.3 16.1 13.9 ...
-    ##  $ Lib_molarity (nM)     : num  53.2 69.8 68.9 69.1 58.9 ...
-    ##  $ Seq_platform          : Factor w/ 1 level "NovaSeq 6000": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Seq_date              : int  190723 190723 190723 190723 190723 190723 190723 190723 190723 190723 ...
-    ##  $ Seq_machine_ID        : Factor w/ 1 level "A00297": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Seq_flowcell_ID       : Factor w/ 1 level "HM7VGDSXX": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Seq_flowcell_run      : int  124 124 124 124 124 124 124 124 124 124 ...
-    ##  $ Seq_flowcell_lane     : int  4 4 4 4 4 4 4 4 4 4 ...
-    ##  $ Seq_flowcell_type     : Factor w/ 1 level "S4": 1 1 1 1 1 1 1 1 1 1 ...
-    ##  $ Seq_length            : int  101 101 101 101 101 101 101 101 101 101 ...
-    ##  $ Seq_end_type          : int  2 2 2 2 2 2 2 2 2 2 ...
-
-``` r
 # Location under GET_site variable
-summary(sford_meta_2$GET_site)
-```
+#summary(sford_meta_2$GET_site)
+#summary(sford_meta_2$GET_site)
+#summary(sanai_meta_1$GET_site)
+#summary(sanai_meta_2$GET_site)
+#summary(sanai_meta_3$GET_site)
 
-    ## Stanford 
-    ##      320
-
-``` r
-summary(sford_meta_2$GET_site)
-```
-
-    ## Stanford 
-    ##      320
-
-``` r
-summary(sanai_meta_1$GET_site)
-```
-
-    ## MSSM 
-    ##  320
-
-``` r
-summary(sanai_meta_2$GET_site)
-```
-
-    ## MSSM 
-    ##  320
-
-``` r
-summary(sanai_meta_3$GET_site)
-```
-
-    ## MSSM 
-    ##   80
-
-``` r
 # Date (batch) under Seq_date variable
-unique(sford_meta_1$Seq_date)
-```
+#unique(sford_meta_1$Seq_date)
+#unique(sford_meta_2$Seq_date)
+#unique(sanai_meta_1$Seq_date)
+#unique(sanai_meta_2$Seq_date)
+#unique(sanai_meta_3$Seq_date)
 
-    ## [1] 190426
-
-``` r
-unique(sford_meta_2$Seq_date)
-```
-
-    ## [1] 190703
-
-``` r
-unique(sanai_meta_1$Seq_date)
-```
-
-    ## [1] 190409
-
-``` r
-unique(sanai_meta_2$Seq_date)
-```
-
-    ## [1] 190626
-
-``` r
-unique(sanai_meta_3$Seq_date)
-```
-
-    ## [1] 190723
-
-``` r
 # Are the combination of these values unique?
-sford_meta_1 %>% 
-        select(vial_label, GET_site, Seq_date) %>%
-        unique() %>% dim()
-```
+#sford_meta_1 %>% 
+#        select(vial_label, GET_site, Seq_date) %>%
+#        unique() %>% dim()
+#sford_meta_2 %>% 
+#        select(vial_label, GET_site, Seq_date) %>%
+#        unique() %>% dim()
+#sanai_meta_1 %>% 
+#        select(vial_label, GET_site, Seq_date) %>%
+#        unique() %>% dim()
+#sanai_meta_2 %>% 
+#        select(vial_label, GET_site, Seq_date) %>%
+#        unique() %>% dim()
+#sanai_meta_3 %>% 
+#        select(vial_label, GET_site, Seq_date) %>%
+#        unique() %>% dim()
 
-    ## [1] 320   3
-
-``` r
-sford_meta_2 %>% 
-        select(vial_label, GET_site, Seq_date) %>%
-        unique() %>% dim()
-```
-
-    ## [1] 320   3
-
-``` r
-sanai_meta_1 %>% 
-        select(vial_label, GET_site, Seq_date) %>%
-        unique() %>% dim()
-```
-
-    ## [1] 320   3
-
-``` r
-sanai_meta_2 %>% 
-        select(vial_label, GET_site, Seq_date) %>%
-        unique() %>% dim()
-```
-
-    ## [1] 320   3
-
-``` r
-sanai_meta_3 %>% 
-        select(vial_label, GET_site, Seq_date) %>%
-        unique() %>% dim()
-```
-
-    ## [1] 80  3
-
-``` r
 # Combine the Stanford and Mt. Sanai Data
 ##########################################
 # Count Matrixes
@@ -959,14 +744,6 @@ sanai_meta_3$sample_key <- paste0(sanai_meta_3$vial_label, '_SN3')
 sford_meta_1$sample_key <- paste0(sford_meta_1$vial_label, '_SF1')
 sford_meta_2$sample_key <- paste0(sford_meta_2$vial_label, '_SF2')
 
-#all(row.names(sanai_1) == row.names(sanai_2))
-#all(row.names(sanai_2) == row.names(sanai_3))
-all(names(sanai_meta_1) == names(sanai_meta_2))
-```
-
-    ## [1] TRUE
-
-``` r
 # Combine counts
 all.data.m <- cbind(sanai_1[,-1], sanai_2[,-1], sanai_3[,-1], sford_1[,-1], sford_2[,-1] ) %>% as.matrix()
 rownames(all.data.m) <- sanai_1[,1]
@@ -982,20 +759,11 @@ sford_meta_2 <- data.frame(lapply(sford_meta_2, as.character), stringsAsFactors=
 meta <- bind_rows(sanai_meta_1, sanai_meta_2, sanai_meta_3, sford_meta_1, sford_meta_2)
 
 # Double check unique values
-dim(meta)
-```
+#dim(meta)
+#meta %>% 
+#        select(vial_label, GET_site, Seq_date) %>%
+#        unique() %>% dim()
 
-    ## [1] 1360   50
-
-``` r
-meta %>% 
-        select(vial_label, GET_site, Seq_date) %>%
-        unique() %>% dim()
-```
-
-    ## [1] 1360    3
-
-``` r
 # General Phenotype Data
 ##################################
 pheno_file <- paste0(WD,'/../phenotype/merged/merged_dmaqc_data2019-10-13.txt')
@@ -1066,7 +834,7 @@ gen_pheno <- gen_pheno %>%
 gen_pheno$animal.registration.sex <- as.factor(gen_pheno$animal.registration.sex)
 ```
 
-# Incorporate Annotation from the phenotypic data
+## Incorporate Annotation from Phenotypic Data
 
 ``` r
 ################################################################################
@@ -1077,38 +845,15 @@ gen_pheno$animal.registration.sex <- as.factor(gen_pheno$animal.registration.sex
 names(gen_pheno) <- str_replace(names(gen_pheno), 'viallabel', 'vial_label')
 
 # To investigate if the "vial_label" key is indeed unique
-meta$vial_label %>% length()
-```
+#meta$vial_label %>% length()
+#meta$vial_label %>% unique %>% length()
+#gen_pheno$vial_label %>% length()
+#gen_pheno$vial_label %>% unique %>% length()
 
-    ## [1] 1360
-
-``` r
-meta$vial_label %>% unique %>% length()
-```
-
-    ## [1] 1280
-
-``` r
-gen_pheno$vial_label %>% length()
-```
-
-    ## [1] 8655
-
-``` r
-gen_pheno$vial_label %>% unique %>% length()
-```
-
-    ## [1] 8655
-
-``` r
 # Perform a left join to incorporate phenotypic information
 status <- left_join(meta, gen_pheno, by = 'vial_label') %>% as.data.frame()
-dim(status)
-```
+#dim(status)
 
-    ## [1] 1360  197
-
-``` r
 # Adjust objects in columns as needed
 
 # Create new columns
@@ -1120,14 +865,8 @@ status <- status %>%
                                  (GET_site == 'MSSM' & Seq_date == '190626') ~ "MSSM_2",
                                  (GET_site == 'MSSM' & Seq_date == '190723') ~ "MSSM_3")
                )
-table(status$Seq_batch)
-```
+#table(status$Seq_batch)
 
-    ## 
-    ##     MSSM_1     MSSM_2     MSSM_3 Stanford_1 Stanford_2 
-    ##        320        320         80        320        320
-
-``` r
 # To factors
 factor_cols <- c("sample_key",
                  "Seq_batch")
@@ -1143,55 +882,31 @@ for(fc in factor_cols){
 # TODO: Come back and figure out about missing samples and annotation
 
 # Make sure that all values in status "sample_key" are unique
-status$sample_key %>% length()
-```
-
-    ## [1] 1360
-
-``` r
-status$sample_key %>% unique %>% length()
-```
-
-    ## [1] 1360
-
-``` r
+#status$sample_key %>% length()
+#status$sample_key %>% unique %>% length()
 # Make sure that all columns in counts matrix are unique
-colnames(all.data.m) %>% length()
-```
+#colnames(all.data.m) %>% length()
+#colnames(all.data.m) %>% unique %>% length()
 
-    ## [1] 1360
-
-``` r
-colnames(all.data.m) %>% unique %>% length()
-```
-
-    ## [1] 1360
-
-``` r
 rownames(status) <- status$sample_key
-all(rownames(status) %in% colnames(all.data.m))
-```
-
-    ## [1] TRUE
-
-``` r
-all(colnames(all.data.m) %in% rownames(status))
-```
-
-    ## [1] TRUE
-
-``` r
-all(rownames(status) == colnames(all.data.m))
-```
-
-    ## [1] FALSE
-
-``` r
+#all(rownames(status) %in% colnames(all.data.m))
+#all(colnames(all.data.m) %in% rownames(status))
+#all(rownames(status) == colnames(all.data.m))
 all.data.m <- all.data.m[, rownames(status)]
+```
+
+#### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
+
+``` r
 all(rownames(status) == colnames(all.data.m))
 ```
 
     ## [1] TRUE
+
+#### Data can easily be formatted for BioJupies if desired
+
+\#+
+BioJupies
 
 ``` r
 ##########################################################################
@@ -1211,11 +926,16 @@ all(rownames(status) == colnames(all.data.m))
 ##########################################################################
 ```
 
-## PCA Analysis
+## PCA Visualization of Sequencing Batches (Unsupervised)
 
-TODO: Generate a summary of the inferences from PCA.
+TODO: Generate a summary of major
+inferences
 
 ``` r
+##########################################################################
+############ PCA Sequencing Batches (Unsupervised) #######################
+##########################################################################
+
 # Perform unsupervised clustering
 # Build model
 count_data <- all.data.m
@@ -1231,24 +951,14 @@ dds <- DESeqDataSetFromMatrix(countData = count_data,
 # Filter genes with average count of 10 or less.
 # Reasoning from:
 #citation("PROPER")
-dds
-```
-
-    ## class: DESeqDataSet 
-    ## dim: 32883 1360 
-    ## metadata(1): version
-    ## assays(1): counts
-    ## rownames(32883): ENSRNOG00000055633 ENSRNOG00000058846 ...
-    ##   ENSRNOG00000055837 ENSRNOG00000055723
-    ## rowData names(0):
-    ## colnames(1360): 90110015502_SN1 90112015502_SN1 ... 80001995527_SF2
-    ##   80001995535_SF2
-    ## colData names(198): vial_label X2D_barcode ...
-    ##   calculated.variables.time_to_freeze Seq_batch
-
-``` r
+#dds
 keep <- rowSums(counts(dds))/ncol(dds) >= 10
 dds <- dds[keep,]
+```
+
+#### Summary of counts and annotation data in a DESeqDataSet
+
+``` r
 dds
 ```
 
@@ -1284,255 +994,27 @@ counts$go <- mapIds(org.Rn.eg.db, counts$ensembl, "GO", "ENSEMBL")
 counts$path <- mapIds(org.Rn.eg.db, counts$ensembl, "PATH", "ENSEMBL")
 ```
 
-### Primary variable of interest, unsupervised
+#### Here We examine all samples by batch and tissue. In our experience, if there is no batch effect, then samples should cluster by tissue type. However, if samples cluster by “batch,” which we define as sequencing date and location, then a batch effect might be occurring.
 
-Let’s examine our primary dichotomous relationship of interest–exercise
-vs control. How well does this relationship explain the variance in our
-data? Are there other factors influencing our data?
+#### When we examine groups by tissue, it’s difficult to distinguish tissues colors, but it seems like mutliple tissues are represented in different clusters.
 
 ``` r
-names(status)
-```
-
-    ##   [1] "vial_label"                                     
-    ##   [2] "X2D_barcode"                                    
-    ##   [3] "Species"                                        
-    ##   [4] "BID"                                            
-    ##   [5] "PID"                                            
-    ##   [6] "Tissue"                                         
-    ##   [7] "Sample_category"                                
-    ##   [8] "GET_site"                                       
-    ##   [9] "RNA_extr_plate_ID"                              
-    ##  [10] "RNA_extr_date"                                  
-    ##  [11] "RNA_extr_conc..ng.uL."                          
-    ##  [12] "RIN"                                            
-    ##  [13] "r_260_280"                                      
-    ##  [14] "r_260_230"                                      
-    ##  [15] "Lib_prep_date"                                  
-    ##  [16] "Lib_RNA_conc..ng.ul."                           
-    ##  [17] "Lib_RNA_vol..ul."                               
-    ##  [18] "Lib_robot"                                      
-    ##  [19] "Lib_vendor"                                     
-    ##  [20] "Lib_type"                                       
-    ##  [21] "Lib_kit_id"                                     
-    ##  [22] "Lib_batch_ID"                                   
-    ##  [23] "Lib_barcode_well"                               
-    ##  [24] "Lib_index_1"                                    
-    ##  [25] "Lib_index_2"                                    
-    ##  [26] "Lib_adapter_1"                                  
-    ##  [27] "Lib_adapter_2"                                  
-    ##  [28] "Lib_UMI_cycle_num..bp."                         
-    ##  [29] "Lib_adapter_size..bp."                          
-    ##  [30] "Lib_frag_size..bp."                             
-    ##  [31] "Lib_DNA_conc..ng.uL."                           
-    ##  [32] "Lib_molarity..nM."                              
-    ##  [33] "Seq_platform"                                   
-    ##  [34] "Seq_date"                                       
-    ##  [35] "Seq_machine_ID"                                 
-    ##  [36] "Seq_flowcell_ID"                                
-    ##  [37] "Seq_flowcell_run"                               
-    ##  [38] "Seq_flowcell_lane"                              
-    ##  [39] "Seq_flowcell_type"                              
-    ##  [40] "Seq_length"                                     
-    ##  [41] "Seq_end_type"                                   
-    ##  [42] "sample_key"                                     
-    ##  [43] "RNA_extr_conc"                                  
-    ##  [44] "Lib_RNA_conc"                                   
-    ##  [45] "Lib_RNA_vol"                                    
-    ##  [46] "Lib_UMI_cycle_num"                              
-    ##  [47] "Lib_adapter_size"                               
-    ##  [48] "Lib_frag_size"                                  
-    ##  [49] "Lib_DNA_conc"                                   
-    ##  [50] "Lib_molarity"                                   
-    ##  [51] "labelid"                                        
-    ##  [52] "pid"                                            
-    ##  [53] "acute.test.participantguid"                     
-    ##  [54] "acute.test.d_visit"                             
-    ##  [55] "acute.test.days_visit"                          
-    ##  [56] "acute.test.staffid"                             
-    ##  [57] "acute.test.siteguid"                            
-    ##  [58] "acute.test.siteid"                              
-    ##  [59] "acute.test.formguid"                            
-    ##  [60] "acute.test.formname"                            
-    ##  [61] "acute.test.versionguid"                         
-    ##  [62] "acute.test.versionnbr"                          
-    ##  [63] "acute.test.d_start"                             
-    ##  [64] "acute.test.days_start"                          
-    ##  [65] "acute.test.t_start"                             
-    ##  [66] "acute.test.weight"                              
-    ##  [67] "acute.test.beginblood"                          
-    ##  [68] "acute.test.distance"                            
-    ##  [69] "acute.test.speed"                               
-    ##  [70] "acute.test.incline"                             
-    ##  [71] "acute.test.t_complete"                          
-    ##  [72] "acute.test.endblood"                            
-    ##  [73] "acute.test.contactshock"                        
-    ##  [74] "acute.test.howlongshock"                        
-    ##  [75] "acute.test.timesshock"                          
-    ##  [76] "acute.test.intenseinitial"                      
-    ##  [77] "acute.test.intensefinal"                        
-    ##  [78] "acute.test.comments"                            
-    ##  [79] "animal.familiarization.participantguid"         
-    ##  [80] "animal.familiarization.d_visit"                 
-    ##  [81] "animal.familiarization.days_visit"              
-    ##  [82] "animal.familiarization.staffid"                 
-    ##  [83] "animal.familiarization.siteguid"                
-    ##  [84] "animal.familiarization.siteid"                  
-    ##  [85] "animal.familiarization.formguid"                
-    ##  [86] "animal.familiarization.formname"                
-    ##  [87] "animal.familiarization.versionguid"             
-    ##  [88] "animal.familiarization.versionnbr"              
-    ##  [89] "animal.familiarization.d_treadmillbegin"        
-    ##  [90] "animal.familiarization.days_treadmillbegin"     
-    ##  [91] "animal.familiarization.d_treadmillcomplete"     
-    ##  [92] "animal.familiarization.days_treadmillcomplete"  
-    ##  [93] "animal.familiarization.activity_score"          
-    ##  [94] "animal.familiarization.compliant"               
-    ##  [95] "animal.familiarization.weight"                  
-    ##  [96] "animal.familiarization.fat"                     
-    ##  [97] "animal.familiarization.lean"                    
-    ##  [98] "animal.familiarization.comments"                
-    ##  [99] "animal.key.participantguid"                     
-    ## [100] "animal.key.protocol"                            
-    ## [101] "animal.key.agegroup"                            
-    ## [102] "animal.key.batch"                               
-    ## [103] "animal.key.intervention"                        
-    ## [104] "animal.key.sacrificetime"                       
-    ## [105] "animal.key.anirandgroup"                        
-    ## [106] "animal.key.sitename"                            
-    ## [107] "animal.registration.participantguid"            
-    ## [108] "animal.registration.d_visit"                    
-    ## [109] "animal.registration.days_visit"                 
-    ## [110] "animal.registration.staffid"                    
-    ## [111] "animal.registration.siteguid"                   
-    ## [112] "animal.registration.siteid"                     
-    ## [113] "animal.registration.formguid"                   
-    ## [114] "animal.registration.formname"                   
-    ## [115] "animal.registration.versionguid"                
-    ## [116] "animal.registration.versionnbr"                 
-    ## [117] "animal.registration.ratid"                      
-    ## [118] "animal.registration.d_arrive"                   
-    ## [119] "animal.registration.days_arrive"                
-    ## [120] "animal.registration.batchnumber"                
-    ## [121] "animal.registration.d_reverselight"             
-    ## [122] "animal.registration.days_reverselight"          
-    ## [123] "animal.registration.d_birth"                    
-    ## [124] "animal.registration.days_birth"                 
-    ## [125] "animal.registration.sex"                        
-    ## [126] "animal.registration.weight"                     
-    ## [127] "animal.registration.cagenumber"                 
-    ## [128] "animal.registration.comments"                   
-    ## [129] "specimen.collection.participantguid"            
-    ## [130] "specimen.collection.d_visit"                    
-    ## [131] "specimen.collection.days_visit"                 
-    ## [132] "specimen.collection.staffid"                    
-    ## [133] "specimen.collection.siteguid"                   
-    ## [134] "specimen.collection.siteid"                     
-    ## [135] "specimen.collection.formguid"                   
-    ## [136] "specimen.collection.formname"                   
-    ## [137] "specimen.collection.versionguid"                
-    ## [138] "specimen.collection.versionnbr"                 
-    ## [139] "specimen.collection.anesthesiaid"               
-    ## [140] "specimen.collection.t_anesthesia"               
-    ## [141] "specimen.collection.anesthesiacomments"         
-    ## [142] "specimen.collection.bloodtype"                  
-    ## [143] "specimen.collection.bloodtube"                  
-    ## [144] "specimen.collection.bloodcomplete"              
-    ## [145] "specimen.collection.bloodtechid"                
-    ## [146] "specimen.collection.t_bloodstart"               
-    ## [147] "specimen.collection.t_bloodstop"                
-    ## [148] "specimen.collection.t_edtafill"                 
-    ## [149] "specimen.collection.bloodcomments"              
-    ## [150] "specimen.collection.uterustype"                 
-    ## [151] "specimen.collection.uterustechid"               
-    ## [152] "specimen.collection.uteruscomplete"             
-    ## [153] "specimen.collection.t_uterusstart"              
-    ## [154] "specimen.collection.t_uterusstop"               
-    ## [155] "specimen.collection.uterusweight"               
-    ## [156] "specimen.collection.uteruscomments"             
-    ## [157] "specimen.collection.t_death"                    
-    ## [158] "specimen.collection.deathtype"                  
-    ## [159] "specimen.processing.formguid"                   
-    ## [160] "specimen.processing.versionguid"                
-    ## [161] "specimen.processing.versionnbr"                 
-    ## [162] "specimen.processing.formname"                   
-    ## [163] "specimen.processing.siteguid"                   
-    ## [164] "specimen.processing.siteid"                     
-    ## [165] "specimen.processing.participantguid"            
-    ## [166] "specimen.processing.labelguid"                  
-    ## [167] "bid"                                            
-    ## [168] "specimen.processing.sampletypedescription"      
-    ## [169] "specimen.processing.sampletypeguid"             
-    ## [170] "specimen.processing.samplenumber"               
-    ## [171] "specimen.processing.timepoint"                  
-    ## [172] "specimen.processing.aliquotdescription"         
-    ## [173] "specimen.processing.aliquotguid"                
-    ## [174] "specimen.processing.volume"                     
-    ## [175] "specimen.processing.partialamt"                 
-    ## [176] "specimen.processing.hemolyzed"                  
-    ## [177] "specimen.processing.comments"                   
-    ## [178] "specimen.processing.t_collection"               
-    ## [179] "specimen.processing.t_edtaspin"                 
-    ## [180] "specimen.processing.t_freeze"                   
-    ## [181] "specimen.processing.techid"                     
-    ## [182] "calculated.variables.wgt_gain_before_acute"     
-    ## [183] "calculated.variables.lactate_change_dueto_acute"
-    ## [184] "calculated.variables.edta_coll_time"            
-    ## [185] "calculated.variables.deathtime_after_acute"     
-    ## [186] "calculated.variables.frozetime_after_acute"     
-    ## [187] "barcode"                                        
-    ## [188] "shiptositeid"                                   
-    ## [189] "receivedcas"                                    
-    ## [190] "receivestatuscas"                               
-    ## [191] "animal.key.timepoint"                           
-    ## [192] "animal.key.is_control"                          
-    ## [193] "acute.test.howlongshock_seconds"                
-    ## [194] "calculated.variables.time_complete_to_death_min"
-    ## [195] "calculated.variables.time_death_to_collect_min" 
-    ## [196] "calculated.variables.time_collect_to_freeze_min"
-    ## [197] "calculated.variables.time_to_freeze"            
-    ## [198] "Seq_batch"
-
-We examine all samples by batch or tissues. In our experience, if there
-is no batch effect, then samples should cluster by tissue type. However,
-if samples cluster by “batch,” which we define as sequencing date and
-location, then a batch effect might be occurring. It’s difficult to see
-but it seems like mutliple tissues are represented in different clusters
-
-``` r
-# Examine groups by tissue
 DESeq2::plotPCA(rld, intgroup ="Tissue") +
         guides(color=guide_legend(title="Tissues"))
 ```
 
-![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
+![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
 
-We examine batches and see that Stanford batch 1 is significantly
-isolated.
+#### When we visualize sequencing batches see that Stanford batch 1 is significantly isolated.
 
 ``` r
 DESeq2::plotPCA(rld, intgroup ="Seq_batch") +
         guides(color=guide_legend(title="Batches"))
 ```
 
-![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-3-1.png)<!-- -->
+![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
 
-``` r
-# Let's examine different labeling scheme
-pcaData <- DESeq2::plotPCA(rld, intgroup=c("Seq_batch", "Tissue"), returnData=TRUE)
-percentVar <- round(100 * attr(pcaData, "percentVar"))
-ggplot(pcaData, aes(PC1, PC2, color=Seq_batch)) +
-        geom_point(size=1, alpha = 0.01) +
-        geom_text(aes(label=Tissue),hjust=0, vjust=0) +
-        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
-        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
-        coord_fixed()
-```
-
-![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-3-2.png)<!-- -->
-
-It is possible that certain tissues were isolated in certain batches.
-Let’s examine what tissues were sequenced in respective batches.
+#### It’s possible that certain tissues were isolated in certain batches. Let’s examine what tissues were sequenced in respective batches.
 
 ``` r
 # Create a contingency table of Tissues sequenced by batch
@@ -1541,36 +1023,41 @@ ctable <- status %>%
         table() %>% as.data.frame()
 ```
 
-This balloon plot demonstrates that sample tissue types were not evenly
-distributed across batches of RNASeq data. The overlap between batches
-and tissues is far from ideal.
+#### This balloon plot demonstrates that sample tissue types were not evenly distributed across batches of RNASeq data. The overlap between batches and tissues is far from ideal. Size of dots and color of dots demonstrate the same attribute: frequency.
 
 ``` r
 # Create a balloon plot
 theme_set(theme_pubr())
 ggballoonplot(ctable, fill = "value") +
-        scale_fill_viridis_c(option = "C")
+        scale_fill_viridis_c(option = "C") +
+        ggtitle("Tissue Samples Distributed Across Sequencing Batches")
 ```
 
-![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-5-1.png)<!-- -->
+![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
 
-Tissue types sequenced across batches include:
+#### Tissue types sequenced across multiple batches include:
+
+  - Gastrocnemius
+  - Heart
+  - Kidney
+  - Lung
+
+<!-- end list -->
 
 ``` r
-        #' * Gastrocnemius
-        #' * Heart
-        #' * Kidney
-        #' * Lung
 ctable %>% 
         filter(Tissue %in% c("Gastrocnemius","Heart","Kidney","Lung")) %>%
         ggballoonplot(fill = "value") + 
         scale_fill_viridis_c(option = "C") +
-        ggtitle("Tissue Sample (+Refs) Sequence Distribution Across Batches")
+        ggtitle("Tissue Samples Distributed Across Sequencing Batches")
 ```
 
-![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
 
-Some of these samples are “reference samples” sequenced across batches
+#### Some of these above samples are “reference samples” sequenced across batches
+
+Note: Notice how the maximum frequency has dramatically decreased but
+the circle size has not.
 
 ``` r
 ref_table <- status %>%
@@ -1583,13 +1070,21 @@ ref_table %>%
         ggtitle("Reference Sample Sequence Distribution Across Batches")
 ```
 
-![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
 
-We examine a PCA plot of only those samples with tissues represented
-across mutliple batches. The tissue types in which samples cluster by
-batch: \* Gastrocnemius The tissue types in which samples cluster by
-tissue: \* Heart \* Kidney \*
-Lung
+#### We examine a PCA plot of **only** samples with tissues represented across mutliple batches.
+
+##### The tissue types in which samples cluster by batch:
+
+  - Gastrocnemius
+
+##### The tissue types in which samples cluster by tissue:
+
+  - Heart
+  - Kidney
+  - Lung
+
+<!-- end list -->
 
 ``` r
 rld.sub <- rld[ , (rld$Tissue %in% c("Gastrocnemius","Heart","Kidney","Lung")) ]
@@ -1604,10 +1099,13 @@ ggplot(pcaData, aes(PC1, PC2, color=Seq_batch, shape=Tissue)) +
         ggtitle("Tissues Sequenced Across More than One Batch")
 ```
 
-![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-8-1.png)<!-- -->
+![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
 
-Gastrocnemius samples cluster by sequencing batch. Also shown: variance
-is not driven by sex.
+#### Gastrocnemius samples cluster by sequencing batch.
+
+Note: variance is extreme.
+
+Also shown: variance is not driven by sex.
 
 ``` r
 rld.sub <- rld[ , (rld$Tissue == "Gastrocnemius") ]
@@ -1622,10 +1120,12 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.registration.sex, shape=Seq_batch)) +
         ggtitle("Gastrocnemius Samples Sequenced Across Batches")
 ```
 
-![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-9-1.png)<!-- -->
+![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
 
-Heart samples cluster by sex. Grey samples represent reference samples
-(some distributed across sequencing sites).
+#### Heart samples cluster by sex.
+
+Grey samples represent reference samples (some distributed across
+sequencing sites).
 
 ``` r
 rld.sub <- rld[ , (rld$Tissue == "Heart") ]
@@ -1640,10 +1140,9 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.registration.sex, shape=Seq_batch)) +
         ggtitle("Heart Samples Sequenced Across Batches")
 ```
 
-![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-10-1.png)<!-- -->
+![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
 
-Kidney samples cluster by sex, but were all primarily sequenced in one
-batch (except for a pair of reference samples)
+#### Kidney samples cluster by sex, but were all primarily sequenced in one batch (except for a pair of reference samples)
 
 ``` r
 rld.sub <- rld[ , (rld$Tissue == "Kidney") ]
@@ -1655,12 +1154,12 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.registration.sex, shape=Seq_batch)) +
         xlab(paste0("PC1: ",percentVar[1],"% variance")) +
         ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
         coord_fixed() +
-        ggtitle("Heart Samples Sequenced Across Batches")
+        ggtitle("Kidney Samples Sequenced Across Batches")
 ```
 
-![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-11-1.png)<!-- -->
+![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
 
-Lung samples cluster by sex.
+#### Lung samples cluster by sex.
 
 ``` r
 rld.sub <- rld[ , (rld$Tissue == "Lung") ]
@@ -1675,10 +1174,9 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.registration.sex, shape=Seq_batch)) +
         ggtitle("Lung Samples Sequenced Across Batches")
 ```
 
-![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-12-1.png)<!-- -->
+![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-14-1.png)<!-- -->
 
-Now let’s examine the distribution of reference samples across tissues
-and batches.
+#### Now let’s examine the distribution of **only** reference samples across tissues and batches.
 
 ``` r
 rld.sub <- rld[ , (rld$Sample_category == 'ref') ]
@@ -1695,7 +1193,9 @@ ggplot(pcaData, aes(PC1, PC2, color=Seq_batch)) +
         ggtitle("Reference Samples Sequenced Across Batches")
 ```
 
-![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-13-1.png)<!-- -->
+![](20200309_exploration-rna-seq-phase1_steep_files/figure-gfm/unnamed-chunk-15-1.png)<!-- -->
+
+#### Inference:
 
 These plots demonstrate agreement across most tissues sequenced across
 multiple batches. However, Gastocnemius was the only tissue and
@@ -1703,21 +1203,20 @@ reference sample tissue to be sequenced across Stanford batch 1 and
 other batches (Mt. Sanai batch 1 & Stanford batch 2). These samples help
 suggest that samples from Stanford batch 1 are experiencing a heavy
 batch effect. All Stanford batch 1 samples cluster together, while other
-batches are more spread out by tissue. Someone might argue that the
-tissues in Stanford batch 1 are similar to one another; that they are
-fatty: White Adipose, Brown Adipose, Liver & Gastrocnemius. However,
+batches are more spread out by tissue. One might argue that the tissues
+in Stanford batch 1 are similar to one another (e.g. that they are
+fatty): White Adipose, Brown Adipose, Liver & Gastrocnemius. However,
 Gastrocnemius is not a fatty tissue whatsoever and the observation that
 a large amount of variance drives this muscle to cluster with fatty
-tissues suggests a strong batch effect. Finally, most of the variance in
-these data are driven by Stanford batch 1 samples.
-
-TODO: Demonstrate a volcano plot showing how many genes TODO: Examine if
-the batch from Stanford 1 can be corrected for. Possible culprits: \*
-Sequencing machine \* Sequencing library \* Time from tissue collection
-to sequencing \* Experimental condition
+tissues **only in Stanford batch 1** suggests a strong batch effect.
+Finally, most of the variance in these data are driven by Stanford batch
+1 samples. \#\#\#\# The TODOs: \* Demonstrate a volcano plot showing how
+many genes \* Examine if the batch from Stanford 1 can be corrected for
+possible culprits: \* Sequencing machine \* Sequencing library \* Time
+from tissue collection to sequencing \* Experimental condition
 
 ``` r
-# Sesh:
+# #### Sesh:
 session_info()
 ```
 

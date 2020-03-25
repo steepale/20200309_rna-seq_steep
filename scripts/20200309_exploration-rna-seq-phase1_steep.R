@@ -3,11 +3,8 @@
 #' author: "Alec Steep and Jiayu Zhang" 
 #' date: "`r format.Date( Sys.Date(), '%Y%m%d' )`"
 #' output:
-#'     html_document:
-#'         code_folding: hide
-#'         toc: true
-#'         highlight: zenburn
 #'     github_document: default
+#'     pdf_document: default
 #'     
 #'---
 
