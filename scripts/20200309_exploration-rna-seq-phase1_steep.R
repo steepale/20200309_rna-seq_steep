@@ -16,7 +16,8 @@ knitr::opts_chunk$set(cache = FALSE)
 
 #' ## Goals of Analysis
 #' * TODO: Add Step-by-step goals of analysis
-#' * Examine if data demonstrate technical batch fffects:
+#' * TODO: Vet "suspect samples" in file: GET_release1_qc_report.pdf and decide if these samples should be removed or not.
+#' * Examine if data demonstrate technical batch effects:
 #'     * Sequencing batch (sequence date and location)
 #' * Examine if data demonstrate biological batch effects:
 #'     * Influence from time of day and circadian rhythm
@@ -277,6 +278,12 @@ gen_pheno <- gen_pheno %>%
                                  animal.registration.sex == '2' ~ 'Male'))
 gen_pheno$animal.registration.sex <- as.factor(gen_pheno$animal.registration.sex)
 
+################################################################################
+###################### Cleanup Memory ##########################################
+################################################################################
+rm("pacs...man","sanai_1","sanai_2","sanai_3","sanai_meta_1","sanai_meta_2","sanai_meta_3","sford_1","sford_2","sford_meta_1","sford_meta_2","pheno_file","factor_cols","date_cols","time_cols")
+################################################################################
+
 #' ## Incorporate Annotation from Phenotypic Data
 
 #+ Incorporate Pheno
@@ -356,6 +363,18 @@ all(rownames(status) == colnames(all.data.m))
 #biojupes <- biojupes %>% dplyr::select(-ensembl)
 #write.table(biojupes, file = paste0('./data/',date,'_biojupiesmatrix_steep.txt'), quote = FALSE, row.names = FALSE, sep = '\t')
 ##########################################################################
+
+#' #### Data Save: Count Matrix & Metadata
+#' Count matrix: motrpac/20200309_rna-seq_steep/data/20200326_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv
+#' Metadata: motrpac/20200309_rna-seq_steep/data/20200326_rnaseq-meta-pass1a-stanford-sinai_steep.txt
+
+# Count matrix
+#out_file <- paste0(WD,'/data/20200326_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv')
+#write.table(all.data.m, file=out_file, row.names = TRUE, quote = FALSE, sep = ',')
+
+# Meatdata table
+#out_file <- paste0(WD,'/data/20200326_rnaseq-meta-pass1a-stanford-sinai_steep.txt')
+#write.table(status, file=out_file, row.names = FALSE, quote = FALSE, sep = '\t')
 
 #' ## PCA Visualization of Sequencing Batches (Unsupervised)
 #' TODO: Generate a summary of major inferences
@@ -543,6 +562,131 @@ ggplot(pcaData, aes(PC1, PC2, color=Seq_batch)) +
 
 #' #### Inference:
 #' These plots demonstrate agreement across most tissues sequenced across multiple batches. However, Gastocnemius was the only tissue and reference sample tissue to be sequenced across Stanford batch 1 and other batches (Mt. Sanai batch 1 & Stanford batch 2). These samples help suggest that samples from Stanford batch 1 are experiencing a heavy batch effect. All Stanford batch 1 samples cluster together, while other batches are more spread out by tissue. One might argue that the tissues in Stanford batch 1 are similar to one another (e.g. that they are fatty): White Adipose, Brown Adipose, Liver & Gastrocnemius. However, Gastrocnemius is not a fatty tissue whatsoever and the observation that a large amount of variance drives this muscle to cluster with fatty tissues **only in Stanford batch 1** suggests a strong batch effect. Finally, most of the variance in these data are driven by Stanford batch 1 samples.
+
+#' #### Systematic Search for Categorical Metadata to Correct for Batch
+#' As we systematically searched the meta data and phenotypic annotation for possible culprits of batch. The categorical variables most likely associated with batch (i.e. Seq_batch) are:
+#' * Seq_date (not suprising)
+#' * Seq_flowcell_ID 
+for(clm in colnames(status)[colnames(status) != 'Seq_batch'] ){
+        if(is.character(status[[clm]]) | is.factor(status[[clm]])){
+                col_num <- status %>% select("Seq_batch", clm) %>% table() %>% ncol()
+                if(col_num < 10 && clm %in% c("Seq_date","Seq_flowcell_ID")){
+                        print(clm)
+                        status %>% select("Seq_batch", clm) %>% table() %>% print()
+                        print("###########")
+                        print("")
+                }
+                
+        }
+        
+}
+
+# Rafa Example
+################################################################################
+library(rafalib)
+library(MASS)
+n <- 100
+y <- t(mvrnorm(n,c(0,0), matrix(c(1,0.95,0.95,1),2,2)))
+s <- svd(y)
+PC1 = s$d[1]*s$v[,1]
+PC2 = s$d[2]*s$v[,2]
+plot(PC1,PC2,xlim=c(-3,3),ylim=c(-3,3))
+
+
+set.seed(1)
+ind <- sample(nrow(all.data.m),2000)
+y <- t(apply(all.data.m[ind,],1,scale)) #standardize data for illustration
+y <- scale(all.data.m)
+s <- svd(all.data.m)
+
+y[1:4,1:4]
+
+
+library(rafalib)
+library(Biobase)
+library(GSE5859) ##Available from GitHub
+data(GSE5859)
+################################################################################
+
+
+#' TODO: Compare differential gene expression analysis between Gastroc samples from different batches
+#' * Show a correlation matrix of svd data and expect uneven correlatation -- structure in data
+#'     * Look for certain samples being correlated more than other samples (uninform structure)
+#' * Look at "d's" for randomized data of singular value composition -- should be straight line around 0
+#' * Look at d's from svd -- see if it shows structure
+#' * Show batch with PCA or MDS
+#' * Use box-plots and split them by factor we think is related to batch
+#'     * Could support visualization with Anova by showing that PC correlated with batch category
+#' * Show correlation matrix and correlation table with factor analysis
+#'     * Show a fitted model and see how much of the variance can be explained
+#'     * Correlation matrix before and after SVA
+#' * Histogram of p-values next to volcano plot (before SVA)
+#' * Histogram of p-values next to volcano plot (after SVA)
+#' * Heatmap of statified genes (before SVA)
+#' * Heatmap of statified genes (after SVA)
+#' 
+
+#' There's no categorical variable (alone) that can isolate Stanford batch 1 from the rest of the group. Here we experiment with a new binary variable, "Seq_batch_effect", and run a supervised model to determine if we can correct for the suspected batch effect from Stanford batch 1.
+
+#+ Supervised PCA: Correction for Stanford Batch 1
+##########################################################################
+############ Supervised PCA: Correction for Stanford Batch 1 #############
+##########################################################################
+
+#' #### The Seq_batch_effect varibale:
+status <- status %>%
+        mutate(Seq_batch_effect = as.factor(ifelse(Seq_batch == 'Stanford_1', '1', '0')))
+status %>%
+        select(Seq_batch, Seq_batch_effect) %>% table()
+
+# Perform supervised clustering
+col_data <- status # To look at all samples 
+design = ~ pcaData$PC1 + 1 # Primary variable needs to be last
+title = paste0('Design: ',as.character(design))
+# Create a DESeqDataSet Object
+dds <- DESeqDataSetFromMatrix(countData = count_data,
+                              colData = col_data,
+                              design = design)
+
+# Perform pre-filtering.
+# Filter genes with average count of 10 or less.
+# Reasoning from:
+#citation("PROPER")
+#dds
+keep <- rowSums(counts(dds))/ncol(dds) >= 10
+dds <- dds[keep,]
+#' #### Summary of counts and annotation data in a DESeqDataSet
+dds
+
+dds <- estimateSizeFactors(dds)
+rs <- rowSums(counts(dds))
+# Normalize the counts
+rld <- vst(dds) #vst and rlog comparable with all samples
+
+
+#' #### Now let's examine the distribution of **only** reference samples across tissues and batches.
+rld.sub <- rld[ , (rld$Sample_category == 'ref') ]
+pcaData <- DESeq2::plotPCA(rld.sub, 
+                           intgroup=c("animal.registration.sex","Seq_batch","Tissue"), 
+                           returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=Seq_batch)) +
+        geom_point(size=3) +
+        geom_text_repel(aes(label=Tissue)) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        coord_fixed() +
+        ggtitle("Reference Samples Sequenced Across Batches")
+
+
+
+
+
+
+
+
+
+
 #' #### The TODOs:
 #' * Demonstrate a volcano plot showing how many genes 
 #' * Examine if the batch from Stanford 1 can be corrected for possible culprits:
