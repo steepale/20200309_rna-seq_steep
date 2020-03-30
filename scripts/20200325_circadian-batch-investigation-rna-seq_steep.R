@@ -126,6 +126,8 @@ row.names(col_data) <- col_data$sample_key
 #' ## Place Genes in Genomic Ranges
 #' #### Reference Genome and Annotation: Rnor_6.0 (GCA_000001895.4) assembly from Ensembl database (Release 96)
 #' Found at: http://uswest.ensembl.org/Rattus_norvegicus/Info/Index.
+#' FASTA: Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz ftp://ftp.ensembl.org/pub/release-96/fasta/rattus_norvegicus/dna/Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz
+#' GTF: Rattus_norvegicus.Rnor_6.0.96.gtf.gz ftp://ftp.ensembl.org/pub/release-96/gtf/rattus_norvegicus/Rattus_norvegicus.Rnor_6.0.96.gtf.gz
 
 #+ Annotate Genes by Chromosome
 
@@ -135,9 +137,38 @@ row.names(col_data) <- col_data$sample_key
 
 # TODO: Load Reference genome and annotations
 
+### Determine which control samples are male and female
+# Get the list of genes on the W chromosome
 
+# Construct your own personal galgal5 reference genome annotation
+# Construct from gtf file from Ensembl (same file used in mapping)
+ens_gtf <- paste0(WD,'/data/Rattus_norvegicus.Rnor_6.0.96.gtf')
+Rn_TxDb <- makeTxDbFromGFF(ens_gtf,
+                           format=c("gtf"),
+                           dataSource="Ensembl_Rattus6_gtf",
+                           organism="Rattus norvegicus",
+                           taxonomyId=NA,
+                           circ_seqs=DEFAULT_CIRC_SEQS,
+                           chrominfo=NULL,
+                           miRBaseBuild=NA,
+                           metadata=NULL)
 
-
+# Define Female specific sex genes (X chromosome)
+# To examine chromosome names
+seqlevels(Rn_TxDb)[1:35]
+# Extract genes as GRanges object, then names
+X_genes_gr <- genes(Rn_TxDb, columns = "TXCHROM", filter = list(tx_chrom=c("X")))
+# Collect ensembl gene ids for female specific genes
+X_ens_id <- names(X_genes_gr)
+# Examine the gene symbols
+X_sym <- mapIds(org.Rn.eg.db, names(X_genes_gr), "SYMBOL", "ENSEMBL")
+# Extract genes as GRanges object, then names
+Y_genes_gr <- genes(Rn_TxDb, columns = "TXCHROM", filter = list(tx_chrom=c("Y")))
+# Collect ensembl gene ids for female specific genes
+Y_ens_id <- names(Y_genes_gr)
+sex_ens_id <- c(X_ens_id,Y_ens_id)
+# Examine the gene symbols
+Y_sym <- mapIds(org.Rn.eg.db, names(Y_genes_gr), "SYMBOL", "ENSEMBL")
 
 
 ################################################################################
