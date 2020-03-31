@@ -301,7 +301,6 @@ plot(tt$dm,-log10(tt$p.value))
 points(tt[X_genes,]$dm,-log10(tt[X_genes,]$p.value),col=1,pch=16)
 points(tt[Y_genes,]$dm,-log10(tt[Y_genes,]$p.value),col=2,pch=16, xlab="Effect size",ylab="-log10(p-value)")
 legend("bottomright",c("X","Y"),col=1:2,pch=16)
-as.vector(tt$p.value)
 p <- tt$p.value
 qvals <- qvalue(tt$p.value)$qvalue
 index <- which(qvals<=0.05)
