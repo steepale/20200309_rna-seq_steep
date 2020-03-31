@@ -126,7 +126,9 @@ row.names(col_data) <- col_data$sample_key
 #' ## Place Genes in Genomic Ranges
 #' #### Reference Genome and Annotation: Rnor_6.0 (GCA_000001895.4) assembly from Ensembl database (Release 96)
 #' Found at: http://uswest.ensembl.org/Rattus_norvegicus/Info/Index.
+#' 
 #' FASTA: Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz ftp://ftp.ensembl.org/pub/release-96/fasta/rattus_norvegicus/dna/Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz
+#' 
 #' GTF: Rattus_norvegicus.Rnor_6.0.96.gtf.gz ftp://ftp.ensembl.org/pub/release-96/gtf/rattus_norvegicus/Rattus_norvegicus.Rnor_6.0.96.gtf.gz
 
 #+ Annotate Genes by Chromosome
@@ -242,10 +244,10 @@ sex <- col_data[livers,"animal.registration.sex"]
 group <- col_data[livers,"animal.key.anirandgroup"]
 liver_counts <- norm_counts[,livers]
 
-#' Predict the sex of reference samples (all samples for that matter) by calculating the median expression of genes on the Y chromosome. We should expect a bimodal distribution with males demonstrating significantly higher median expression.
+#' #### Predict the sex of reference samples (all samples for that matter) by calculating the median expression of genes on the Y chromosome. We should expect a bimodal distribution with males demonstrating significantly higher median expression.
 chryexp <- colMeans(norm_counts[Y_genes,livers])
 
-#' If we create a histogram of the median gene expression values on chromosome Y, we should expect to see a bimodal distribution. However, distinct peaks are not detected. This was a surprising result. 
+#' ##### If we create a histogram of the median gene expression values on chromosome Y, we should expect to see a bimodal distribution. However, distinct peaks are not detected. This was a surprising result. 
 mypar()
 hist(chryexp, breaks = 200)
 summary(chryexp)
@@ -296,8 +298,6 @@ mypar(1,2)
 # Histogram of p values associated with ttest
 hist(tt$p.value,main="",ylim=c(0,1300), breaks = 100)
 plot(tt$dm,-log10(tt$p.value))
-tt[X_genes,]$dm
-tt[Y_genes,]
 points(tt[X_genes,]$dm,-log10(tt[X_genes,]$p.value),col=1,pch=16)
 points(tt[Y_genes,]$dm,-log10(tt[Y_genes,]$p.value),col=2,pch=16, xlab="Effect size",ylab="-log10(p-value)")
 legend("bottomright",c("X","Y"),col=1:2,pch=16)
