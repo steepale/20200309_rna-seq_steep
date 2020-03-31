@@ -18,6 +18,8 @@ knitr::opts_chunk$set(cache = FALSE)
 
 #' ## Goals of Analysis
 #' * TODO: Add Step-by-step goals of analysis
+#' * TODO: Investigate samples for a correlation of 1 (duplicate samples) and remove them
+#' * TODO: Consider removing control probes form the analysis
 #' * TODO: Vet "suspect samples" in file: GET_release1_qc_report.pdf and decide if these samples should be removed or not.
 #' * Examine if data demonstrate technical batch effects:
 #'     * Sequencing batch (sequence date and location)

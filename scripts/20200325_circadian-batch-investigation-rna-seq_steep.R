@@ -54,11 +54,11 @@ WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
 
 # Load the dependencies
 #source("https://bioconductor.org/biocLite.R")
-#BiocManager::install("org.Rn.eg.db")
+#BiocManager::install("qvalue")
 #install.packages("tidyverse")
 
 # Load dependencies
-pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel")
+pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue")
 lapply(pacs...man, FUN = function(X) {
         do.call("library", list(X)) })
 
@@ -170,7 +170,6 @@ sex_ens_id <- c(X_ens_id,Y_ens_id)
 # Examine the gene symbols
 Y_sym <- mapIds(org.Rn.eg.db, names(Y_genes_gr), "SYMBOL", "ENSEMBL")
 
-
 ################################################################################
 #' ## PCA of Liver Samples 
 #' Samples from Stanford Batch 1, which we suspect demonstrates a batch effect
@@ -222,6 +221,114 @@ counts$path <- mapIds(org.Rn.eg.db, counts$ensembl, "PATH", "ENSEMBL")
 rld.sub <- rld[ , (rld$Tissue == "Liver") ]
 DESeq2::plotPCA(rld.sub, intgroup ="animal.registration.sex") +
         guides(color=guide_legend(title="Sex"))
+
+# Variables of interest
+male_livers <- (col_data %>% 
+                        filter(Tissue == 'Liver') %>% 
+                        filter(animal.registration.sex == 'Male'))$sample_key %>% 
+        as.character()
+female_livers <- (col_data %>% 
+                          filter(Tissue == 'Liver') %>% 
+                          filter(animal.registration.sex == 'Female'))$sample_key %>% 
+        as.character()
+ref_livers <- (col_data %>% 
+                       filter(Tissue == 'Liver') %>% 
+                       filter(is.na(animal.registration.sex)))$sample_key %>% 
+        as.character()
+livers <- c(male_livers,female_livers,ref_livers)
+Y_genes <- Y_ens_id[Y_ens_id %in% row.names(norm_counts)]
+X_genes <- X_ens_id[X_ens_id %in% row.names(norm_counts)]
+sex <- col_data[livers,"animal.registration.sex"]
+group <- col_data[livers,"animal.key.anirandgroup"]
+liver_counts <- norm_counts[,livers]
+
+#' Predict the sex of reference samples (all samples for that matter) by calculating the median expression of genes on the Y chromosome. We should expect a bimodal distribution with males demonstrating significantly higher median expression.
+chryexp <- colMeans(norm_counts[Y_genes,livers])
+
+#' If we create a histogram of the median gene expression values on chromosome Y, we should expect to see a bimodal distribution. However, distinct peaks are not detected. This was a surprising result. 
+mypar()
+hist(chryexp, breaks = 200)
+summary(chryexp)
+#' We will not use this common strategy to determine sex of unknown samples, rather we will use clustering from PCA.
+
+#' The distribution of sex by group
+table(group, sex) # <- Bad idea.
+
+#' #### Generate a heatmap of expression from 3 sets of genes:
+#' * Genes from the Y chromosome
+#' * The top and bottom 25 genes (50 total) associated with sex
+#' * Randomly selected genes
+
+#' ##### Males and Females demonstrate distinctly different gene expression profiles.
+#' * Genes on the Y chromosome are not a good predictor of sex in Liver mRNA measures (Figure 1; suprising result)
+#' * Male and female samples show distinct correlation to one another (Figure 2)
+
+# T-test of expression associated with sex
+tt <- rowttests(liver_counts,sex)
+
+# Take genes from the Y chromosome
+# Y_genes
+# Take the top and bottom 25 genes associated with variable of interest (remove any genes in Y chromosome)
+top <- row.names(tt[order(-tt$dm),][1:25,])
+bot <- row.names(tt[order(tt$dm),][1:25,])
+top_n_bot <- setdiff(c(top,bot), Y_genes)
+
+# Randomly select 50 genes not in prior sets 
+set.seed(123)
+randos <- setdiff(row.names(tt[sample(seq(along=tt$dm),50),]), c(Y_genes,top_n_bot))
+geneindex <- c(randos,top_n_bot,Y_genes)
+# Generate the heatmap and support with a plot of a correlation matrix
+mat <- liver_counts[geneindex,]
+mat <- mat -rowMeans(mat)
+icolors <- colorRampPalette(rev(brewer.pal(11,"RdYlBu")))(100)
+mypar(1,2)
+image(t(mat),xaxt="n",yaxt="n",col=icolors)
+y <- liver_counts - rowMeans(liver_counts)
+image(1:ncol(y),1:ncol(y),cor(y),col=icolors,zlim=c(-1,1),
+      xaxt="n",xlab="",yaxt="n",ylab="")
+axis(2,1:ncol(y),sex,las=2)
+axis(1,1:ncol(y),sex,las=2)
+
+#' #### A naive t-test and genes with q values less than or equal to 0.05
+#' ##### The left figure represents a histogram of p values from a naive t-test (all genes). We see that a significant proportion of genes correlate with sex. To investigate if these genes are located on sex chromosomes or autosomal chromosomes, we contruct a volcano plot on the right. To our suprise, again, genes on the Y chromosome do not show signifcant correlation to sex. Rather some genes on the X chromosome demonstrate significance, however, these genes do not make up the majority of significantly assocaited genes.
+#' ## The variance in gene expression is not dicated by differential expression of genes on sex chromosomes.
+mypar(1,2)
+# Histogram of p values associated with ttest
+hist(tt$p.value,main="",ylim=c(0,1300), breaks = 100)
+plot(tt$dm,-log10(tt$p.value))
+tt[X_genes,]$dm
+tt[Y_genes,]
+points(tt[X_genes,]$dm,-log10(tt[X_genes,]$p.value),col=1,pch=16)
+points(tt[Y_genes,]$dm,-log10(tt[Y_genes,]$p.value),col=2,pch=16, xlab="Effect size",ylab="-log10(p-value)")
+legend("bottomright",c("X","Y"),col=1:2,pch=16)
+as.vector(tt$p.value)
+p <- tt$p.value
+qvals <- qvalue(tt$p.value)$qvalue
+index <- which(qvals<=0.05)
+abline(h=-log10(max(tt$p.value[index])))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+load(file = paste0(WD,"/data/GSE5859Subset.rda"))
+library(rafalib)
+library(RColorBrewer)
+library(genefilter)
+
+load(file = paste0(WD,"/data/GSE5859.rda"))
+
+
 
 
 
