@@ -10,3 +10,5 @@
 *.Rdata
 *.Rproj
 /._20200317_qc-rna-seq-phase1_zhang.Rmd
+scripts/._20200328_circadian_batch_investigation-rna-seq_zhang.html
+scripts/._20200328_circadian_batch_investigation-rna-seq_zhang.R
