@@ -308,9 +308,19 @@ names(gen_pheno) <- str_replace(names(gen_pheno), 'viallabel', 'vial_label')
 status <- left_join(meta, gen_pheno, by = 'vial_label') %>% as.data.frame()
 #dim(status)
 
-# Adjust objects in columns as needed
+#' ## Generate New Annotations
+#' * Sequencing batch
+#' * TODO: Time since last fed
+#' * Exercise and control (redundent -- for visualizations)
+#' * Exercise group <= 4 hrs
+#' 
 
-# Create new columns
+#+ New Annotations
+################################################################################
+####### Build New Annotations and Adjust Objects in Columns ####################
+################################################################################
+
+# Sequencing Batch
 status <- status %>% 
         mutate(Seq_batch = 
                        case_when((GET_site == 'Stanford' & Seq_date == '190426') ~ "Stanford_1",
@@ -320,6 +330,25 @@ status <- status %>%
                                  (GET_site == 'MSSM' & Seq_date == '190723') ~ "MSSM_3")
                )
 #table(status$Seq_batch)
+
+# Exercise and Control
+status <- status %>% 
+        mutate(animal.key.exvsctrl = 
+                       factor(case_when( grepl('Control',animal.key.anirandgroup) ~ "Control",
+                                  grepl('Exercise',animal.key.anirandgroup) ~ "Exercise" ))
+        )
+
+# Exercise group <= 4 hrs
+status <- status %>% 
+        mutate(animal.key.exlt4 = 
+                       factor(ifelse(
+                               animal.key.anirandgroup %in% 
+                                             c('Exercise - IPE',
+                                               'Exercise - 0.5 hr',
+                                               'Exercise - 1 hr',
+                                               'Exercise - 4 hr'), 
+                               '1','0'))
+        )
 
 # To factors
 factor_cols <- c("sample_key",
@@ -369,15 +398,15 @@ all(rownames(status) == colnames(all.data.m))
 ##########################################################################
 
 #' #### Data Save: Count Matrix & Metadata
-#' Count matrix: motrpac/20200309_rna-seq_steep/data/20200326_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv
-#' Metadata: motrpac/20200309_rna-seq_steep/data/20200326_rnaseq-meta-pass1a-stanford-sinai_steep.txt
+#' Count matrix: motrpac/20200309_rna-seq_steep/data/20200309_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv
+#' Metadata: motrpac/20200309_rna-seq_steep/data/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt
 
 # Count matrix
-#out_file <- paste0(WD,'/data/20200326_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv')
+out_file <- paste0(WD,'/data/20200309_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv')
 #write.table(all.data.m, file=out_file, row.names = TRUE, quote = FALSE, sep = ',')
 
 # Meatdata table
-#out_file <- paste0(WD,'/data/20200326_rnaseq-meta-pass1a-stanford-sinai_steep.txt')
+out_file <- paste0(WD,'/data/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt')
 #write.table(status, file=out_file, row.names = FALSE, quote = FALSE, sep = '\t')
 
 #' ## PCA Visualization of Sequencing Batches (Unsupervised)

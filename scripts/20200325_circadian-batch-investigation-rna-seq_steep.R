@@ -20,7 +20,8 @@ knitr::opts_chunk$set(cache = FALSE)
 #'     * If Liver clusters by sex, investigate clustering by autosomal and sex genes
 #'         * Histogram of p values by autosomal genes and sex genes (BOTH X and Y chromosomes!)
 #'         * Match with volcano plots
-#'     * Either correct for sex batch, remove sex genes, or subset one sex.
+#'     * Either correct for sex batch, remove sex genes, or subset one sex
+#'         * Decision: Subset by sex
 #' * Perform another PCA with exercise groups, do they cluster together by:
 #'     * Time of day?
 #'     * Exercise cohort?
@@ -54,11 +55,11 @@ WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
 
 # Load the dependencies
 #source("https://bioconductor.org/biocLite.R")
-#BiocManager::install("qvalue")
+#BiocManager::install("som")
 #install.packages("tidyverse")
 
 # Load dependencies
-pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue")
+pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som")
 lapply(pacs...man, FUN = function(X) {
         do.call("library", list(X)) })
 
@@ -115,13 +116,16 @@ f_pmap_aslist <- function(df) {
 # Files last saved in: 20200309_exploration-rna-seq-phase1_steep.R
 
 # Count matrix
-in_file <- paste0(WD,'/data/20200326_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv')
+in_file <- paste0(WD,'/data/20200309_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv')
 count_data <- read.table(in_file,sep = ',', header = TRUE,row.names = 1,check.names = FALSE)
 
 # Meatdata table
-in_file <- paste0(WD,'/data/20200326_rnaseq-meta-pass1a-stanford-sinai_steep.txt')
+in_file <- paste0(WD,'/data/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt')
 col_data <- read.table(in_file, header = TRUE, check.names = FALSE, sep = '\t')
 row.names(col_data) <- col_data$sample_key
+
+# Adjust columns
+col_data$animal.key.exlt4 <- as.factor(col_data$animal.key.exlt4)
 
 #' ## Place Genes in Genomic Ranges
 #' #### Reference Genome and Annotation: Rnor_6.0 (GCA_000001895.4) assembly from Ensembl database (Release 96)
@@ -136,8 +140,6 @@ row.names(col_data) <- col_data$sample_key
 ################################################################################
 #####     Annotate Genes by Chromosome       ###################################
 ################################################################################
-
-# TODO: Load Reference genome and annotations
 
 ### Determine which control samples are male and female
 # Get the list of genes on the W chromosome
@@ -157,7 +159,7 @@ Rn_TxDb <- makeTxDbFromGFF(ens_gtf,
 
 # Define Female specific sex genes (X chromosome)
 # To examine chromosome names
-seqlevels(Rn_TxDb)[1:35]
+seqlevels(Rn_TxDb)[1:23]
 # Extract genes as GRanges object, then names
 X_genes_gr <- genes(Rn_TxDb, columns = "TXCHROM", filter = list(tx_chrom=c("X")))
 # Collect ensembl gene ids for female specific genes
@@ -306,6 +308,119 @@ qvals <- qvalue(tt$p.value)$qvalue
 index <- which(qvals<=0.05)
 abline(h=-log10(max(tt$p.value[index])))
 
+#' ## Subset by sex and compare to exercise/control groups
+
+#+ Males by Exercise/Contrl Groups
+################################################################################
+################# Males by Exercise/Control Groups ##############################
+################################################################################
+
+#' We decide to subset by sex and investigate how samples cluster (top 500 genes ranked by total variance)
+
+#' #### Males by exercise/control group
+# Males (ref removed)
+###################################
+rld.sub <- rld[ , (rld$Tissue == "Liver" & 
+                           rld$animal.registration.sex == 'Male' & 
+                           rld$Sample_category != 'ref') ]
+rld.mat <- assay(rld.sub)
+
+mypar()
+pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("animal.key.anirandgroup"), 
+                           returnData=TRUE, ntop = nrow(assay(rld.sub)))
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup)) +
+        geom_point(size=3) +
+        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        #coord_fixed() +
+        ggtitle("Male Liver Samples Sequenced ")
+
+pca <- prcomp(t(rld.mat), center = TRUE, scale. = FALSE)
+#Doublecheck the plot
+#autoplot(pca)
+
+#' ##### The variances associated with PCs is not strong. Data does not seem to have an obvious linear relationship (TODO: is non-linearity an accurate assessment?). 
+summary(pca)$importance[,1:10]
+plot((summary(pca)$importance[,1:10])[2,]*100, ylab = '% Variance', xlab = "PC")
+
+pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("animal.key.exlt4"), returnData=TRUE, 
+                           ntop = nrow(rld.mat))
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.exlt4)) +
+        geom_point(size=3) +
+        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        #coord_fixed() +
+        ggtitle("Male Liver Samples Sequenced ")
+
+################################################################################
+######## Unsupervised Clustering w/ SOMs & K-means #############################
+################################################################################
+
+# Generate a self organiz
+som1<-som(rld.mat,6,6)
+plot(som1)
+
+
+
+
+data(yeast)
+yeast <- yeast[, -c(1, 11)]
+yeast.f <- filtering(yeast)
+yeast.f.n <- normalize(yeast.f)
+foo <- som(yeast.f.n, xdim=5, ydim=6)
+foo <- som(yeast.f.n, xdim=5, ydim=6, topol="hexa", neigh="gaussian")
+plot(foo)
+
+
+
+
+
+#' #### Males by exercise and control group
+# Males (ref removed)
+###################################
+rld.sub <- rld[ , (rld$Tissue == "Liver" & 
+                           rld$animal.registration.sex == 'Male' & 
+                           rld$Sample_category != 'ref') ]
+
+DESeq2::plotPCA(rld.sub, intgroup ="specimen.collection.t_death") +
+        guides(color=guide_legend(title="Sex"))
+
+
+
+
+
+
+
+
+
+
+
+#' #### Females by exercise/control group
+
+#+ Females by Exercise/Contrl Groups
+################################################################################
+################# Females by Exercise/Control Group ############################
+################################################################################
+
+# Females (ref removed)
+###################################
+rld.sub <- rld[ , (rld$Tissue == "Liver" & 
+                           rld$animal.registration.sex == 'Female' & 
+                           rld$Sample_category != 'ref') ]
+
+pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("animal.key.anirandgroup"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup)) +
+        geom_point(size=3) +
+        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        #coord_fixed() +
+        ggtitle("Female Liver Samples Sequenced ")
 
 
 
@@ -319,6 +434,70 @@ abline(h=-log10(max(tt$p.value[index])))
 
 
 
+
+
+
+
+
+
+rld.sub <- rld[ , (rld$Tissue == "Liver" & 
+                           rld$animal.registration.sex == 'Male' & 
+                           rld$Sample_category != 'ref' &
+                           rld$animal.key.anirandgroup %!in% "Exercise - 48 hr") ]
+
+pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("specimen.collection.t_death"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=specimen.collection.t_death)) +
+        geom_point(size=3) +
+        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        #coord_fixed() +
+        ggtitle("Male Liver Samples Sequenced ")
+
+
+
+
+DESeq2::plotPCA(rld.sub, intgroup ="specimen.collection.t_death") +
+        guides(color=guide_legend(title="Sex"))
+
+str(col_data)
+
+
+
+
+
+
+# Examine character columns
+col_data[, sapply(col_data, class) == 'character']
+# Examine factor columns
+col_data[, sapply(col_data, class) == 'factor']
+# Numeric columns
+col_data[, sapply(col_data, class) == 'numeric']
+# Integer columns
+col_data[, sapply(col_data, class) == 'integer']
+# Logical columns
+col_data[, sapply(col_data, class) == 'logical']
+
+# Steps for investigating categorical variables:
+# * Examine categorical variable in PCA
+# * Create contingenyc table and use Chi square to determine if categorical varibale are associated with eachother
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Notes for examinging Rafa code
 
 load(file = paste0(WD,"/data/GSE5859Subset.rda"))
 library(rafalib)
@@ -327,23 +506,19 @@ library(genefilter)
 
 load(file = paste0(WD,"/data/GSE5859.rda"))
 
+# datasciencebook.pdf page 635
+library(dslabs)
+if(!exists("mnist")) mnist <- read_mnist()
+
+col_means <- colMeans(mnist$test$images) 
+
+pc <- 1:ncol(mnist$test$images) 
+qplot(pc, pca$sdev)
 
 
 
 
-
-
-
-pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("animal.registration.sex","Seq_batch"), returnData=TRUE)
-percentVar <- round(100 * attr(pcaData, "percentVar"))
-ggplot(pcaData, aes(PC1, PC2, color=animal.registration.sex, shape=Seq_batch)) +
-        geom_point(size=3) +
-        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
-        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
-        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
-        #coord_fixed() +
-        ggtitle("Gastrocnemius Samples Sequenced Across Batches")
-
+str(mnist$train$images)
 
 
 
