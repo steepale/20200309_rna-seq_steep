@@ -2,7 +2,7 @@ PASS1A Rat Liver (Stanford Batch 1) RNA-Seq: Circadian vs. Exercise:
 What Drives Variance?
 ================
 Alec Steep and Jiayu Zhang
-20200327
+20200331
 
 ## Goals of Analysis
 
@@ -50,11 +50,11 @@ WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
 
 # Load the dependencies
 #source("https://bioconductor.org/biocLite.R")
-#BiocManager::install("org.Rn.eg.db")
+#BiocManager::install("qvalue")
 #install.packages("tidyverse")
 
 # Load dependencies
-pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel")
+pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue")
 lapply(pacs...man, FUN = function(X) {
         do.call("library", list(X)) })
 ```
@@ -592,7 +592,59 @@ lapply(pacs...man, FUN = function(X) {
     ## [61] "tibble"               "ggplot2"              "tidyverse"           
     ## [64] "stats"                "graphics"             "grDevices"           
     ## [67] "utils"                "datasets"             "methods"             
-    ## [70] "base"
+    ## [70] "base"                
+    ## 
+    ## [[31]]
+    ##  [1] "ggrepel"              "ggpubr"               "magrittr"            
+    ##  [4] "hms"                  "lubridate"            "RColorBrewer"        
+    ##  [7] "BioInstaller"         "SeqGSEA"              "DESeq"               
+    ## [10] "lattice"              "locfit"               "doParallel"          
+    ## [13] "iterators"            "foreach"              "PROPER"              
+    ## [16] "biomaRt"              "pathview"             "org.Hs.eg.db"        
+    ## [19] "formula.tools"        "sva"                  "genefilter"          
+    ## [22] "mgcv"                 "nlme"                 "pheatmap"            
+    ## [25] "org.Rn.eg.db"         "plyr"                 "AnnotationHub"       
+    ## [28] "BiocFileCache"        "dbplyr"               "BSgenome"            
+    ## [31] "rtracklayer"          "Biostrings"           "XVector"             
+    ## [34] "GenomicFeatures"      "hexbin"               "vsn"                 
+    ## [37] "GO.db"                "AnnotationDbi"        "rafalib"             
+    ## [40] "devtools"             "usethis"              "DESeq2"              
+    ## [43] "SummarizedExperiment" "DelayedArray"         "BiocParallel"        
+    ## [46] "matrixStats"          "Biobase"              "GenomicRanges"       
+    ## [49] "GenomeInfoDb"         "IRanges"              "S4Vectors"           
+    ## [52] "BiocGenerics"         "parallel"             "stats4"              
+    ## [55] "forcats"              "stringr"              "dplyr"               
+    ## [58] "purrr"                "readr"                "tidyr"               
+    ## [61] "tibble"               "ggplot2"              "tidyverse"           
+    ## [64] "stats"                "graphics"             "grDevices"           
+    ## [67] "utils"                "datasets"             "methods"             
+    ## [70] "base"                
+    ## 
+    ## [[32]]
+    ##  [1] "qvalue"               "ggrepel"              "ggpubr"              
+    ##  [4] "magrittr"             "hms"                  "lubridate"           
+    ##  [7] "RColorBrewer"         "BioInstaller"         "SeqGSEA"             
+    ## [10] "DESeq"                "lattice"              "locfit"              
+    ## [13] "doParallel"           "iterators"            "foreach"             
+    ## [16] "PROPER"               "biomaRt"              "pathview"            
+    ## [19] "org.Hs.eg.db"         "formula.tools"        "sva"                 
+    ## [22] "genefilter"           "mgcv"                 "nlme"                
+    ## [25] "pheatmap"             "org.Rn.eg.db"         "plyr"                
+    ## [28] "AnnotationHub"        "BiocFileCache"        "dbplyr"              
+    ## [31] "BSgenome"             "rtracklayer"          "Biostrings"          
+    ## [34] "XVector"              "GenomicFeatures"      "hexbin"              
+    ## [37] "vsn"                  "GO.db"                "AnnotationDbi"       
+    ## [40] "rafalib"              "devtools"             "usethis"             
+    ## [43] "DESeq2"               "SummarizedExperiment" "DelayedArray"        
+    ## [46] "BiocParallel"         "matrixStats"          "Biobase"             
+    ## [49] "GenomicRanges"        "GenomeInfoDb"         "IRanges"             
+    ## [52] "S4Vectors"            "BiocGenerics"         "parallel"            
+    ## [55] "stats4"               "forcats"              "stringr"             
+    ## [58] "dplyr"                "purrr"                "readr"               
+    ## [61] "tidyr"                "tibble"               "ggplot2"             
+    ## [64] "tidyverse"            "stats"                "graphics"            
+    ## [67] "grDevices"            "utils"                "datasets"            
+    ## [70] "methods"              "base"
 
 ``` r
 ############################################################
@@ -666,8 +718,13 @@ row.names(col_data) <- col_data$sample_key
 
 #### Reference Genome and Annotation: Rnor\_6.0 (GCA\_000001895.4) assembly from Ensembl database (Release 96)
 
-Found at:
-<http://uswest.ensembl.org/Rattus_norvegicus/Info/Index>.
+Found at: <http://uswest.ensembl.org/Rattus_norvegicus/Info/Index>.
+
+FASTA: Rattus\_norvegicus.Rnor\_6.0.dna.toplevel.fa.gz
+<ftp://ftp.ensembl.org/pub/release-96/fasta/rattus_norvegicus/dna/Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz>
+
+GTF: Rattus\_norvegicus.Rnor\_6.0.96.gtf.gz
+<ftp://ftp.ensembl.org/pub/release-96/gtf/rattus_norvegicus/Rattus_norvegicus.Rnor_6.0.96.gtf.gz>
 
 ``` r
 ################################################################################
@@ -676,10 +733,51 @@ Found at:
 
 # TODO: Load Reference genome and annotations
 
+### Determine which control samples are male and female
+# Get the list of genes on the W chromosome
 
+# Construct your own personal galgal5 reference genome annotation
+# Construct from gtf file from Ensembl (same file used in mapping)
+ens_gtf <- paste0(WD,'/data/Rattus_norvegicus.Rnor_6.0.96.gtf')
+Rn_TxDb <- makeTxDbFromGFF(ens_gtf,
+                           format=c("gtf"),
+                           dataSource="Ensembl_Rattus6_gtf",
+                           organism="Rattus norvegicus",
+                           taxonomyId=NA,
+                           circ_seqs=DEFAULT_CIRC_SEQS,
+                           chrominfo=NULL,
+                           miRBaseBuild=NA,
+                           metadata=NULL)
 
+# Define Female specific sex genes (X chromosome)
+# To examine chromosome names
+seqlevels(Rn_TxDb)[1:35]
+```
 
+    ##  [1] "1"              "2"              "3"              "4"             
+    ##  [5] "5"              "6"              "7"              "8"             
+    ##  [9] "9"              "10"             "11"             "12"            
+    ## [13] "13"             "14"             "15"             "16"            
+    ## [17] "17"             "18"             "19"             "20"            
+    ## [21] "X"              "Y"              "MT"             "AABR07022258.1"
+    ## [25] "AABR07022620.1" "AABR07022926.1" "AABR07024031.1" "AABR07024032.1"
+    ## [29] "AABR07024040.1" "AABR07024041.1" "AABR07024044.1" "AABR07024102.1"
+    ## [33] "AABR07024104.1" "AABR07024106.1" "AABR07024115.1"
 
+``` r
+# Extract genes as GRanges object, then names
+X_genes_gr <- genes(Rn_TxDb, columns = "TXCHROM", filter = list(tx_chrom=c("X")))
+# Collect ensembl gene ids for female specific genes
+X_ens_id <- names(X_genes_gr)
+# Examine the gene symbols
+X_sym <- mapIds(org.Rn.eg.db, names(X_genes_gr), "SYMBOL", "ENSEMBL")
+# Extract genes as GRanges object, then names
+Y_genes_gr <- genes(Rn_TxDb, columns = "TXCHROM", filter = list(tx_chrom=c("Y")))
+# Collect ensembl gene ids for female specific genes
+Y_ens_id <- names(Y_genes_gr)
+sex_ens_id <- c(X_ens_id,Y_ens_id)
+# Examine the gene symbols
+Y_sym <- mapIds(org.Rn.eg.db, names(Y_genes_gr), "SYMBOL", "ENSEMBL")
 
 ################################################################################
 ```
@@ -761,6 +859,149 @@ DESeq2::plotPCA(rld.sub, intgroup ="animal.registration.sex") +
 ![](20200325_circadian-batch-investigation-rna-seq_steep_files/figure-gfm/unnamed-chunk-2-1.png)<!-- -->
 
 ``` r
+# Variables of interest
+male_livers <- (col_data %>% 
+                        filter(Tissue == 'Liver') %>% 
+                        filter(animal.registration.sex == 'Male'))$sample_key %>% 
+        as.character()
+female_livers <- (col_data %>% 
+                          filter(Tissue == 'Liver') %>% 
+                          filter(animal.registration.sex == 'Female'))$sample_key %>% 
+        as.character()
+ref_livers <- (col_data %>% 
+                       filter(Tissue == 'Liver') %>% 
+                       filter(is.na(animal.registration.sex)))$sample_key %>% 
+        as.character()
+livers <- c(male_livers,female_livers,ref_livers)
+Y_genes <- Y_ens_id[Y_ens_id %in% row.names(norm_counts)]
+X_genes <- X_ens_id[X_ens_id %in% row.names(norm_counts)]
+sex <- col_data[livers,"animal.registration.sex"]
+group <- col_data[livers,"animal.key.anirandgroup"]
+liver_counts <- norm_counts[,livers]
+```
+
+#### Predict the sex of reference samples (all samples for that matter) by calculating the median expression of genes on the Y chromosome. We should expect a bimodal distribution with males demonstrating significantly higher median expression.
+
+``` r
+chryexp <- colMeans(norm_counts[Y_genes,livers])
+```
+
+##### If we create a histogram of the median gene expression values on chromosome Y, we should expect to see a bimodal distribution. However, distinct peaks are not detected. This was a surprising result.
+
+``` r
+mypar()
+hist(chryexp, breaks = 200)
+```
+
+![](20200325_circadian-batch-investigation-rna-seq_steep_files/figure-gfm/unnamed-chunk-4-1.png)<!-- -->
+
+``` r
+summary(chryexp)
+```
+
+    ##    Min. 1st Qu.  Median    Mean 3rd Qu.    Max. 
+    ##   2.235   2.474   2.544   2.587   2.681   3.148
+
+We will not use this common strategy to determine sex of unknown
+samples, rather we will use clustering from PCA. The distribution of sex
+by group
+
+``` r
+table(group, sex) # <- Bad idea.
+```
+
+    ##                    sex
+    ## group               Female Male
+    ##   Control - 7 hr         5    5
+    ##   Control - IPE          5    5
+    ##   Exercise - 0.5 hr      5    5
+    ##   Exercise - 1 hr        5    5
+    ##   Exercise - 24 hr       3    3
+    ##   Exercise - 4 hr        5    5
+    ##   Exercise - 48 hr       3    3
+    ##   Exercise - 7 hr        3    3
+    ##   Exercise - IPE         5    5
+
+#### Generate a heatmap of expression from 3 sets of genes:
+
+  - Genes from the Y chromosome
+  - The top and bottom 25 genes (50 total) associated with sex
+  - Randomly selected genes \#\#\#\#\# Males and Females demonstrate
+    distinctly different gene expression profiles.
+  - Genes on the Y chromosome are not a good predictor of sex in Liver
+    mRNA measures (Figure 1; suprising result)
+  - Male and female samples show distinct correlation to one another
+    (Figure 2)
+
+<!-- end list -->
+
+``` r
+# T-test of expression associated with sex
+tt <- rowttests(liver_counts,sex)
+
+# Take genes from the Y chromosome
+# Y_genes
+# Take the top and bottom 25 genes associated with variable of interest (remove any genes in Y chromosome)
+top <- row.names(tt[order(-tt$dm),][1:25,])
+bot <- row.names(tt[order(tt$dm),][1:25,])
+top_n_bot <- setdiff(c(top,bot), Y_genes)
+
+# Randomly select 50 genes not in prior sets 
+set.seed(123)
+randos <- setdiff(row.names(tt[sample(seq(along=tt$dm),50),]), c(Y_genes,top_n_bot))
+geneindex <- c(randos,top_n_bot,Y_genes)
+# Generate the heatmap and support with a plot of a correlation matrix
+mat <- liver_counts[geneindex,]
+mat <- mat -rowMeans(mat)
+icolors <- colorRampPalette(rev(brewer.pal(11,"RdYlBu")))(100)
+mypar(1,2)
+image(t(mat),xaxt="n",yaxt="n",col=icolors)
+y <- liver_counts - rowMeans(liver_counts)
+image(1:ncol(y),1:ncol(y),cor(y),col=icolors,zlim=c(-1,1),
+      xaxt="n",xlab="",yaxt="n",ylab="")
+axis(2,1:ncol(y),sex,las=2)
+axis(1,1:ncol(y),sex,las=2)
+```
+
+![](20200325_circadian-batch-investigation-rna-seq_steep_files/figure-gfm/unnamed-chunk-6-1.png)<!-- -->
+
+#### A naive t-test and genes with q values less than or equal to 0.05
+
+##### The left figure represents a histogram of p values from a naive t-test (all genes). We see that a significant proportion of genes correlate with sex. To investigate if these genes are located on sex chromosomes or autosomal chromosomes, we contruct a volcano plot on the right. To our suprise, again, genes on the Y chromosome do not show signifcant correlation to sex. Rather some genes on the X chromosome demonstrate significance, however, these genes do not make up the majority of significantly assocaited genes.
+
+## The variance in gene expression is not dicated by differential expression of genes on sex chromosomes.
+
+``` r
+mypar(1,2)
+# Histogram of p values associated with ttest
+hist(tt$p.value,main="",ylim=c(0,1300), breaks = 100)
+plot(tt$dm,-log10(tt$p.value))
+points(tt[X_genes,]$dm,-log10(tt[X_genes,]$p.value),col=1,pch=16)
+points(tt[Y_genes,]$dm,-log10(tt[Y_genes,]$p.value),col=2,pch=16, xlab="Effect size",ylab="-log10(p-value)")
+legend("bottomright",c("X","Y"),col=1:2,pch=16)
+p <- tt$p.value
+qvals <- qvalue(tt$p.value)$qvalue
+index <- which(qvals<=0.05)
+abline(h=-log10(max(tt$p.value[index])))
+```
+
+![](20200325_circadian-batch-investigation-rna-seq_steep_files/figure-gfm/unnamed-chunk-7-1.png)<!-- -->
+
+``` r
+load(file = paste0(WD,"/data/GSE5859Subset.rda"))
+library(rafalib)
+library(RColorBrewer)
+library(genefilter)
+
+load(file = paste0(WD,"/data/GSE5859.rda"))
+
+
+
+
+
+
+
+
 pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("animal.registration.sex","Seq_batch"), returnData=TRUE)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
 ggplot(pcaData, aes(PC1, PC2, color=animal.registration.sex, shape=Seq_batch)) +
@@ -772,4 +1013,4 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.registration.sex, shape=Seq_batch)) +
         ggtitle("Gastrocnemius Samples Sequenced Across Batches")
 ```
 
-![](20200325_circadian-batch-investigation-rna-seq_steep_files/figure-gfm/unnamed-chunk-2-2.png)<!-- -->
+![](20200325_circadian-batch-investigation-rna-seq_steep_files/figure-gfm/unnamed-chunk-7-2.png)<!-- -->
