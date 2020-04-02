@@ -3,8 +3,10 @@
 #' author: "Alec Steep and Jiayu Zhang" 
 #' date: "`r format.Date( Sys.Date(), '%Y%m%d' )`"
 #' output:
-#'     github_document: default
-#'     pdf_document: default
+#'     html_document:
+#'         code_folding: hide
+#'         toc: true
+#'         highlight: zenburn
 #'     
 #'---
 
@@ -367,13 +369,6 @@ plot(som1)
 
 
 
-data(yeast)
-yeast <- yeast[, -c(1, 11)]
-yeast.f <- filtering(yeast)
-yeast.f.n <- normalize(yeast.f)
-foo <- som(yeast.f.n, xdim=5, ydim=6)
-foo <- som(yeast.f.n, xdim=5, ydim=6, topol="hexa", neigh="gaussian")
-plot(foo)
 
 
 
@@ -461,7 +456,7 @@ ggplot(pcaData, aes(PC1, PC2, color=specimen.collection.t_death)) +
 DESeq2::plotPCA(rld.sub, intgroup ="specimen.collection.t_death") +
         guides(color=guide_legend(title="Sex"))
 
-str(col_data)
+
 
 
 
@@ -499,26 +494,26 @@ col_data[, sapply(col_data, class) == 'logical']
 
 # Notes for examinging Rafa code
 
-load(file = paste0(WD,"/data/GSE5859Subset.rda"))
-library(rafalib)
-library(RColorBrewer)
-library(genefilter)
+#load(file = paste0(WD,"/data/GSE5859Subset.rda"))
+#library(rafalib)
+#library(RColorBrewer)
+#library(genefilter)
 
-load(file = paste0(WD,"/data/GSE5859.rda"))
+#load(file = paste0(WD,"/data/GSE5859.rda"))
 
 # datasciencebook.pdf page 635
-library(dslabs)
-if(!exists("mnist")) mnist <- read_mnist()
+#library(dslabs)
+#if(!exists("mnist")) mnist <- read_mnist()
 
-col_means <- colMeans(mnist$test$images) 
+#col_means <- colMeans(mnist$test$images) 
 
-pc <- 1:ncol(mnist$test$images) 
-qplot(pc, pca$sdev)
-
-
+#pc <- 1:ncol(mnist$test$images) 
+#qplot(pc, pca$sdev)
 
 
-str(mnist$train$images)
+
+
+#str(mnist$train$images)
 
 
 

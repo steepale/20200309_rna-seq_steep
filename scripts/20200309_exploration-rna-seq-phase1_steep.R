@@ -708,49 +708,49 @@ for(clm in colnames(status)[colnames(status) != 'Seq_batch'] ){
 ##########################################################################
 
 #' #### The Seq_batch_effect varibale:
-status <- status %>%
-        mutate(Seq_batch_effect = as.factor(ifelse(Seq_batch == 'Stanford_1', '1', '0')))
-status %>%
-        select(Seq_batch, Seq_batch_effect) %>% table()
+#status <- status %>%
+#        mutate(Seq_batch_effect = as.factor(ifelse(Seq_batch == 'Stanford_1', '1', '0')))
+#status %>%
+#        select(Seq_batch, Seq_batch_effect) %>% table()
 
 # Perform supervised clustering
-col_data <- status # To look at all samples 
-design = ~ pcaData$PC1 + 1 # Primary variable needs to be last
-title = paste0('Design: ',as.character(design))
+#col_data <- status # To look at all samples 
+#design = ~ pcaData$PC1 + 1 # Primary variable needs to be last
+#title = paste0('Design: ',as.character(design))
 # Create a DESeqDataSet Object
-dds <- DESeqDataSetFromMatrix(countData = count_data,
-                              colData = col_data,
-                              design = design)
+#dds <- DESeqDataSetFromMatrix(countData = count_data,
+#                              colData = col_data,
+#                              design = design)
 
 # Perform pre-filtering.
 # Filter genes with average count of 10 or less.
 # Reasoning from:
 #citation("PROPER")
 #dds
-keep <- rowSums(counts(dds))/ncol(dds) >= 10
-dds <- dds[keep,]
+#keep <- rowSums(counts(dds))/ncol(dds) >= 10
+#dds <- dds[keep,]
 #' #### Summary of counts and annotation data in a DESeqDataSet
-dds
+#dds
 
-dds <- estimateSizeFactors(dds)
-rs <- rowSums(counts(dds))
+#dds <- estimateSizeFactors(dds)
+#rs <- rowSums(counts(dds))
 # Normalize the counts
-rld <- vst(dds) #vst and rlog comparable with all samples
+#rld <- vst(dds) #vst and rlog comparable with all samples
 
 
 #' #### Now let's examine the distribution of **only** reference samples across tissues and batches.
-rld.sub <- rld[ , (rld$Sample_category == 'ref') ]
-pcaData <- DESeq2::plotPCA(rld.sub, 
-                           intgroup=c("animal.registration.sex","Seq_batch","Tissue"), 
-                           returnData=TRUE)
-percentVar <- round(100 * attr(pcaData, "percentVar"))
-ggplot(pcaData, aes(PC1, PC2, color=Seq_batch)) +
-        geom_point(size=3) +
-        geom_text_repel(aes(label=Tissue)) +
-        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
-        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
-        coord_fixed() +
-        ggtitle("Reference Samples Sequenced Across Batches")
+#rld.sub <- rld[ , (rld$Sample_category == 'ref') ]
+#pcaData <- DESeq2::plotPCA(rld.sub, 
+#                           intgroup=c("animal.registration.sex","Seq_batch","Tissue"), 
+#                           returnData=TRUE)
+#percentVar <- round(100 * attr(pcaData, "percentVar"))
+#ggplot(pcaData, aes(PC1, PC2, color=Seq_batch)) +
+#        geom_point(size=3) +
+#        geom_text_repel(aes(label=Tissue)) +
+#        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+#        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+#        coord_fixed() +
+#        ggtitle("Reference Samples Sequenced Across Batches")
 
 
 
