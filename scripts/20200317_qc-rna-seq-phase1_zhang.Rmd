@@ -12,6 +12,12 @@ knitr::opts_chunk$set(echo = TRUE)
 > script based on: tidyverse, DESeq2, ggplot2, ggfortify, devtools  
 > need import of Rdata from ../../../Data/phenotype/merged/merged_dmaqc_data2019-10-13.Rdata  
 
+```{r}
+pacs...man <- c("tidyverse", "DESeq2","devtools","ggfortify","ggplot2")
+lapply(pacs...man, FUN = function(X) {
+        do.call("library", list(X)) 
+})
+```
 
 #### QC by Stanford  
 > DESeq2::varianceStabilizingTransformation to the filtered counts matrix  
@@ -30,7 +36,10 @@ stf_b1_meta = read.csv("../../../Data/rna-seq/stanford/batch_1/metadata/sample_m
 stf_b1_features = read.csv("../../../Data/rna-seq/stanford/batch_1/summary/rnaseq_qc_report.csv", header = T, row.names = 1, na.strings = "NA", check.names = F)
 
 # phenotype info (for now I just used the sex info)
+load("../../../data/phenotype/merged/merged_dmaqc_data2019-10-13.Rdata")
 merged_dmaqc_data_sex = data.frame(cbind(merged_dmaqc_data$viallabel, merged_dmaqc_data$animal.registration.sex), row.names = 1)
+names(merged_dmaqc_data_sex)[1] = "sex"
+merged_dmaqc_data_sex$sex = as.factor(merged_dmaqc_data_sex$sex)
 
 ```
   
