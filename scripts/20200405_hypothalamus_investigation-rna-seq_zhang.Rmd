@@ -1,0 +1,401 @@
+---
+title: "2020005_hypothalamus-circadian-investigation-rna-seq_Zhang"
+author: "Jiayu Zhang"
+date: "4/5/2020"
+output: html_document:
+  code_folding: hide
+  toc: true
+  highlight: zenburn
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(cache = FALSE)
+```
+
+# Hypothalamus Investigation Group Comparison  
+
+> general data structure  
+> differential expressed genes (control group vs. exercise group) t-test?
+> orthologs of mouse circadian genes in rats
+> subset the differential expressed genes -- circadian and exercise
+
+### set up the environment
+```{r}
+################################################################################
+##### Resources and Dependencies ###############################################
+################################################################################
+
+# Set the working directory
+WD <- '/Volumes/SanDisk64GB/MoTrPAC/'
+setwd(WD)
+
+# Load dependencies
+pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2",
+               "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr",
+               "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt","feather",
+               "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel",
+               "AnnotationDbi")
+
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("PROPER")
+BiocManager::install("org.Rn.eg.db")
+BiocManager::install("pcaExplorer")
+mypackages = c("tidyverse","GenomicRanges", "DESeq2","devtools","ggplot2","dplyr","PROPER", "lubridate", "hms",
+               "org.Rn.eg.db", "AnnotationDbi", "pcaExplorer")
+lapply(mypackages, FUN = function(X) {
+  do.call("library", list(X)) })
+
+############################################################
+##### Functions ############################################
+############################################################
+
+# Set select
+select <- dplyr::select
+
+# Capture the Date and Author
+################################################################################
+date <- format.Date( Sys.Date(), '%Y%m%d' )
+auth <- "Jiayu"
+################################################################################
+```
+
+## Data structure  
+### Load and clean data
+
+* Data file to load:
+  + Standford batch 2 & metadata & phenotype 
+```{r}
+# Stanford batch 2 read counts (320 samples in total; 80 hypothalamus samples)
+sford_2 <- read.table(file = paste0(WD,'Data/rna-seq/stanford/batch_2/summary/rsem_genes_count.txt'), 
+                      header = T, row.names = 1, na.strings = "NA", check.names = F)  %>% as.matrix()
+
+# Stanford batch 2 meta data
+sford_meta_2 <-  read.csv(file = paste0(WD,'Data/rna-seq/stanford/batch_2/metadata/sample_metadata_20191010.csv'), 
+                          header = T, na.strings = "NA", check.names = F) 
+
+# Merged Phenotype
+###################################
+
+load(paste0(WD,"Data/phenotype/merged/merged_dmaqc_data2019-10-13.Rdata"))
+
+# Mice RNA seq library
+###################################
+
+# circadian genes
+# TODO: may need to find orthologs for rats
+mice_cir_genes = read.csv(file = paste0(WD,'Data/library/20080516_mouse-SCN-circadian-genes_yan.csv'), 
+                            header = T, na.strings = "NA", check.names = F)
+mice_cir_genes = mice_cir_genes[-which(is.na(mice_cir_genes$SCN)),]
+
+# Convert counts to integers
+mode(sford_2) <- "integer"
+
+# Adjust column objects
+########################
+# To factors
+
+sford_meta_2$vial_label = as.factor(sford_meta_2$vial_label)
+factor_cols <- c("labelid",
+                 "viallabel",
+                 "animal.registration.sex")
+for(fc in factor_cols){
+  merged_dmaqc_data[[fc]] <- as.factor(merged_dmaqc_data[[fc]])
+}
+
+# To Dates: 03JUL2018
+date_cols <- c("acute.test.d_visit",
+               "acute.test.d_start",
+               "animal.familiarization.d_visit",
+               "animal.familiarization.d_treadmillbegin",
+               "animal.familiarization.d_treadmillcomplete",
+               "animal.registration.d_visit",
+               "animal.registration.d_arrive",
+               "animal.registration.d_reverselight",
+               "specimen.collection.d_visit")
+for(dc in date_cols){
+  merged_dmaqc_data[[dc]] <- dmy(merged_dmaqc_data[[dc]])
+}
+# To Dates: Jan 2018 
+merged_dmaqc_data <- merged_dmaqc_data %>%
+  mutate(animal.registration.d_birth = dmy(paste0('1 ',animal.registration.d_birth)))
+
+# To Times: 10:30:00
+time_cols <- c("acute.test.t_complete",
+               "specimen.collection.t_anesthesia",
+               "specimen.collection.t_bloodstart",
+               "specimen.collection.t_bloodstop",
+               "specimen.collection.t_edtafill",
+               "specimen.collection.uteruscomplete",
+               "specimen.collection.t_uterusstart",
+               "specimen.collection.t_uterusstop",
+               "specimen.collection.t_death",
+               "specimen.processing.t_collection",
+               "specimen.processing.t_edtaspin",
+               "specimen.processing.t_freeze")
+for(tc in time_cols){
+  merged_dmaqc_data[[tc]] <- merged_dmaqc_data[[tc]] %>% as.character() %>% parse_time()
+}
+
+# To Times: 01:21
+merged_dmaqc_data <- merged_dmaqc_data %>%
+  mutate(acute.test.howlongshock = 
+           ifelse((merged_dmaqc_data$acute.test.howlongshock != ''), paste0('00:',acute.test.howlongshock), '00:00:00'))
+merged_dmaqc_data$acute.test.howlongshock <- parse_time(merged_dmaqc_data$acute.test.howlongshock)
+
+# Adjust labels within columns (e.g. 1 and 2 to female and male)
+# see ../phenotype/merged/20191013_merged-column-dictionary_steep-edits.xlsx
+########################
+merged_dmaqc_data <- merged_dmaqc_data %>%
+  mutate(animal.registration.sex = 
+           case_when(animal.registration.sex == '1' ~ 'Female',
+                     animal.registration.sex == '2' ~ 'Male'))
+merged_dmaqc_data$animal.registration.sex <- as.factor(merged_dmaqc_data$animal.registration.sex)
+
+#' ### Incorporate Annotation from Phenotypic Data
+#' 
+
+################################################################################
+######### Incorporate Phenotypic Annotations ###################################
+################################################################################
+
+# Replace the name of the vial label column (for sake of join)
+names(merged_dmaqc_data) <- str_replace(names(merged_dmaqc_data), 'viallabel', 'vial_label')
+
+# Perform a left join to incorporate phenotypic information
+status <- left_join(sford_meta_2, merged_dmaqc_data, by = 'vial_label') %>% as.data.frame()
+#dim(status)
+
+# Adjust objects in columns as needed
+
+# Create new columns
+status <- status %>% 
+  mutate(Seq_batch = 
+           case_when((GET_site == 'Stanford' & Seq_date == '190426') ~ "Stanford_1",
+                     (GET_site == 'Stanford' & Seq_date == '190703') ~ "Stanford_2",
+                     (GET_site == 'MSSM' & Seq_date == '190409') ~ "MSSM_1",
+                     (GET_site == 'MSSM' & Seq_date == '190626') ~ "MSSM_2",
+                     (GET_site == 'MSSM' & Seq_date == '190723') ~ "MSSM_3")
+  )
+#table(status$Seq_batch)
+
+# To factors
+factor_cols <- "Seq_batch"
+for(fc in factor_cols){
+  status[[fc]] <- as.factor(status[[fc]])
+}
+
+# "It is absolutely critical that the columns of the count matrix and the rows of the 
+# column data (information about samples) are in the same order. DESeq2 will not make 
+# guesses as to which column of the count matrix belongs to which row of the column data, 
+# these must be provided to DESeq2 already in consistent order." ~ Mike Love
+
+# TODO: Come back and figure out about missing samples and annotation
+
+# Make sure that all values in status "sample_key" are unique
+#status$sample_key %>% length()
+#status$sample_key %>% unique %>% length()
+# Make sure that all columns in counts matrix are unique
+#colnames(all.data.m) %>% length()
+#colnames(all.data.m) %>% unique %>% length()
+
+rownames(status) <- status$vial_label
+#all(rownames(status) %in% colnames(all.data.m))
+#all(colnames(all.data.m) %in% rownames(status))
+#all(rownames(status) == colnames(all.data.m))
+#all.data.m <- all.data.m[, rownames(status)]
+status$animal.key.anirandgroup = as.factor(status$animal.key.anirandgroup)
+# add a new column to status dataframe to differentiate time in hour in a day
+status$hour_death = hour(status$specimen.collection.t_death) %>% as.factor()
+table(status$hour_death)
+hist(status$hour_death, breaks = 8:17)
+```
+### PCA Visualization
+```{r}
+
+
+count_data = sford_2[, sort(colnames(sford_2))]
+col_data = status[sort(rownames(status)), ]
+design = ~1
+title = paste0('Design: ',as.character(design))
+# Create a DESeqDataSet Object
+dds <- DESeqDataSetFromMatrix(countData = count_data,
+                              colData = col_data,
+                              design = design)
+
+
+# Filter genes with average count of 10 or less. (this time I won't perform this)
+# Reasoning from:
+#citation("PROPER")
+#dds
+# keep <- rowMeans(counts(dds)) >= 10
+# dds <- dds[keep,]
+
+dds <- estimateSizeFactors(dds)
+rs <- rowSums(counts(dds))
+# Normalize the counts
+rld <- vst(dds) #vst and rlog comparable with all samples
+#rld <- rlog(dds, blind=FALSE)
+
+# Extract matrix of normalized counts
+norm_counts <- assay(rld)
+counts <- as.data.frame(norm_counts)
+
+# Annotate normalized counts
+counts$ensembl <- rownames(counts)
+counts$symbol <- mapIds(org.Rn.eg.db, counts$ensembl, "SYMBOL", "ENSEMBL")
+counts$entrez <- mapIds(org.Rn.eg.db, counts$ensembl, "ENTREZID", "ENSEMBL")
+counts$genename <- mapIds(org.Rn.eg.db, counts$ensembl, "GENENAME", "ENSEMBL")
+counts$go <- mapIds(org.Rn.eg.db, counts$ensembl, "GO", "ENSEMBL")
+counts$path <- mapIds(org.Rn.eg.db, counts$ensembl, "PATH", "ENSEMBL")
+
+# Here we examine all samples by batch and tissue
+# 
+# first PCA with intGroup of tissue
+DESeq2::plotPCA(rld, intgroup ="Tissue") +
+  guides(color=guide_legend(title="Tissues"))
+
+# subset the dataset to only Gastro, which is my tissue of interest
+rld.sub <- rld[ , (rld$Tissue == "Hypothalamus") ]
+pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("animal.registration.sex","hour_death"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=hour_death, shape=animal.registration.sex)) +
+  geom_point(size=3) +
+  #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  #coord_fixed() +
+  ggtitle("Hypothalamus Samples Across Groups")
+
+# visualize the distribution of PCs' variance explained
+pcaData_1 = prcomp(t(assay(rld.sub)))
+summary(pcaData_1)
+pcascree(pcaData_1, pc_nr = 25, type = "pev")
+```
+We can see that PC1 and PC2 explained limited proportion in variance.  
+Also, there might be an sample resided in opposite cluster  
+### Kmeans clustering
+```{r}
+
+```
+
+## Defferential gene expression
+### Modeling raw counts with normalization
+
+now perform *differential gene expression* on the counts, try to find genes with dfference in counts across groups due to the condition of interest rises above the biological and technical variance we observe
+
+```{r}
+# variables in design formula cannot contain NA, so I have to remove ref samples here
+count_data = sford_2[, sort(colnames(sford_2))]
+col_data = status[sort(rownames(status)), ] 
+count_data = count_data[,-which(is.na(col_data$animal.key.anirandgroup))]
+col_data = col_data[-which(is.na(col_data$animal.key.anirandgroup)),]
+count_data = count_data[,-which(col_data$Tissue != "Hypothalamus")]
+col_data = col_data[-which(col_data$Tissue != "Hypothalamus"), ]
+#group = col_data$animal.key.anirandgroup
+#design = ~ col_data$animal.key.anirandgroup
+title = paste0('Design: ',as.character(design))
+# Create a DESeqDataSet Object
+dds <- DESeqDataSetFromMatrix(countData = count_data,
+                              colData = col_data,
+                              design = ~ animal.key.anirandgroup)
+
+
+# Filter genes with average count of 10 or less. (this time I won't perform this)
+# Reasoning from:
+#citation("PROPER")
+#dds
+# keep <- rowMeans(counts(dds)) >= 10
+# dds <- dds[keep,]
+
+dds_1 <- estimateSizeFactors(dds)
+rs <- rowSums(counts(dds_1))
+# Normalize the counts
+rld <- vst(dds_1) #vst and rlog comparable with all samples
+#rld <- rlog(dds, blind=FALSE)
+
+# Extract matrix of normalized counts
+norm_counts <- assay(rld)
+counts <- as.data.frame(norm_counts)
+
+# Annotate normalized counts
+counts$ensembl <- rownames(counts)
+counts$symbol <- mapIds(org.Rn.eg.db, counts$ensembl, "SYMBOL", "ENSEMBL")
+counts$entrez <- mapIds(org.Rn.eg.db, counts$ensembl, "ENTREZID", "ENSEMBL")
+counts$genename <- mapIds(org.Rn.eg.db, counts$ensembl, "GENENAME", "ENSEMBL")
+counts$go <- mapIds(org.Rn.eg.db, counts$ensembl, "GO", "ENSEMBL")
+counts$path <- mapIds(org.Rn.eg.db, counts$ensembl, "PATH", "ENSEMBL")
+
+# 
+```
+Then run the DESeq2 model:
+```{r}
+dds <- DESeq(dds)
+res = results(dds)
+head(res)
+
+```
+**for myself reference**
+Another way to look at the difference is that a p-value of 0.05 implies that 5% of all tests  
+will result in false positives. An FDR adjusted p-value (or q-value) of 0.05 implies that 5%   
+of significant tests will result in false positives. The latter will result in fewer false  
+positives.  
+```{r}
+# table(res$padj < 0.1)
+# summary(res)
+#which()
+res2 <- results(dds, alpha=0.05)
+table(res2$padj < 0.05)
+
+# a sorted results table:
+resSort <- res2[order(res2$padj),]
+```
+### Visualizing results
+```{r}
+plotMA(res2, ylim=c(-4,4), alpha = 0.05)
+hist(res2$pvalue[res2$baseMean > 1], 
+     col="grey", border="white", xlab="pvalue", ylab="frequency", main="")
+```
+Examine the counts for the top gene, sorting by FDR:
+```{r}
+#plotCounts(dds, gene=which.min(res2$padj), intgroup="animal.key.anirandgroup")
+data <- plotCounts(dds, gene=which.min(res2$padj), intgroup="animal.key.anirandgroup", returnData=TRUE)
+ggplot(data, aes(x=animal.key.anirandgroup, y=count, col = col_data$hour_death)) +
+  geom_point(position=position_jitter(width=.1,height=0)) +
+  scale_y_log10() +
+  theme(axis.text.x = element_text(angle = 45))
+```
+Draw heatmap of the top genes:
+
+```{r}
+topgenes <- head(rownames(resSort),20)
+mat <- assay(rld)[topgenes,]
+
+# standarized the count matrix
+mat <- mat - rowMeans(mat)
+df <- as.data.frame(colData(dds)[,"animal.key.anirandgroup"])
+pheatmap(mat, annotation_col=df)
+```
+Generally, exercise-IPE and exercise-0.5hr are clustered together, apart from other groups.  
+
+
+As we talked in meeting, the control-7 group and exercise-7 group are well matched  
+So I try to find genes that are significantly differently expressed in those 2 groups
+```{r}
+
+
+res3 <- results(dds, alpha=0.05, contrast = c("animal.key.anirandgroup", "Control - 7 hr", "Exercise - 7 hr"))
+table(res3$padj < 0.05)
+hist(res3$pvalue[res3$baseMean > 1], 
+     col="grey", border="white", xlab="pvalue", ylab="frequency", main="")
+data <- plotCounts(dds, gene=which.min(res3$padj), intgroup="animal.key.anirandgroup", returnData=TRUE)
+ggplot(data, aes(x=animal.key.anirandgroup, y=count, col = col_data$hour_death)) +
+  geom_point(position=position_jitter(width=.1,height=0)) +
+  scale_y_log10() +
+  theme(axis.text.x = element_text(angle = 45))
+```
+
