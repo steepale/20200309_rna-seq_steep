@@ -392,7 +392,7 @@ status <- status %>%
                                (specimen.collection.t_death_bins >=  14.25 & 
                                         specimen.collection.t_death_bins <= 15.00) ~ "14.25-15.00",
                                (specimen.collection.t_death_bins >=17.00 & 
-                                        specimen.collection.t_death_bins <= 18.00) ~ "17.00-18.00")))
+                                        specimen.collection.t_death_bins <= 18.00) ~ "10-11.25")))
 
 # To factors
 factor_cols <- c("sample_key",
@@ -401,18 +401,30 @@ for(fc in factor_cols){
         status[[fc]] <- as.factor(status[[fc]])
 }
 
-# Releveling factors
-status$animal.key.anirandgroup <- as.character(status$animal.key.anirandgroup)
-status$animal.key.anirandgroup <- factor(status$animal.key.anirandgroup, 
-                                         levels = c("Control - IPE",
-                                            "Control - 7 hr",
-                                            "Exercise - IPE",
-                                            "Exercise - 0.5 hr",
-                                            "Exercise - 1 hr",
-                                            "Exercise - 4 hr",
-                                            "Exercise - 7 hr",
-                                            "Exercise - 24 hr",
-                                            "Exercise - 48 hr"))
+#' #### Histograms and density plots demonstrate the frequency of sampling based on time of day as well as our binning strategies for incorporating time of day into analyses. 
+#' TODO: Articulate decision making: bins were choosen subjectively/arbitrarily.
+
+#+ Histograms & Density Plots: time of death vs time of day
+################################################################################
+####### Histograms & Density Plots: time of death vs time of day ###############
+################################################################################
+
+#Histogram
+ggplot(status, aes(x=specimen.collection.t_death_bins,
+                   color=specimen.collection.t_death_bins.type, 
+                   fill=specimen.collection.t_death_bins.type)) +
+        geom_histogram(aes(y=..density..), position="identity", alpha=0.5, bins = 96) +
+        labs(title="Histogram: \nAdjusted Bins for Time of Death",
+             x="Time of Death (Hour scale)", 
+             y = "Density") +
+        scale_x_continuous(breaks=seq(0, 24, 0.5))
+# Density plot of sampling based on experimental group
+ggplot(status, aes(x=specimen.collection.t_death, 
+                   fill=animal.key.anirandgroup)) +
+        geom_density(alpha=0.4) +
+        labs(title="Density Plot \nTime of Death for Experimental Groups",
+             x="Time of Death (Hour scale)",
+             y = "Density")
 
 #' #### Data Save: Count Matrix & Metadata
 #' Count matrix: motrpac/20200309_rna-seq_steep/data/20200309_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv
@@ -422,6 +434,7 @@ status$animal.key.anirandgroup <- factor(status$animal.key.anirandgroup,
 ################################################################################
 ############## Data Save: Count Matrix & Metadata ##############################
 ################################################################################
+
 
 # "It is absolutely critical that the columns of the count matrix and the rows of the 
 # column data (information about samples) are in the same order. DESeq2 will not make 
@@ -470,39 +483,6 @@ write.table(all.data.m, file=out_file, row.names = TRUE, quote = FALSE, sep = ',
 # Meatdata table
 out_file <- paste0(WD,'/data/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt')
 write.table(status, file=out_file, row.names = FALSE, quote = FALSE, sep = '\t')
-
-#' #### Histograms and density plots demonstrate the frequency of sampling based on time of day as well as our binning strategies for incorporating time of day into analyses. 
-#' #### Tissue type collectd by exercise/control group
-#' TODO: Articulate decision making: bins were choosen subjectively/arbitrarily. Instead, we should come back once we have a nice cohort of circadian genes in certain tissues and cluster these dates into bins that better represent the (cosine) models of circadian rhythm. 
-
-#+ Histograms, Density Plots, and Tables: time of death vs time of day
-################################################################################
-####### Histograms & Density Plots: time of death vs time of day ###############
-################################################################################
-
-# Tissue type collectd by exercise/control group
-table(status$Tissue, status$animal.key.anirandgroup)
-# Tissue type collectd by time of death
-table(status$Tissue, status$specimen.collection.t_death_bins.type)
-# Demonstrate the confounding
-table(status$animal.key.anirandgroup, status$specimen.collection.t_death_bins.type)
-
-#Histogram
-ggplot(status, aes(x=specimen.collection.t_death_bins,
-                   color=specimen.collection.t_death_bins.type, 
-                   fill=specimen.collection.t_death_bins.type)) +
-        geom_histogram(aes(y=..density..), position="identity", alpha=0.5, bins = 96) +
-        labs(title="Histogram: \nAdjusted Bins for Time of Death",
-             x="Time of Death (Hour scale)", 
-             y = "Density") +
-        scale_x_continuous(breaks=seq(0, 24, 0.5))
-# Density plot of sampling based on experimental group
-ggplot(status, aes(x=specimen.collection.t_death, 
-                   fill=animal.key.anirandgroup)) +
-        geom_density(alpha=0.4) +
-        labs(title="Density Plot \nTime of Death for Experimental Groups",
-             x="Time of Death (Hour scale)",
-             y = "Density")
 
 #' ## PCA Visualization of Sequencing Batches (Unsupervised)
 #' TODO: Generate a summary of major inferences
@@ -596,6 +576,7 @@ rm(d0,norm_counts0)
 
 #' ##### This is what these data look like: Which shows that a majority of variance is explained by just 2 principle components
 plot(s$d^2/sum(s$d^2))
+
 
 #' #### Boxplot of PCs
 #' ##### If we examine the first 4 PC's and startify the data by batch, we can see that the majority of variance in PCs 1 and two are associated with Stanford Batch 1.

@@ -1,7 +1,7 @@
 #'---
-#' title: "PASS1A Rat Liver (Stanford Batch 1): What Drives Variance?"
+#' title: "PASS1A Rat Kidney: What Drives Variance?"
 #' author: "Alec Steep and Jiayu Zhang" 
-#' date: "`r format.Date( Sys.Date(), '%Y%m%d' )`"
+#' date: "20200409"
 #' output:
 #'     html_document:
 #'         code_folding: hide
@@ -18,14 +18,12 @@ knitr::opts_chunk$set(cache = FALSE)
 
 #' ## Goals of Analysis
 #' * TODO: Continue Step-by-step goals of analysis
-#' * Perform a PCA of Liver
-#'     * If Liver clusters by sex, investigate clustering by autosomal and sex genes
+#' * Perform a PCA of Kidney
+#'     * If Kidney clusters by sex, investigate clustering by autosomal and sex genes
 #'         * Histogram of p values by autosomal genes and sex genes (BOTH X and Y chromosomes!)
 #'         * Match with volcano plots
 #'     * Either correct for sex batch, remove sex genes, or subset one sex
-#'         * Decision: Subset by sex
-#' 
-#'     
+#'         * Decision: TODO
 #' 
 #' ## Setup the Environment
 
@@ -49,9 +47,9 @@ pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.d
 lapply(pacs...man, FUN = function(X) {
         do.call("library", list(X)) })
 
-############################################################
-##### Functions ############################################
-############################################################
+################################################################################
+######################### Functions ############################################
+################################################################################
 
 # Set select
 select <- dplyr::select
@@ -163,38 +161,35 @@ Y_sym <- mapIds(org.Rn.eg.db, names(Y_genes_gr), "SYMBOL", "ENSEMBL")
 #' ## Normalization for Sequencing Depth
 
 #+ Normalization for Sequencing Depth
-
 ################################################################################
 #####     Normalization for Sequencing Depth      ##############################
 ################################################################################
 
-#' ##### Liver Samples (80 unique) from 1 batch were filtered prior to normalization
+#' ##### Kidney Samples (82 unique) from 1 batch were filtered prior to normalization
 #' One outlier removed: TODO: Document removal of outlier in seperate script
-livers <- col_data %>%
-  filter(Tissue == 'Liver') %>%
-  filter(sample_key != '90042016803_SF1') %>%
-  select(sample_key) %>% unlist() %>% as.character()
-liver_counts <- count_data[,livers] %>% as.matrix()
+kidneys <- col_data %>%
+        filter(Tissue == 'Kidney') %>%
+        select(sample_key) %>% unlist() %>% as.character()
+kidney_counts <- count_data[,kidneys] %>% as.matrix()
 
 # All samples unique?
 #col_data %>%
-#  filter(Tissue == 'Liver') %>%
+#  filter(Tissue == 'Kidney') %>%
 #  select(vial_label) %>% unlist() %>% unique() %>% length()
 
-# SUbset liver metadata
-liver_cols <- col_data %>%
-  filter(Tissue == 'Liver') %>%
-  filter(sample_key != '90042016803_SF1')
-row.names(liver_cols) <- liver_cols$sample_key
+# Subset kidney metadata
+kidney_cols <- col_data %>%
+        filter(Tissue == 'Kidney')
+row.names(kidney_cols) <- kidney_cols$sample_key
 
 #' #### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
-all(rownames(liver_cols) == colnames(liver_counts))
+all(rownames(kidney_cols) == colnames(kidney_counts))
 
 design = ~ 1 # Primary variable needs to be last
 title = paste0('Design: ',as.character(design))
 # Create a DESeqDataSet Object
-dds <- DESeqDataSetFromMatrix(countData = liver_counts,
-                              colData = liver_cols,
+dds <- DESeqDataSetFromMatrix(countData = kidney_counts,
+                              colData = kidney_cols,
                               design = design)
 
 # Perform pre-filtering.
@@ -202,7 +197,8 @@ dds <- DESeqDataSetFromMatrix(countData = liver_counts,
 # Reasoning from:
 #citation("PROPER")
 #dds
-#' #### We remove genes with an average sequencing depth of 10 or less
+#' #### We remove genes with an average sequencing depth of 10 or less 
+#' ... lowered so more Y genes included
 #' Before Filtering
 dds
 keep <- rowSums(counts(dds))/ncol(dds) > 3
@@ -230,7 +226,6 @@ summary(sizeFactors(dds))
 loggeomeans <- rowMeans(log(counts(dds)))
 exp(median((log(counts(dds)[,1]) - loggeomeans)[is.finite(loggeomeans)])) == sizeFactors(dds)[1]
 
-
 #' ### Comparison of transformation techniques
 
 #+ Transformation Techniques
@@ -246,10 +241,10 @@ vstd <- vst(dds)
 #' The purpose of using the "regularized log" transformation is to shrink together the values of the genes that have very low counts ("shrinkage" technique in statistics). Rlog is close to log2 transform.
 #Time difference of 2.914409 mins (on Macbook pro)
 for( n in 1){
-  start_time <- Sys.time()
-  rld <- rlog(dds)
-  end_time <- Sys.time()
-  print(end_time - start_time)
+        start_time <- Sys.time()
+        rld <- rlog(dds)
+        end_time <- Sys.time()
+        print(end_time - start_time)
 }
 
 # This command is redundent, but included for safety
@@ -282,13 +277,12 @@ mds_rlog <- meanSdPlot(assay(rld)[rs > 0,], ranks=FALSE)
 mds_rlog$gg + ggtitle("rlog Transform")
 
 ################################################################################
-#' ## PCA of Liver Samples 
-#' Samples from Stanford Batch 1, which we suspect demonstrates a strong technical batch effect
+#' ## PCA of Kidney Samples 
+#' Samples from one batch
 
-#+ PCA of Liver Samples
-
+#+ PCA of Kidney Samples
 ################################################################################
-#####     PCA of Liver Samples       ###########################################
+#####     PCA of Kidney Samples       ##########################################
 ################################################################################
 
 # Extract matrix of normalized counts
@@ -305,26 +299,26 @@ counts$genename <- mapIds(org.Rn.eg.db, counts$ensembl, "GENENAME", "ENSEMBL")
 counts$go <- mapIds(org.Rn.eg.db, counts$ensembl, "GO", "ENSEMBL")
 counts$path <- mapIds(org.Rn.eg.db, counts$ensembl, "PATH", "ENSEMBL")
 
-#' #### Liver samples cluster by sex.
+#' #### Kidney samples cluster by sex.
 #' Grey samples represent "reference samples".
 DESeq2::plotPCA(rld, intgroup ="animal.registration.sex") +
         guides(color=guide_legend(title="Sex"))
 
 # Variables of interest
-male_livers <- (liver_cols %>% 
+male_kidneys <- (kidney_cols %>% 
                         filter(animal.registration.sex == 'Male'))$sample_key %>% 
         as.character()
-female_livers <- (liver_cols %>% 
+female_kidneys <- (kidney_cols %>% 
                           filter(animal.registration.sex == 'Female'))$sample_key %>% 
         as.character()
-ref_livers <- (liver_cols %>%
+ref_kidneys <- (kidney_cols %>%
                        filter(is.na(animal.registration.sex)))$sample_key %>% 
         as.character()
-livers <- c(male_livers,female_livers,ref_livers)
+kidneys <- c(male_kidneys,female_kidneys,ref_kidneys)
 Y_genes <- Y_ens_id[Y_ens_id %in% row.names(norm_counts)]
 X_genes <- X_ens_id[X_ens_id %in% row.names(norm_counts)]
-sex <- liver_cols[livers,"animal.registration.sex"]
-group <- liver_cols[livers,"animal.key.anirandgroup"]
+sex <- kidney_cols[kidneys,"animal.registration.sex"]
+group <- kidney_cols[kidneys,"animal.key.anirandgroup"]
 
 #' #### Predict the sex of reference samples (all samples for that matter) by calculating the median expression of genes on the Y chromosome. We should expect a bimodal distribution with males demonstrating significantly higher median expression.
 chryexp <- colMeans(norm_counts[Y_genes,])
@@ -333,21 +327,19 @@ chryexp <- colMeans(norm_counts[Y_genes,])
 chryexp_df <- data.frame("counts" = chryexp)
 chryexp_df$sample <- row.names(chryexp_df) %>% as.factor()
 chryexp_df <- chryexp_df %>%
-  mutate(sex = ifelse(sample %in% male_livers, 'Male', 'Female'))
+        mutate(sex = ifelse(sample %in% male_kidneys, 'Male', 'Female'))
 
-#' ##### If we create a histogram of the median gene expression values on chromosome Y, we should expect to see a bimodal distribution. However, distinct peaks are not detected. This was a surprising result. 
+#' ##### If we create a histogram of the median gene expression values on chromosome Y, we should expect to see a bimodal distribution. Indeed, we do in kidney.
 mypar()
 hist(chryexp_df$counts, breaks = 200, 
      main = "Histogram: \nY Chromosome Genes across Samples",
      xlab = "Total reads on Y chromosome genes per sample")
 ggplot(chryexp_df, aes(counts, colour = sex)) +
-  geom_freqpoly(binwidth = 4) +
-  xlab("Total reads on Y chromosome genes per sample") +
-  ylab("Frequency") +
-  ggtitle("Frequency Polygon: \nY Chromosome Genes across Samples")
+        geom_freqpoly(binwidth = 4) +
+        xlab("Total reads on Y chromosome genes per sample") +
+        ylab("Frequency") +
+        ggtitle("Frequency Polygon: \nY Chromosome Genes across Samples")
 # summary(chryexp)
-
-#' We will not use this common strategy to determine sex of unknown samples, rather we will use clustering from PCA.
 
 #' The distribution of sex by group
 table(group, sex) # <- Bad idea.
@@ -358,11 +350,14 @@ table(group, sex) # <- Bad idea.
 #' * Randomly selected genes
 
 #' ##### Males and Females demonstrate distinctly different gene expression profiles.
-#' * Genes on the Y chromosome are not a good predictor of sex in Liver mRNA measures (Figure 1; suprising result)
+#' * Genes on the Y chromosome are a good predictor of sex in Kidney mRNA measures (Figure 1)
 #' * Male and female samples show distinct correlation to one another (Figure 2)
 
+# Ensure males and females are ordered
+kidney_counts <- counts[,c(male_kidneys,female_kidneys,ref_kidneys)] %>% as.matrix()
+
 # T-test of expression associated with sex
-tt <- rowttests(liver_counts,sex)
+tt <- rowttests(kidney_counts,sex)
 
 # Take genes from the Y chromosome
 # Y_genes
@@ -376,12 +371,12 @@ set.seed(123)
 randos <- setdiff(row.names(tt[sample(seq(along=tt$dm),50),]), c(Y_genes,top_n_bot))
 geneindex <- c(randos,top_n_bot,Y_genes)
 # Generate the heatmap and support with a plot of a correlation matrix
-mat <- liver_counts[geneindex,]
+mat <- kidney_counts[geneindex,]
 mat <- mat -rowMeans(mat)
 icolors <- colorRampPalette(rev(brewer.pal(11,"RdYlBu")))(100)
 mypar(1,2)
 image(t(mat),xaxt="n",yaxt="n",col=icolors)
-y <- liver_counts - rowMeans(liver_counts)
+y <- kidney_counts - rowMeans(kidney_counts)
 image(1:ncol(y),1:ncol(y),cor(y),col=icolors,zlim=c(-1,1),
       xaxt="n",xlab="",yaxt="n",ylab="")
 axis(2,1:ncol(y),sex,las=2)
@@ -408,6 +403,9 @@ abline(h=-log10(max(tt$p.value[index])))
 ################################################################################
 ################ End of Script Notes ###########################################
 ################################################################################
+
+#' TODO: Determine decision for Kidney. Either subset for sex, or adjust for batch.
+#' TODO: Label the reference samples by sex
 
 #' #### Session Information
 ################################################################################

@@ -1,0 +1,15 @@
+INFO [2020-04-09 04:10:16] $x
+INFO [2020-04-09 04:10:16] list(top500, circ_kid_ens)
+INFO [2020-04-09 04:10:16] 
+INFO [2020-04-09 04:10:16] $category.names
+INFO [2020-04-09 04:10:16] c("   --------Top 500 Variance Genes", "Rat Orthologs of \nCircadian Genes \nin Mouse Kidney")
+INFO [2020-04-09 04:10:16] 
+INFO [2020-04-09 04:10:16] $filename
+INFO [2020-04-09 04:10:16] venn_file
+INFO [2020-04-09 04:10:16] 
+INFO [2020-04-09 04:10:16] $imagetype
+INFO [2020-04-09 04:10:16] [1] "png"
+INFO [2020-04-09 04:10:16] 
+INFO [2020-04-09 04:10:16] $output
+INFO [2020-04-09 04:10:16] [1] TRUE
+INFO [2020-04-09 04:10:16] 
