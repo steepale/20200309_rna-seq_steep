@@ -1,7 +1,7 @@
 #'---
 #' title: "PASS1A Rat Liver (Stanford Batch 1): What Drives Variance?"
 #' author: "Alec Steep and Jiayu Zhang" 
-#' date: "`r format.Date( Sys.Date(), '%Y%m%d' )`"
+#' date: "20200325"
 #' output:
 #'     html_document:
 #'         code_folding: hide
@@ -211,10 +211,11 @@ dds <- dds[keep,]
 dds
 
 mypar()
-#' #### When we plot counts for genes across 2 samples, we see that genes with high counts will demonstrate high variance in untransformed data.
-plot(assay(dds)[,1:2], cex=.3)
+#' #### When we plot counts for genes across 2 samples, we see that genes with high counts will demonstrate high variance in non-normalized non-transformed data.
+plot(assay(dds)[,1:2], cex=1)
 #' To see the reads per million for each sample
 sort(colSums(assay(dds)))/1e6
+summary(colSums(assay(dds))/1e6)
 
 # estimateSizeFactors gives us a robust estimate in sequencing depth
 dds <- estimateSizeFactors(dds)
@@ -238,7 +239,7 @@ exp(median((log(counts(dds)[,1]) - loggeomeans)[is.finite(loggeomeans)])) == siz
 #####     Transformation Techniques      #######################################
 ################################################################################
 
-#' ##### Log2 normalization (with size factor and pseudo count)"
+#' ##### Log2 normalization (with size factor and pseudo count)
 log_norm_counts <- log2(counts(dds, normalized=TRUE) + 1)
 #' ##### Variance stabilizing transformation (VST) uses a subset of genes and divides each column of the counts matrix by our size factors. It also normalizes with respect to library size.
 vstd <- vst(dds)
@@ -255,12 +256,10 @@ for( n in 1){
 # This command is redundent, but included for safety
 rs <- rowSums(counts(dds))
 #' #### Here we visualize the counts from log2 transformation and from the rlog transform
-mypar(1,2)
+mypar(1,3)
 boxplot(log2(counts(dds)[rs > 0,] +1), cex=0.2, main = "log2 Transform") # Log2 Transform
-boxplot(assay(rld)[rs > 0,], cex=0.2, main = "rlog Transform") # Regularized Log Transform
-mypar(1,2)
-boxplot(log2(counts(dds)[rs > 0,] +1), cex=0.2, main = "log2 Transform") # log2 Transform
 boxplot(assay(vstd)[rs > 0,], cex=0.2, main = "VST Transform") # VST Transform
+boxplot(assay(rld)[rs > 0,], cex=0.2, main = "rlog Transform") # Regularized Log Transform
 
 #' ##### Returning to our prior plot of comparing expression of 2 samples, we can see the the variance is now more stable in VST and rlog transforms. However, the VST transform demonstrates a lot of variance in genes with low read counts. For that reason, we will proceed with rlog transform.
 mypar(1,1)
@@ -408,6 +407,9 @@ abline(h=-log10(max(tt$p.value[index])))
 ################################################################################
 ################ End of Script Notes ###########################################
 ################################################################################
+
+# TODO: Something is funky in this script
+# TODO: Go find kidney script and sort out the ordering of samples
 
 #' #### Session Information
 ################################################################################

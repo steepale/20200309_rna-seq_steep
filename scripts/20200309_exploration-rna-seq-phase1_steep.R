@@ -49,7 +49,7 @@ WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
 pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2",
                 "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr",
                 "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt","feather",
-                "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel")
+                "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","reshape2")
 lapply(pacs...man, FUN = function(X) {
         do.call("library", list(X)) })
 
@@ -465,20 +465,72 @@ all(rownames(status) == colnames(all.data.m))
 
 # Count matrix
 out_file <- paste0(WD,'/data/20200309_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv')
-write.table(all.data.m, file=out_file, row.names = TRUE, quote = FALSE, sep = ',')
+#write.table(all.data.m, file=out_file, row.names = TRUE, quote = FALSE, sep = ',')
 
 # Meatdata table
 out_file <- paste0(WD,'/data/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt')
-write.table(status, file=out_file, row.names = FALSE, quote = FALSE, sep = '\t')
+#write.table(status, file=out_file, row.names = FALSE, quote = FALSE, sep = '\t')
 
 #' #### Histograms and density plots demonstrate the frequency of sampling based on time of day as well as our binning strategies for incorporating time of day into analyses. 
 #' #### Tissue type collectd by exercise/control group
 #' TODO: Articulate decision making: bins were choosen subjectively/arbitrarily. Instead, we should come back once we have a nice cohort of circadian genes in certain tissues and cluster these dates into bins that better represent the (cosine) models of circadian rhythm. 
 
-#+ Histograms, Density Plots, and Tables: time of death vs time of day
+#+ Design Summary: Heatmaps, Histograms, Density Plots, and Tables
 ################################################################################
-####### Histograms & Density Plots: time of death vs time of day ###############
+####### Design Summary: Heatmaps, Histograms, Density Plots, and Tables ########
 ################################################################################
+
+# Generate a heatmap of major annotations of interest
+# Annotations of interest:
+# Samples: sample_key
+# Sequencing Batch: Seq_batch
+# Sex: animal.registration.sex
+# Exercise/Control Group: animal.key.anirandgroup
+# Time of Death (binned): specimen.collection.t_death_bins.type
+# Tissue: Tissue
+
+# Select annotations of interest
+ann_df <- status %>%
+        select(sample_key,
+               Tissue,
+               Seq_batch,
+               animal.registration.sex,
+               animal.key.anirandgroup,
+               specimen.collection.t_death_bins.type)
+annotations <- c("sample_key",
+                 "Tissue",
+                 "Seq_batch",
+                 "animal.registration.sex",
+                 "animal.key.anirandgroup",
+                 "specimen.collection.t_death_bins.type")
+for(anno in annotations){
+        ann_df[[anno]] <- as.character(ann_df[[anno]])
+}
+# Adjust names
+names(ann_df) <- c('Sample','Tissue','Sequencing Batch',
+                   'Sex','Exercise/Control Group','Time of Death (binned)')
+ann_df <- ann_df %>%
+        select('Sample','Exercise/Control Group','Time of Death (binned)',
+               'Sex','Sequencing Batch','Tissue')
+# Melt dataframe
+ann_df_melt <- melt(ann_df, id.var = 'Sample')
+# Adjust colors
+n <- length(unique(ann_df_melt$value))
+colors <- colorRampPalette(c("blue", "green", "yellow", "red"))(n)
+
+#' #### The distribution of Samples by Annotations of Primary Interest
+# Plot heatmap
+ggplot(ann_df_melt, 
+       aes(variable, Sample)) + 
+        geom_tile(aes(fill = value),
+                  colour = "white") +
+        scale_fill_manual(values=colors) +
+        theme(axis.title.y=element_blank(),
+              axis.text.y=element_blank(),
+              axis.ticks.y=element_blank()) +
+        theme(legend.position="none") +
+        theme(axis.title.x=element_blank()) +
+        theme(text = element_text(size=20))
 
 # Tissue type collectd by exercise/control group
 table(status$Tissue, status$animal.key.anirandgroup)
@@ -502,7 +554,8 @@ ggplot(status, aes(x=specimen.collection.t_death,
         geom_density(alpha=0.4) +
         labs(title="Density Plot \nTime of Death for Experimental Groups",
              x="Time of Death (Hour scale)",
-             y = "Density")
+             y = "Density") +
+        guides(fill=guide_legend(title="Exercise/Control Groups"))
 
 #' ## PCA Visualization of Sequencing Batches (Unsupervised)
 #' TODO: Generate a summary of major inferences
@@ -547,10 +600,10 @@ counts <- as.data.frame(norm_counts)
 # Annotate normalized counts
 counts$ensembl <- rownames(counts)
 counts$symbol <- mapIds(org.Rn.eg.db, counts$ensembl, "SYMBOL", "ENSEMBL")
-counts$entrez <- mapIds(org.Rn.eg.db, counts$ensembl, "ENTREZID", "ENSEMBL")
-counts$genename <- mapIds(org.Rn.eg.db, counts$ensembl, "GENENAME", "ENSEMBL")
-counts$go <- mapIds(org.Rn.eg.db, counts$ensembl, "GO", "ENSEMBL")
-counts$path <- mapIds(org.Rn.eg.db, counts$ensembl, "PATH", "ENSEMBL")
+#counts$entrez <- mapIds(org.Rn.eg.db, counts$ensembl, "ENTREZID", "ENSEMBL")
+#counts$genename <- mapIds(org.Rn.eg.db, counts$ensembl, "GENENAME", "ENSEMBL")
+#counts$go <- mapIds(org.Rn.eg.db, counts$ensembl, "GO", "ENSEMBL")
+#counts$path <- mapIds(org.Rn.eg.db, counts$ensembl, "PATH", "ENSEMBL")
 
 #' #### Let's examine the stucture in the data to see if there is significant sample correlation
 #' It looks like much of the sample correlation is driven by sequencing batch

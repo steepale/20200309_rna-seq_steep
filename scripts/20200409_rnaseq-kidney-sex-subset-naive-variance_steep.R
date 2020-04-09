@@ -324,9 +324,6 @@ output_n <- circ_kid2$ENSEMBL_RAT %>% unique() %>% length() %>% as.character()
 circ_kid <- circ_kid2
 rm(circ_kid2)
 
-circ_kid %>%
-        filter(is.na(circ_kid$SYMBOL_RAT))
-
 # Make one custom adjustment (Biomart did not catch this annotation)
 circ_kid <- circ_kid %>%
         mutate(SYMBOL_RAT = ifelse(
@@ -583,7 +580,7 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup.bins.1)) +
         xlab(paste0("PC1: ",percentVar[1],"% variance")) +
         ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
         #coord_fixed() +
-        ggtitle("Female Kidney Samples: \nRandomly Sampled Genes (n = 201") +
+        ggtitle("Female Kidney Samples: \nRandomly Sampled Genes (n = 201)") +
         guides(color=guide_legend(title="Control/Exercise Groups"))
 
 # Collect the variance for top 500 genes and for circadian rhythm genes

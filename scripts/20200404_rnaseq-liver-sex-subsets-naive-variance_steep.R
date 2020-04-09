@@ -478,9 +478,9 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup)) +
 #' #### An (unrooted) euclidean distance dendrogram of the top 500 genes driving variance demonstrates further supports the notion that immediate exercise groups show relatively higher variance in their gene expressions. The dendrogram adds precision to the groupings (compared to and in support of PCA).
 hc <- hclust(dist(t(assay(rld.500))))
 # Create a dendrogram with different annotations
-myplclust(hc, labels=colData(rld.sub)[["animal.key.anirandgroup"]],
+myplclust(hc, labels=colData(rld.500)[["animal.key.anirandgroup"]],
           #cex=0.8, 
-          lab.col=as.fumeric(as.character(colData(rld.sub)[["animal.key.anirandgroup"]])), 
+          lab.col=as.fumeric(as.character(colData(rld.500)[["animal.key.anirandgroup"]])), 
           main="Euclidean Distance Dendrogram: \nExercise/Control Groups")
 # Including binned time of death annotation demonstrates the troubling experimental design but it may distract from the following findings; therefore it is not included in the final report but code is provided.
 #myplclust(hc, labels=colData(rld.sub)[["specimen.collection.t_death_bins.type"]],
@@ -578,7 +578,7 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup.bins.1)) +
         xlab(paste0("PC1: ",percentVar[1],"% variance")) +
         ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
         #coord_fixed() +
-        ggtitle("Male Liver Samples: \nRandomly Sampled Genes (n = 102") +
+        ggtitle("Male Liver Samples: \nRandomly Sampled Genes (n = 102)") +
         guides(color=guide_legend(title="Control/Exercise Groups"))
 
 # Collect the variance for top 500 genes and for circadian rhythm genes
@@ -646,7 +646,7 @@ melt_plot$value <- as.numeric(melt_plot$value)
 #' #### When we examine the expression of a set of circadian genes selected at random, we see that they do not considerably chnage their expression over time
 set.seed(666)
 rando_plot <- melt_plot %>%
-        filter(variable %in% sample(melt_plot$variable, 20))
+        filter(variable %in% sample(melt_plot$variable, 10))
 ggplot(rando_plot, 
        aes(x = specimen.collection.t_death, 
            y = value, 
