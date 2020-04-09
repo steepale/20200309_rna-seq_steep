@@ -1,0 +1,12 @@
+INFO [2020-04-07 22:57:25] $x
+INFO [2020-04-07 22:57:25] list(assay(rld)[topgenes, ], circ_liv_ens)
+INFO [2020-04-07 22:57:25] 
+INFO [2020-04-07 22:57:25] $category.names
+INFO [2020-04-07 22:57:25] c("Top 500 Genes Driving Variance in Naive PCA", "Rat Orthologs of Circadian Genes in Mouse Liver")
+INFO [2020-04-07 22:57:25] 
+INFO [2020-04-07 22:57:25] $filename
+INFO [2020-04-07 22:57:25] venn_file
+INFO [2020-04-07 22:57:25] 
+INFO [2020-04-07 22:57:25] $output
+INFO [2020-04-07 22:57:25] [1] TRUE
+INFO [2020-04-07 22:57:25] 

@@ -1,0 +1,858 @@
+#'---
+#' title: "PASS1A Rat Liver (Stanford Batch 1): Sex Subsets -- Groupings by Naive Models"
+#' author: "Alec Steep and Jiayu Zhang" 
+#' date: "20200404"
+#' output:
+#'     html_document:
+#'         code_folding: hide
+#'         toc: true
+#'         highlight: zenburn
+#'     
+#'---
+
+#+ setup, include=FALSE
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(cache = FALSE)
+
+#' ## Goals of Analysis
+#' * Determine rat orthologs of circadian genes in mouse liver
+#' * Perform PCAs with liver sex subsets, do they cluster together by:
+#'     * Time of day?
+#'     * Exercise cohort?
+#'     * Other metadata?
+#' * Subset circadian rhythm genes to determine and generate more PCAs.
+#' 
+#'     
+#' 
+#' ## Setup the Environment
+
+#+ Setup Environment
+
+################################################################################
+##### Resources and Dependencies ###############################################
+################################################################################
+
+# Set the working directory
+WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
+#setwd(WD)
+
+# Load the dependencies
+#source("https://bioconductor.org/biocLite.R")
+#BiocManager::install("EBImage")
+#install.packages("tidyverse")
+
+# Load dependencies
+pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som", "vsn","org.Mm.eg.db","VennDiagram","EBImage","reshape2")
+lapply(pacs...man, FUN = function(X) {
+        do.call("library", list(X)) })
+
+############################################################
+##### Functions ############################################
+############################################################
+
+# Set select
+select <- dplyr::select
+
+# Make the 'not in' operator
+################################################################################
+'%!in%' <- function(x,y) {
+        !('%in%'(x,y))
+}
+################################################################################
+
+# Capture the Date and AUthor
+################################################################################
+date <- format.Date( Sys.Date(), '%Y%m%d' )
+auth <- "steep"
+################################################################################
+
+## explicit gc, then execute `expr` `n` times w/o explicit gc, return timings
+################################################################################
+benchmark <- function(n = 1, expr, envir = parent.frame()) {
+        expr <- substitute(expr)
+        gc()
+        map(seq_len(n), ~ system.time(eval(expr, envir), gcFirst = FALSE))
+}
+################################################################################
+
+# Function to speed up making rows into lists for interation with lapply
+################################################################################
+f_pmap_aslist <- function(df) {
+        purrr::pmap(as.list(df), list)
+}
+################################################################################
+
+# Function to relabel RNASeq read names to orthologs
+###############################################################################################
+# mmusculus_gene_ensembl: Mouse genes (GRCm38.p6)
+# rnorvegicus_gene_ensembl: Rat genes (Rnor_6.0)
+mouse2rat_ortho <- function(x) {
+        # Ensure 'x' is a data.frame
+        if ( class(x) != "data.frame" ) {
+                stop("'x' must be a data frame", class.= FALSE)
+        }
+        
+        # Load requirements
+        library(biomaRt)
+        library(purrr)
+        library(dplyr)
+        # Load in annotations
+        mart_mm_ens = useMart("ensembl", dataset="mmusculus_gene_ensembl")
+        mart_rn_ens = useMart("ensembl", dataset="rnorvegicus_gene_ensembl")
+        # Create ortholog table
+        ortho_df <- getLDS(attributes=c("ensembl_gene_id","rnorvegicus_homolog_orthology_confidence"),
+                           filters="ensembl_gene_id", 
+                           values = x$ENSEMBL_MOUSE, 
+                           mart=mart_mm_ens,
+                           attributesL=c("ensembl_gene_id"), 
+                           martL=mart_rn_ens) # Use biomart to get orthologs
+        # Filter out any low confidence orthologs and any genes that are not one-to-one orthologs in both directions
+        ortho_df <- ortho_df[ortho_df$Rat.orthology.confidence..0.low..1.high. == '1',]
+        ortho_df <- ortho_df[!duplicated(ortho_df[,1]),]
+        ortho_df <- ortho_df[!duplicated(ortho_df[,3]),]
+        names(ortho_df) <- c('ENSEMBL_MOUSE','CONFIDENCE','ENSEMBL_RAT') 
+        ortho_df <- ortho_df %>%
+                select(-CONFIDENCE)
+        
+        # Assumes that 'x' has ensembl chicken gene ID's as rownames
+        # Ensure that only chicken genes appear in the matrix
+        #x <- x[startsWith(rownames(x), "ENSGALG"),]
+        # Assign the HUGO symbols to a new column
+        x <- left_join(x, ortho_df, by = "ENSEMBL_MOUSE") %>%
+                filter(!is.na(ENSEMBL_RAT)) %>%
+                mutate(SYMBOL_RAT = mapIds(org.Rn.eg.db, ENSEMBL_RAT, "SYMBOL", "ENSEMBL"))
+        x
+}
+#########################################################################################
+
+
+#' ## Load & Clean Data
+#' ##### Data files to load:
+#' * Count Matrix and Metadata Table from:
+#'     * RNA-Seq from Mt. Sinai
+#'         * 3 sequencing batches & metadata
+#'     * RNA-Seq from Stanford
+#'         * 2 sequencing batches & metadata
+
+#+ Load the Data
+
+################################################################################
+#####     Load & Clean Data      ###############################################
+################################################################################
+
+# Files last saved in: 20200309_exploration-rna-seq-phase1_steep.R
+
+# Count matrix
+in_file <- paste0(WD,'/data/20200309_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv')
+count_data <- read.table(in_file,sep = ',', header = TRUE,row.names = 1,check.names = FALSE)
+
+# Meatdata table
+in_file <- paste0(WD,'/data/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt')
+col_data <- read.table(in_file, header = TRUE, check.names = FALSE, sep = '\t')
+row.names(col_data) <- col_data$sample_key
+
+# Adjust column objects
+########################
+# To factors
+factor_cols <- c("labelid",
+                 "vial_label",
+                 "animal.registration.sex",
+                 "animal.key.exlt4")
+for(fc in factor_cols){
+        col_data[[fc]] <- as.factor(col_data[[fc]])
+}
+
+# To Dates: 03JUL2018
+date_cols <- c("acute.test.d_visit",
+               "acute.test.d_start",
+               "animal.familiarization.d_visit",
+               "animal.familiarization.d_treadmillbegin",
+               "animal.familiarization.d_treadmillcomplete",
+               "animal.registration.d_visit",
+               "animal.registration.d_arrive",
+               "animal.registration.d_reverselight",
+               "specimen.collection.d_visit",
+               "animal.registration.d_birth")
+for(dc in date_cols){
+        col_data[[dc]] <- ymd(col_data[[dc]])
+}
+
+# To Times: 10:30:00
+time_cols <- c("acute.test.t_complete",
+               "specimen.collection.t_anesthesia",
+               "specimen.collection.t_bloodstart",
+               "specimen.collection.t_bloodstop",
+               "specimen.collection.t_edtafill",
+               "specimen.collection.uteruscomplete",
+               "specimen.collection.t_uterusstart",
+               "specimen.collection.t_uterusstop",
+               "specimen.collection.t_death",
+               "specimen.processing.t_collection",
+               "specimen.processing.t_edtaspin",
+               "specimen.processing.t_freeze",
+               "acute.test.howlongshock")
+for(tc in time_cols){
+        col_data[[tc]] <- col_data[[tc]] %>% as.character() %>% parse_time()
+}
+
+
+#' ## Place Genes in Genomic Ranges
+#' #### Reference Genome and Annotation: Rnor_6.0 (GCA_000001895.4) assembly from Ensembl database (Release 96)
+#' Found at: http://uswest.ensembl.org/Rattus_norvegicus/Info/Index.
+#' 
+#' FASTA: Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz ftp://ftp.ensembl.org/pub/release-96/fasta/rattus_norvegicus/dna/Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz
+#' 
+#' GTF: Rattus_norvegicus.Rnor_6.0.96.gtf.gz ftp://ftp.ensembl.org/pub/release-96/gtf/rattus_norvegicus/Rattus_norvegicus.Rnor_6.0.96.gtf.gz
+
+#+ Annotate Genes by Chromosome
+################################################################################
+#####     Annotate Genes by Chromosome       ###################################
+################################################################################
+
+### Determine which control samples are male and female
+# Get the list of genes on the W chromosome
+
+# Construct your own personal galgal5 reference genome annotation
+# Construct from gtf file from Ensembl (same file used in mapping)
+ens_gtf <- paste0(WD,'/data/Rattus_norvegicus.Rnor_6.0.96.gtf')
+Rn_TxDb <- makeTxDbFromGFF(ens_gtf,
+                           format=c("gtf"),
+                           dataSource="Ensembl_Rattus6_gtf",
+                           organism="Rattus norvegicus",
+                           taxonomyId=NA,
+                           circ_seqs=DEFAULT_CIRC_SEQS,
+                           chrominfo=NULL,
+                           miRBaseBuild=NA,
+                           metadata=NULL)
+
+# Define Female specific sex genes (X chromosome)
+# To examine chromosome names
+seqlevels(Rn_TxDb)[1:23]
+# Extract genes as GRanges object, then names
+X_genes_gr <- genes(Rn_TxDb, columns = "TXCHROM", filter = list(tx_chrom=c("X")))
+# Collect ensembl gene ids for female specific genes
+X_ens_id <- names(X_genes_gr)
+# Examine the gene symbols
+X_sym <- mapIds(org.Rn.eg.db, names(X_genes_gr), "SYMBOL", "ENSEMBL")
+# Extract genes as GRanges object, then names
+Y_genes_gr <- genes(Rn_TxDb, columns = "TXCHROM", filter = list(tx_chrom=c("Y")))
+# Collect ensembl gene ids for female specific genes
+Y_ens_id <- names(Y_genes_gr)
+sex_ens_id <- c(X_ens_id,Y_ens_id)
+# Examine the gene symbols
+Y_sym <- mapIds(org.Rn.eg.db, names(Y_genes_gr), "SYMBOL", "ENSEMBL")
+
+#' #### Retrieve Circadian Genes Associated with Tissue (Liver)
+#' Data from Supplementary Table 2 from 1. Yan, J., Wang, H., Liu, Y. & Shao, C. Analysis of gene regulatory networks in the mammalian circadian rhythm. PLoS Comput. Biol. 4, (2008).
+#' Downloaded 20200326 by Alec Steep
+
+#+ Circadian Gene Sets
+################################################################################
+#####     Circadian Gene Sets       ############################################
+################################################################################
+
+# Circadian Genes
+in_file <- paste0(WD,'/data/20080516_mouse-tissue-circadian-genes_yan.txt')
+circ_df <- read.table(in_file,sep = '\t', header = TRUE,check.names = FALSE)
+# Adjust gene symbol names
+names(circ_df)[1] <- "SYMBOL_MOUSE"
+
+circ_liv <- circ_df %>%
+        select(SYMBOL_MOUSE, LIV, NUM.TISSUE, RANGE.P, PEAK.MEAN) %>%
+        filter(!is.na(LIV)) %>%
+        filter(NUM.TISSUE >= 4)
+input_n <- circ_liv$SYMBOL_MOUSE %>% unique() %>% length() %>% as.character()
+
+# Some genes were annotated with synonyms by Yan et al. We manually convert these synonyms to gene symbols
+circ_liv$SYMBOL_MOUSE <- as.character(circ_liv$SYMBOL_MOUSE)
+circ_liv$ENSEMBL_MOUSE <- mapIds(org.Mm.eg.db, circ_liv$SYMBOL_MOUSE, "ENSEMBL", "SYMBOL")
+# Useful trick, search symbol in aliases and grab symbol
+circ_liv$ALIAS_MOUSE <- mapIds(org.Mm.eg.db, 
+                               circ_liv$SYMBOL_MOUSE, "SYMBOL", "ALIAS",
+                               multiVals = "first")
+
+# With a slow for loop, iterate through rows of dataframe and adjust nomenclature scheme as needed
+for( r in 1:nrow(circ_liv)){
+        ENSEMBL <- circ_liv[r,'ENSEMBL_MOUSE']
+        ALIAS <- circ_liv[r,'ALIAS_MOUSE']
+        if(is.na(ENSEMBL)){
+                if(!is.na(ALIAS)){
+                        # Remember that ALIAS is actually from Ensembl's SYMBOL column
+                        ENSEMBL_RPL <- mapIds(org.Mm.eg.db, ALIAS, "ENSEMBL", "SYMBOL")
+                        circ_liv[r,'ENSEMBL_MOUSE'] <- ENSEMBL_RPL
+                        circ_liv[r,'SYMBOL_MOUSE'] <- ALIAS
+                }
+        }
+}
+
+circ_liv <- circ_liv %>%
+        filter(!is.na(ENSEMBL_MOUSE)) %>%
+        select(-ALIAS_MOUSE)
+
+circ_liv2 <- mouse2rat_ortho(circ_liv)
+output_n <- circ_liv2$ENSEMBL_RAT %>% unique() %>% length() %>% as.character()
+#' ##### High confidence ortholgos were collected from Yan et. al. (Supplementary Table 2) and converted to high confidence rat orthologs with Ensembl.
+#' ###### Mouse annotation: GRCm38.p6
+#' ###### Rat annotation: Rnor_6.0
+#' ###### Stats:
+#' * Mouse genes input: `r input_n`
+#' * High confidence Rat orthologs output: `r output_n`
+#' ###### Steps in ortholog selection:
+#' * Demonstration of circadian oscilliations in mouse liver (from Yan et. al.)
+#' * Demonstration of circadian oscilliations in 4 or more tissues (from Yan et. al.)
+#' * Mouse genes were removed that did not have Ensembl gene symbol (or alias) to gene id 
+#'     * First choice of 1:many were included
+#' * Genes were removed if they did not have a high orthology confidence score between mouse gene id and rat gene id  (binary value 0|1)
+#' * Duplicate orthologs were removed
+#'     * First choice of 1:many were included
+
+# Cleanup
+circ_liv <- circ_liv2
+rm(circ_liv2)
+
+# Make one custom adjustment (Biomart did not catch this annotation)
+circ_liv <- circ_liv %>%
+        mutate(SYMBOL_RAT = ifelse(ENSEMBL_RAT == 'ENSRNOG00000060956', SYMBOL_MOUSE, SYMBOL_RAT))
+
+# Collect liver circadian river genes
+circ_liv_ens <- circ_liv %>%
+        select(ENSEMBL_RAT) %>% unlist()
+
+#' ## Normalization for Sequencing Depth (Male Livers)
+
+#+ Normalization for Sequencing Depth (Male Livers)
+
+################################################################################
+#####     Normalization for Sequencing Depth  (Male Livers)   ##################
+################################################################################
+
+#' ##### Male Liver Samples (40 unique) from 1 batch were filtered prior to normalization
+#' One outlier removed: TODO: Document removal of outlier in seperate script
+mliv <- col_data %>%
+        filter(Tissue == 'Liver') %>%
+        filter(animal.registration.sex == 'Male') %>%
+        #filter(sample_key != '90042016803_SF1') %>%
+        select(sample_key) %>% unlist() %>% as.character()
+mliv_counts <- count_data[,mliv] %>% as.matrix()
+
+# All samples unique?
+#col_data %>%
+#  filter(Tissue == 'Liver') %>%
+#  select(vial_label) %>% unlist() %>% unique() %>% length()
+
+# SUbset liver metadata
+mliv_cols <- col_data %>%
+        filter(Tissue == 'Liver') %>%
+        filter(animal.registration.sex == 'Male')
+        #filter(sample_key != '90042016803_SF1')
+row.names(mliv_cols) <- mliv_cols$sample_key
+
+#' #### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
+all(rownames(mliv_cols) == colnames(mliv_counts))
+
+design = ~ 1 # Primary variable needs to be last
+title = paste0('Design: ',as.character(design))
+# Create a DESeqDataSet Object
+dds <- DESeqDataSetFromMatrix(countData = mliv_counts,
+                              colData = mliv_cols,
+                              design = design)
+
+# Perform pre-filtering.
+# Filter genes with average count of 10 or less.
+# Reasoning from:
+#citation("PROPER")
+#dds
+#' #### We remove genes with an average sequencing depth of 10 or less
+#' Before Filtering
+dds
+keep <- rowSums(counts(dds))/ncol(dds) > 10
+dds <- dds[keep,]
+#' #### Summary of counts and annotation data in a DESeqDataSet after filtering out genes with low sequencing depth
+dds
+
+mypar()
+#' To see the reads per million for each sample
+sort(colSums(assay(dds)))/1e6
+
+# estimateSizeFactors gives us a robust estimate in sequencing depth
+dds <- estimateSizeFactors(dds)
+#' Size facotrs are generally around 1 (scaled) and calculated using the median and are robust to genes with large read counts
+summary(sizeFactors(dds))
+
+#' ### Transformation (Male Livers)
+
+#+ Transformation (Male Livers)
+################################################################################
+#####     Transformation (Male Livers)      ####################################
+################################################################################
+
+#' ##### Log2 normalization (with size factor and pseudo count)"
+log_norm_counts <- log2(counts(dds, normalized=TRUE) + 1)
+
+#' Regularized Log (rlog) Transform
+for( n in 1){
+        start_time <- Sys.time()
+        rld <- rlog(dds)
+        end_time <- Sys.time()
+        print(end_time - start_time)
+}
+
+# This command is redundent, but included for safety
+rs <- rowSums(counts(dds))
+#' #### Here we visualize the counts comparing log2 transform and rlog transform
+mypar(1,2)
+boxplot(log2(counts(dds)[rs > 0,] +1), cex=0.2, main = "log2 Transform") # Log2 Transform
+boxplot(assay(rld)[rs > 0,], cex=0.2, main = "rlog Transform") # Regularized Log Transform
+
+#' ##### Returning to our prior plot of comparing expression of 2 samples, we can see the the variance is now more stable in the rlog transform.
+mypar(1,1)
+plot(assay(rld)[,c(1,2)],
+     xlab = "Sample 1 rlog Gene Counts", 
+     ylab = "Sample 2 rlog Gene Counts", 
+     cex = 0.3, main = "rlog Transform")
+
+#' ##### Another plot to examine the difference between transformations is a mean standard deviation plot, which calculates--for each gene--the mean over all samples and the standard deviation over all samples..
+mypar(1,1)
+#' #### rlog Transform
+meanSdPlot(assay(rld)[rs > 0,], ranks=FALSE)
+
+#' ## PCA (Male Livers) 
+
+#+ PCA (Male Livers)
+
+################################################################################
+#####     PCA (Male Livers)       ##############################################
+################################################################################
+
+#' We decide to subset by sex and investigate how samples cluster (top 500 genes ranked by total variance)
+pcaData <- DESeq2::plotPCA(rld, intgroup=c("animal.key.anirandgroup"), returnData=TRUE, 
+                           ntop = 500)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup)) +
+        geom_point(size=3) +
+        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        #coord_fixed() +
+        ggtitle("Male Liver Samples Sequenced ")
+
+# Collect the top 500 genes that demonstrate the most variance
+rv <- apply(assay(rld), 1, var)
+topgenes <- head(order(rv, decreasing = TRUE), 500)
+# Note: prcomp expect samples to be rows
+pca <- prcomp(t(assay(rld)[topgenes,]), center = TRUE, scale. = FALSE)
+#Doublecheck the plot
+#autoplot(pca)
+rv_500 <- head(rv[order(rv, decreasing = TRUE)], 500)
+# Capture the top 500 genes driving variance in the Naive PCA
+top500 <- row.names(assay(rld)[topgenes,])
+
+#' ##### A Venn Diagram comparing the top 500 genes driving variance in male liver samples shows considerably little overlap between orthologous circadian genes in mouse liver.
+#' Circadian genes in top 500 genes driving variance in 
+circ_liv_ens %in% top500 %>% table()
+venn_file <- paste0(WD,'/plots/20200404-rnaseq-male-liver-venn-500-vs-circ_steep.png')
+venn.diagram(
+        x = list(top500, circ_liv_ens),
+        category.names = c("   --------Top 500 Variance Genes", 
+                           "Rat Orthologs of \nCircadian Genes \nin Mouse Liver"),
+        filename = venn_file,
+        imagetype = "png",
+        output=TRUE
+)
+img = readImage(venn_file)
+display(img, method = "raster")
+shared_genes <- mapIds(org.Rn.eg.db, circ_liv_ens[circ_liv_ens %in% top500], "SYMBOL", "ENSEMBL")
+
+#' ##### The variances associated with PC1 is quite significant (54% variance).
+summary(pca)$importance[,1:10]
+plot((summary(pca)$importance[,1:10])[2,]*100, ylab = '% Variance', xlab = "PC")
+
+#' #### When we examine the variance associated with circadian genes across the entire dataset (only 102 circadian genes expressed), we see that circadian genes are not a primary driver of variance.
+mypar()
+rld.circ <- rld[row.names(rld) %in% circ_liv_ens,]
+pcaData <- DESeq2::plotPCA(rld.circ, intgroup=c("animal.key.anirandgroup"), 
+                           returnData=TRUE, ntop = 500)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup)) +
+        geom_point(size=3) +
+        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        #coord_fixed() +
+        ggtitle("Male Liver Samples Sequenced (Circadian Liver Genes Only)")
+
+#' #### Instead, if we select 102 genes at random, we see that the randomly selected genes look more similar to the top 500 genes driving variance, than to variance from circadian rhythm genes.
+set.seed(666)
+mypar()
+rld.sub <- rld[row.names(rld) %in% sample(row.names(rld),102),]
+pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("animal.key.anirandgroup"), 
+                           returnData=TRUE, ntop = 500)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup)) +
+        geom_point(size=3) +
+        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        #coord_fixed() +
+        ggtitle("Male Liver Samples Sequenced (Randomly Sampled Genes)")
+
+# Collect the variance for top 500 genes and for circadian rhythm genes
+mypar()
+set.seed(666)
+rv_top_noncirc <- sample(rv_500,102)
+rv_circ <- apply(assay(rld.circ), 1, var)
+rv_random <- sample(rv,102)
+df1 <- data.frame("VARIANCE" = rv_circ, "SET" = "CIRCADIAN", row.names = NULL)
+df2 <- data.frame("VARIANCE" = rv_500, "SET" = "TOP_500", row.names = NULL)
+var_df <- rbind(df1,df2)
+
+#' ##### A histogram of the variance per gene demonstrates that Circadian genes do not capture much of the variance at all, they are drowned out by the top 500 genes. 
+#' Note: This histogram is reduced on the x-axis to 1. To better put things into perspective, the sum variance from all circadian genes was `r sum(rv_circ)` while the sum variance from the top 500 genes was `r sum(rv_500)` and the maximum variance from any gene was `r max(rv_500)`.
+ggplot(var_df, aes(x=VARIANCE, color=SET, fill=SET)) +
+        geom_histogram(aes(y=..density..), position="identity", alpha=0.5) +
+        labs(title="Variance Histogram: \nTop 500 Genes vs Circadian Rhythm Genes",x="Variance (per gene)", y = "Frequency")+
+        xlim(0,1) +
+        theme_classic()
+
+# Add the randomly selected genes to the dataframe for the boxplot
+df3 <- data.frame("VARIANCE" = rv_random, "SET" = "RANDOM_102", row.names = NULL)
+var_df <- rbind(df1,df2,df3)
+#' #### A boxplot with supporting summary stats show a similar story, except that 102 genes selected at random capture nealry identical variance as circadian rhythm genes. Note: Much of y axis has been chopped.
+# Boxplot
+ggplot(var_df, aes(x=SET,y=VARIANCE, color=SET)) +
+        geom_boxplot(show.legend = FALSE) +
+        ylim(0,0.5) +
+        xlab("") +
+        ylab("Variance (per gene)") +
+        ggtitle("Variance Boxplot: \nPer Gene Variance of Different Gene Sets")
+#' #### Top 500:
+summary(rv_500)
+#' #### Circadian:
+summary(rv_circ)
+#' #### 102 Randomly Selected Genes:
+summary(rv_random)
+
+#' ### Circadian Genes do not capture much variance in Male Liver Samples under a naive model (~ 1)
+
+#' #### Model Expression of Circadian Genes
+#+
+################################################################################
+######## Model Expression of Circadian Genes ###################################
+################################################################################
+
+rld.circ <- rld[row.names(rld) %in% circ_liv_ens,]
+
+# Create a dataframe for the plot
+df1 <- data.frame(t(assay(rld.circ)))
+df1$sample_key<- row.names(df1)
+df2 <- col_data %>%
+        select(specimen.collection.t_death, animal.key.anirandgroup)
+df2$sample_key <- row.names(df2)
+# Adjust the column names to be symbols for ease of plot interpretation
+df_plot <- left_join(df1, df2, by = "sample_key")
+genes <- colnames(df_plot)[grepl('ENSRNOG', colnames(df_plot))]
+symbols <- mapIds(org.Rn.eg.db, genes, "SYMBOL", "ENSEMBL")
+colnames(df_plot)[grepl('ENSRNOG', colnames(df_plot))] <- symbols
+
+# Melt the plot
+melt_plot <- melt(df_plot, id.vars = c("specimen.collection.t_death", "animal.key.anirandgroup"))
+# Change expression value to numeric
+melt_plot$value <- as.numeric(melt_plot$value)
+
+set.seed(666)
+sub_plot <- melt_plot %>%
+        filter(variable %in% shared_genes)
+
+ggplot(sub_plot, 
+       aes(x = specimen.collection.t_death, 
+           y = value, 
+           color = variable,
+           alpha = 0.2)) +
+        geom_point() +
+        stat_smooth(alpha = 0.5) +
+        ylab(gene) +
+        xlab("Specimen Collection Death")
+
+mypar(2,2)
+ggplot(sub_plot, 
+       aes(x = specimen.collection.t_death, 
+           y = value, 
+           color = variable,
+           alpha = 0.2)) +
+        geom_point() +
+        stat_smooth(alpha = 0.5) +
+        ylab(gene) +
+        xlab("Specimen Collection Death")
+ggplot(sub_plot, 
+       aes(x = animal.key.anirandgroup, 
+           y = value, 
+           color = variable,
+           alpha = 0.2)) +
+        geom_point() +
+        stat_smooth(alpha = 0.5) +
+        ylab(gene) +
+        xlab("Specimen Collection Death")
+
+########## Calculate maximum log2 fold chnage
+
+library(ggplot2)
+library(reshape2)
+d <- melt(d, id.vars="Xax")
+x <- df_plot %>% select(-animal.key.anirandgroup)
+
+class(d)
+
+# Everything on the same plot
+ggplot(d, aes(Xax,value, col=variable)) + 
+        geom_point() + 
+        stat_smooth() 
+str(d)
+
+str(col_data$specimen.collection.t_death)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+#' #### Under these naive conditions, what drives variance?
+
+################################################################################
+######## Hierarchical Clustering ###############################################
+################################################################################
+
+mypar(1,1)
+# Create a dendrogram via rld normalization
+hc <- hclust(dist(t(assay(rld)[rs > 0,])))
+title <- 'Ttitle'
+
+
+# Create a dendrogram with different annotations
+for (anno in c("animal.key.anirandgroup","specimen.collection.t_death")) {
+        myplclust(hc, labels=colData(rld.sub)[[anno]], 
+                  #cex=0.8, 
+                  lab.col=as.fumeric(as.character(colData(rld.sub)[[anno]])), 
+                  main=title)
+}
+
+plot(hclust(dist(t(assay(rld.sub)))), 
+     labels=colData(rld.sub)$animal.key.anirandgroup,
+     col=colData(rld.sub)$animal.key.anirandgroup)
+
+
+# Hierarchical clustering based on euclidean distance
+
+
+
+################################################################################
+######## Unsupervised Clustering w/ SOMs & K-means #############################
+################################################################################
+
+# Generate a self organiz
+som1<-som(rld.mat,6,6)
+plot(som1)
+
+
+
+
+
+
+
+
+
+#' #### Males by exercise and control group
+# Males (ref removed)
+###################################
+rld.sub <- rld[ , (rld$Tissue == "Liver" & 
+                           rld$animal.registration.sex == 'Male' & 
+                           rld$Sample_category != 'ref') ]
+
+DESeq2::plotPCA(rld.sub, intgroup ="specimen.collection.t_death") +
+        guides(color=guide_legend(title="Sex"))
+
+
+
+
+
+
+
+
+
+
+
+#' #### Females by exercise/control group
+
+#+ Females by Exercise/Contrl Groups
+################################################################################
+################# Females by Exercise/Control Group ############################
+################################################################################
+
+# Females (ref removed)
+###################################
+rld.sub <- rld[ , (rld$Tissue == "Liver" & 
+                           rld$animal.registration.sex == 'Female' & 
+                           rld$Sample_category != 'ref') ]
+
+pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("animal.key.anirandgroup"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup)) +
+        geom_point(size=3) +
+        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        #coord_fixed() +
+        ggtitle("Female Liver Samples Sequenced ")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+rld.sub <- rld[ , (rld$Tissue == "Liver" & 
+                           rld$animal.registration.sex == 'Male' & 
+                           rld$Sample_category != 'ref' &
+                           rld$animal.key.anirandgroup %!in% "Exercise - 48 hr") ]
+
+pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("specimen.collection.t_death"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=specimen.collection.t_death)) +
+        geom_point(size=3) +
+        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        #coord_fixed() +
+        ggtitle("Male Liver Samples Sequenced ")
+
+
+
+
+DESeq2::plotPCA(rld.sub, intgroup ="specimen.collection.t_death") +
+        guides(color=guide_legend(title="Sex"))
+
+
+
+
+
+
+
+
+# Examine character columns
+col_data[, sapply(col_data, class) == 'character']
+# Examine factor columns
+col_data[, sapply(col_data, class) == 'factor']
+# Numeric columns
+col_data[, sapply(col_data, class) == 'numeric']
+# Integer columns
+col_data[, sapply(col_data, class) == 'integer']
+# Logical columns
+col_data[, sapply(col_data, class) == 'logical']
+
+# Steps for investigating categorical variables:
+# * Examine categorical variable in PCA
+# * Create contingenyc table and use Chi square to determine if categorical varibale are associated with eachother
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# Notes for examinging Rafa code
+
+#load(file = paste0(WD,"/data/GSE5859Subset.rda"))
+#library(rafalib)
+#library(RColorBrewer)
+#library(genefilter)
+
+#load(file = paste0(WD,"/data/GSE5859.rda"))
+
+# datasciencebook.pdf page 635
+#library(dslabs)
+#if(!exists("mnist")) mnist <- read_mnist()
+
+#col_means <- colMeans(mnist$test$images) 
+
+#pc <- 1:ncol(mnist$test$images) 
+#qplot(pc, pca$sdev)
+
+
+
+
+#str(mnist$train$images)
+
+
+
+
+summary(col_data$specimen.collection.t_death)
+
+hist(as.numeric(col_data$specimen.collection.t_death))
+vec <- vector()
+for( n in 1:1360){
+        x <- str_split(col_data$specimen.collection.t_death,':')[[n]][1]
+        vec <- c(vec,x)
+}
+
+hist(as.numeric(vec))
+
+str_split(col_data$specimen.collection.t_death,':')
+
+
+col_data$specimen.collection.t_death
+
+
+
+
+
+
+
+
+# Outlier Detection
+################################################################################
+DESeq2::plotPCA(vstd, intgroup ="animal.registration.sex") +
+        guides(color=guide_legend(title="Sex"))
+
+par(mar=c(8,5,2,2))
+boxplot(log10(assays(dds)[["cooks"]]), range=0, las=2)
+
+
+assays(dds)[["cooks"]]
+
+#https://support.bioconductor.org/p/35918/
+################################################################################
+
+
+
+

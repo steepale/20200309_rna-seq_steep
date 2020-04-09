@@ -24,22 +24,6 @@ knitr::opts_chunk$set(cache = FALSE)
 #'         * Match with volcano plots
 #'     * Either correct for sex batch, remove sex genes, or subset one sex
 #'         * Decision: Subset by sex
-#' * Perform another PCA with exercise groups, do they cluster together by:
-#'     * Time of day?
-#'     * Exercise cohort?
-#'     * Other metadata? -- EDA (dunno yet)
-#' * Build a correlation matrix -- EDA (dunno yet)
-#' * Subset genes into 2 groups:
-#'     * Genes associated with circadian rhythm in Rat Liver (We don't have this set, we use Mouse Liver)
-#'     * Genes associated with exercise effects (TODO: Gene sets need to be collected).
-#' * Investiagte batch
-#'     * Examine overlap of 2 gene sets
-#'     * Rank genes by p-value (dunno how to do this yet, unless by differential expression)
-#'         * TODO: Determien ranking strategy
-#'     * Statistical test involving rank -- dunno: wilcoxen rank sum test?
-#'         * TODO: Determine proper test
-#'     * Cluster: PCAs -- EDA
-#' * To be continued ...
 #' 
 #'     
 #' 
@@ -221,37 +205,45 @@ dds <- DESeqDataSetFromMatrix(countData = liver_counts,
 #' #### We remove genes with an average sequencing depth of 10 or less
 #' Before Filtering
 dds
-keep <- rowSums(counts(dds))/ncol(dds) > 10
+keep <- rowSums(counts(dds))/ncol(dds) > 3
 dds <- dds[keep,]
-#' #### Summary of counts and annotation data in a DESeqDataSet (after filtering)
+#' #### Summary of counts and annotation data in a DESeqDataSet after filtering out genes with low sequencing depth
 dds
 
 mypar()
-# On un-transformed data, genes with high counts will demonstrate high variance.
-# We can visualize this with 2 samples
+#' #### When we plot counts for genes across 2 samples, we see that genes with high counts will demonstrate high variance in untransformed data.
 plot(assay(dds)[,1:2], cex=.3)
-# To see the reads per million for each sample
+#' To see the reads per million for each sample
 sort(colSums(assay(dds)))/1e6
 
-#estimateSizeFactors gives us a robust estimate in sequencing depth
+# estimateSizeFactors gives us a robust estimate in sequencing depth
 dds <- estimateSizeFactors(dds)
-# If we plot colSums vs size factors, they are strongly correlated
+#' #### If we plot the total counts for each sample (colSums) vs each sample size factors, we see they are strongly correlated--size factors act as a coefficient for sequencing depth
 plot(sizeFactors(dds), colSums(counts(dds)), cex=.3)
 abline(lm(colSums(counts(dds)) ~ sizeFactors(dds) + 0))
-# Size facotrs are generally around 1 (scaled) and calculated using the median
-# Size factors are robust to genes with huge amount of reads
+#' Size facotrs are generally around 1 (scaled) and calculated using the median and are robust to genes with large read counts
 sort(sizeFactors(dds))
 summary(sizeFactors(dds))
-# Size factors are from the median ratio of samples compared to a pseudo-sample, which is the geometric mean of all samples.
-# How size factor is computed for a sample:
+
+#' How size factor is computed for a sample:
+#' Size factors are from the median ratio of samples compared to a pseudo-sample, which is the geometric mean of all samples.
 loggeomeans <- rowMeans(log(counts(dds)))
 exp(median((log(counts(dds)[,1]) - loggeomeans)[is.finite(loggeomeans)])) == sizeFactors(dds)[1]
 
-# To make a matrix of log normalized counts:
-# This divides each column of the counts matrix by our size factors. Then we take the log2 and add a psuedocount.
+
+#' ### Comparison of transformation techniques
+
+#+ Transformation Techniques
+################################################################################
+#####     Transformation Techniques      #######################################
+################################################################################
+
+#' ##### Log2 normalization (with size factor and pseudo count)"
 log_norm_counts <- log2(counts(dds, normalized=TRUE) + 1)
+#' ##### Variance stabilizing transformation (VST) uses a subset of genes and divides each column of the counts matrix by our size factors. It also normalizes with respect to library size.
 vstd <- vst(dds)
-# The purpose of using the "regularized log" transformation is to shrink together the values of the genes that have very low counts ("shrinkage" technique in statistics). Rlog is close to log2 transform.
+#' Regularized Log (rlog)
+#' The purpose of using the "regularized log" transformation is to shrink together the values of the genes that have very low counts ("shrinkage" technique in statistics). Rlog is close to log2 transform.
 #Time difference of 2.914409 mins (on Macbook pro)
 for( n in 1){
   start_time <- Sys.time()
@@ -262,33 +254,36 @@ for( n in 1){
 
 # This command is redundent, but included for safety
 rs <- rowSums(counts(dds))
-#' #### Here we visualize the counts before and after normalization
+#' #### Here we visualize the counts from log2 transformation and from the rlog transform
 mypar(1,2)
-boxplot(log2(counts(dds)[rs > 0,] +1), cex=0.2) # Raw
-boxplot(assay(rld)[rs > 0,], cex=0.2) # Regularized Log Normalizaed
-boxplot(log2(counts(dds)[rs > 0,] +1), cex=0.2) # Raw
-boxplot(assay(vstd)[rs > 0,], cex=0.2) # VST Normalizaed
+boxplot(log2(counts(dds)[rs > 0,] +1), cex=0.2, main = "log2 Transform") # Log2 Transform
+boxplot(assay(rld)[rs > 0,], cex=0.2, main = "rlog Transform") # Regularized Log Transform
+mypar(1,2)
+boxplot(log2(counts(dds)[rs > 0,] +1), cex=0.2, main = "log2 Transform") # log2 Transform
+boxplot(assay(vstd)[rs > 0,], cex=0.2, main = "VST Transform") # VST Transform
 
-#' #### Returning to our prior plot of comparing expression of 2 samples, we can see the the variance is now more stable.
+#' ##### Returning to our prior plot of comparing expression of 2 samples, we can see the the variance is now more stable in VST and rlog transforms. However, the VST transform demonstrates a lot of variance in genes with low read counts. For that reason, we will proceed with rlog transform.
 mypar(1,1)
-plot(assay(rld)[,c(1,2)],
-     xlab = "Sample 1 rlog Gene Counts", 
-     ylab = "Sample 2 rlog Gene Counts", 
-     cex = 0.3)
 plot(assay(vstd)[,c(1,2)],
      xlab = "Sample 1 VST Gene Counts", 
      ylab = "Sample 2 VST Gene Counts", 
-     cex = 0.3)
+     cex = 0.3, main = "VST Transform" )
+plot(assay(rld)[,c(1,2)],
+     xlab = "Sample 1 rlog Gene Counts", 
+     ylab = "Sample 2 rlog Gene Counts", 
+     cex = 0.3, main = "rlog Transform")
 
-# Another plot to examine the difference between transformations is a mean standard deviation plot, which calculates--for each gene--the mean over all samples and the standard deviation over all samples.
+#' ##### Another plot to examine the difference between transformations is a mean standard deviation plot, which calculates--for each gene--the mean over all samples and the standard deviation over all samples. rlog and vst transforms are comparable.
 mypar(1,2)
 #meanSdPlot(log_norm_counts, ranks=FALSE) 
-meanSdPlot(assay(vstd)[rs > 0,], ranks=FALSE) 
-meanSdPlot(assay(rld)[rs > 0,], ranks=FALSE) 
+mds_vst <- meanSdPlot(assay(vstd)[rs > 0,], ranks=FALSE)
+mds_vst$gg + ggtitle("VST Transform")
+mds_rlog <- meanSdPlot(assay(rld)[rs > 0,], ranks=FALSE)
+mds_rlog$gg + ggtitle("rlog Transform")
 
 ################################################################################
 #' ## PCA of Liver Samples 
-#' Samples from Stanford Batch 1, which we suspect demonstrates a batch effect
+#' Samples from Stanford Batch 1, which we suspect demonstrates a strong technical batch effect
 
 #+ PCA of Liver Samples
 
@@ -312,9 +307,7 @@ counts$path <- mapIds(org.Rn.eg.db, counts$ensembl, "PATH", "ENSEMBL")
 
 #' #### Liver samples cluster by sex.
 #' Grey samples represent "reference samples".
-#' 
-rld.sub <- rld[ , (rld$Tissue == "Liver") ]
-DESeq2::plotPCA(rld.sub, intgroup ="animal.registration.sex") +
+DESeq2::plotPCA(rld, intgroup ="animal.registration.sex") +
         guides(color=guide_legend(title="Sex"))
 
 # Variables of interest
@@ -332,15 +325,28 @@ Y_genes <- Y_ens_id[Y_ens_id %in% row.names(norm_counts)]
 X_genes <- X_ens_id[X_ens_id %in% row.names(norm_counts)]
 sex <- liver_cols[livers,"animal.registration.sex"]
 group <- liver_cols[livers,"animal.key.anirandgroup"]
-liver_counts <- norm_counts[,livers]
 
 #' #### Predict the sex of reference samples (all samples for that matter) by calculating the median expression of genes on the Y chromosome. We should expect a bimodal distribution with males demonstrating significantly higher median expression.
-chryexp <- colMeans(norm_counts[Y_genes,livers])
+chryexp <- colMeans(norm_counts[Y_genes,])
+#chryexp <- colMeans(assay(dds)[Y_genes,])
+
+chryexp_df <- data.frame("counts" = chryexp)
+chryexp_df$sample <- row.names(chryexp_df) %>% as.factor()
+chryexp_df <- chryexp_df %>%
+  mutate(sex = ifelse(sample %in% male_livers, 'Male', 'Female'))
 
 #' ##### If we create a histogram of the median gene expression values on chromosome Y, we should expect to see a bimodal distribution. However, distinct peaks are not detected. This was a surprising result. 
 mypar()
-hist(chryexp, breaks = 200)
-summary(chryexp)
+hist(chryexp_df$counts, breaks = 200, 
+     main = "Histogram: \nY Chromosome Genes across Samples",
+     xlab = "Total reads on Y chromosome genes per sample")
+ggplot(chryexp_df, aes(counts, colour = sex)) +
+  geom_freqpoly(binwidth = 4) +
+  xlab("Total reads on Y chromosome genes per sample") +
+  ylab("Frequency") +
+  ggtitle("Frequency Polygon: \nY Chromosome Genes across Samples")
+# summary(chryexp)
+
 #' We will not use this common strategy to determine sex of unknown samples, rather we will use clustering from PCA.
 
 #' The distribution of sex by group
@@ -395,281 +401,4 @@ p <- tt$p.value
 qvals <- qvalue(tt$p.value)$qvalue
 index <- which(qvals<=0.05)
 abline(h=-log10(max(tt$p.value[index])))
-
-#' ## Subset by sex and compare to exercise/control groups
-
-#+ Males by Exercise/Contrl Groups
-################################################################################
-################# Males by Exercise/Control Groups ##############################
-################################################################################
-
-#' We decide to subset by sex and investigate how samples cluster (top 500 genes ranked by total variance)
-
-#' #### Males by exercise/control group
-# Males (ref removed)
-###################################
-rld.sub <- rld[ , (rld$Tissue == "Liver" & 
-                           rld$animal.registration.sex == 'Male' & 
-                           rld$Sample_category != 'ref') ]
-rld.mat <- assay(rld.sub)
-
-mypar()
-pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("animal.key.anirandgroup"), 
-                           returnData=TRUE, ntop = 500)
-percentVar <- round(100 * attr(pcaData, "percentVar"))
-ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup)) +
-        geom_point(size=3) +
-        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
-        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
-        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
-        #coord_fixed() +
-        ggtitle("Male Liver Samples Sequenced ")
-
-# Collect the top 500 genes that demonstrate interesting variance across our samples
-rv <- apply(rld.mat, 1, var)
-topgenes <- head(order(rv, decreasing = TRUE), 500)
-# Note: prcomp expect samples to be rows
-pca <- prcomp(t(rld.mat[topgenes,]), center = TRUE, scale. = FALSE)
-#Doublecheck the plot
-#autoplot(pca)
-
-#' ##### The variances associated with PCs is not strong. Data does not seem to have an obvious linear relationship (TODO: is non-linearity an accurate assessment?). 
-summary(pca)$importance[,1:10]
-plot((summary(pca)$importance[,1:10])[2,]*100, ylab = '% Variance', xlab = "PC")
-
-pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("animal.key.exlt4"), returnData=TRUE, 
-                           ntop = nrow(rld.mat))
-percentVar <- round(100 * attr(pcaData, "percentVar"))
-ggplot(pcaData, aes(PC1, PC2, color=animal.key.exlt4)) +
-        geom_point(size=3) +
-        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
-        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
-        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
-        #coord_fixed() +
-        ggtitle("Male Liver Samples Sequenced ")
-
-################################################################################
-######## Hierarchical Clustering ###############################################
-################################################################################
-
-mypar(1,2)
-# Create a dendrogram via rld normalization
-hc <- hclust(dist(t(assay(rld.sub)[rs > 0,])))
-title <- 'Ttitle'
-# Create a dendrogram with different annotations
-for (anno in c("animal.key.anirandgroup","specimen.collection.t_death")) {
-  myplclust(hc, labels=colData(rld.sub)[[anno]], 
-            #cex=0.8, 
-            lab.col=as.fumeric(as.character(colData(rld.sub)[[anno]])), 
-            main=title)
-}
-
-plot(hclust(dist(t(assay(rld.sub)))), 
-     labels=colData(rld.sub)$animal.key.anirandgroup,
-     col=colData(rld.sub)$animal.key.anirandgroup)
-
-
-# Hierarchical clustering based on euclidean distance
-
-
-
-################################################################################
-######## Unsupervised Clustering w/ SOMs & K-means #############################
-################################################################################
-
-# Generate a self organiz
-som1<-som(rld.mat,6,6)
-plot(som1)
-
-
-
-
-
-
-
-
-
-#' #### Males by exercise and control group
-# Males (ref removed)
-###################################
-rld.sub <- rld[ , (rld$Tissue == "Liver" & 
-                           rld$animal.registration.sex == 'Male' & 
-                           rld$Sample_category != 'ref') ]
-
-DESeq2::plotPCA(rld.sub, intgroup ="specimen.collection.t_death") +
-        guides(color=guide_legend(title="Sex"))
-
-
-
-
-
-
-
-
-
-
-
-#' #### Females by exercise/control group
-
-#+ Females by Exercise/Contrl Groups
-################################################################################
-################# Females by Exercise/Control Group ############################
-################################################################################
-
-# Females (ref removed)
-###################################
-rld.sub <- rld[ , (rld$Tissue == "Liver" & 
-                           rld$animal.registration.sex == 'Female' & 
-                           rld$Sample_category != 'ref') ]
-
-pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("animal.key.anirandgroup"), returnData=TRUE)
-percentVar <- round(100 * attr(pcaData, "percentVar"))
-ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup)) +
-        geom_point(size=3) +
-        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
-        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
-        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
-        #coord_fixed() +
-        ggtitle("Female Liver Samples Sequenced ")
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-rld.sub <- rld[ , (rld$Tissue == "Liver" & 
-                           rld$animal.registration.sex == 'Male' & 
-                           rld$Sample_category != 'ref' &
-                           rld$animal.key.anirandgroup %!in% "Exercise - 48 hr") ]
-
-pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("specimen.collection.t_death"), returnData=TRUE)
-percentVar <- round(100 * attr(pcaData, "percentVar"))
-ggplot(pcaData, aes(PC1, PC2, color=specimen.collection.t_death)) +
-        geom_point(size=3) +
-        #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
-        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
-        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
-        #coord_fixed() +
-        ggtitle("Male Liver Samples Sequenced ")
-
-
-
-
-DESeq2::plotPCA(rld.sub, intgroup ="specimen.collection.t_death") +
-        guides(color=guide_legend(title="Sex"))
-
-
-
-
-
-
-
-
-# Examine character columns
-col_data[, sapply(col_data, class) == 'character']
-# Examine factor columns
-col_data[, sapply(col_data, class) == 'factor']
-# Numeric columns
-col_data[, sapply(col_data, class) == 'numeric']
-# Integer columns
-col_data[, sapply(col_data, class) == 'integer']
-# Logical columns
-col_data[, sapply(col_data, class) == 'logical']
-
-# Steps for investigating categorical variables:
-# * Examine categorical variable in PCA
-# * Create contingenyc table and use Chi square to determine if categorical varibale are associated with eachother
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-# Notes for examinging Rafa code
-
-#load(file = paste0(WD,"/data/GSE5859Subset.rda"))
-#library(rafalib)
-#library(RColorBrewer)
-#library(genefilter)
-
-#load(file = paste0(WD,"/data/GSE5859.rda"))
-
-# datasciencebook.pdf page 635
-#library(dslabs)
-#if(!exists("mnist")) mnist <- read_mnist()
-
-#col_means <- colMeans(mnist$test$images) 
-
-#pc <- 1:ncol(mnist$test$images) 
-#qplot(pc, pca$sdev)
-
-
-
-
-#str(mnist$train$images)
-
-
-
-
-summary(col_data$specimen.collection.t_death)
-
-hist(as.numeric(col_data$specimen.collection.t_death))
-vec <- vector()
-for( n in 1:1360){
-  x <- str_split(col_data$specimen.collection.t_death,':')[[n]][1]
-  vec <- c(vec,x)
-}
-
-hist(as.numeric(vec))
-
-str_split(col_data$specimen.collection.t_death,':')
-
-
-col_data$specimen.collection.t_death
-
-
-
-
-
-
-
-
-# Outlier Detection
-################################################################################
-DESeq2::plotPCA(vstd, intgroup ="animal.registration.sex") +
-  guides(color=guide_legend(title="Sex"))
-
-par(mar=c(8,5,2,2))
-boxplot(log10(assays(dds)[["cooks"]]), range=0, las=2)
-
-
-assays(dds)[["cooks"]]
-
-#https://support.bioconductor.org/p/35918/
-################################################################################
-
-
-
 

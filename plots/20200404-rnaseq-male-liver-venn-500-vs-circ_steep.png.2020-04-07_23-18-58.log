@@ -1,0 +1,12 @@
+INFO [2020-04-07 23:18:58] $x
+INFO [2020-04-07 23:18:58] list(top500, circ_liv_ens)
+INFO [2020-04-07 23:18:58] 
+INFO [2020-04-07 23:18:58] $category.names
+INFO [2020-04-07 23:18:58] c("Top 500 Variance Genes", "Rat Orthologs of Circadian Genes in Mouse Liver")
+INFO [2020-04-07 23:18:58] 
+INFO [2020-04-07 23:18:58] $filename
+INFO [2020-04-07 23:18:58] venn_file
+INFO [2020-04-07 23:18:58] 
+INFO [2020-04-07 23:18:58] $output
+INFO [2020-04-07 23:18:58] [1] TRUE
+INFO [2020-04-07 23:18:58] 
