@@ -17,7 +17,6 @@ knitr::opts_chunk$set(message = FALSE)
 knitr::opts_chunk$set(cache = FALSE)
 
 #' ## Goals of Analysis
-#' * TODO: Add Step-by-step goals of analysis
 #' * TODO: Investigate samples for a correlation of 1 (duplicate samples) and remove them
 #' * TODO: Consider removing control probes from the analysis
 #' * TODO: Vet "suspect samples" in file: GET_release1_qc_report.pdf and decide if these samples should be removed or not.
@@ -30,8 +29,7 @@ knitr::opts_chunk$set(cache = FALSE)
 #' 
 #' ## Setup the Environment
 
-#+ Setup Environment
-
+#+ Setup Environment, message=FALSE, results='hide', warning = FALSE
 ################################################################################
 ##### Resources and Dependencies ###############################################
 ################################################################################
@@ -95,6 +93,9 @@ f_pmap_aslist <- function(df) {
 #'     * 3 sequencing batches & metadata
 #' * RNA-Seq from Stanford
 #'     * 2 sequencing batches & metadata
+
+# Stops evaluation of code
+knitr::opts_chunk$set(eval = FALSE)
 
 #+ Load the Data
 
@@ -910,7 +911,8 @@ for(clm in colnames(status)[colnames(status) != 'Seq_batch'] ){
 # #### Sesh:
 session_info()
 
-
+# Stops evaluation of code
+#knitr::opts_chunk$set(eval = FALSE)
 
 
 

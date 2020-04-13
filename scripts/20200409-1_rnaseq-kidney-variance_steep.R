@@ -27,8 +27,7 @@ knitr::opts_chunk$set(cache = FALSE)
 #' 
 #' ## Setup the Environment
 
-#+ Setup Environment
-
+#+ Setup Environment, message=FALSE, results='hide', warning = FALSE
 ################################################################################
 ##### Resources and Dependencies ###############################################
 ################################################################################

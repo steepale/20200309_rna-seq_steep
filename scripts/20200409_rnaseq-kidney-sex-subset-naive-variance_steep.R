@@ -29,8 +29,7 @@ knitr::opts_chunk$set(cache = FALSE)
 #' 
 #' ## Setup the Environment
 
-#+ Setup Environment
-
+#+ Setup Environment, message=FALSE, results='hide', warning = FALSE
 ################################################################################
 ##### Resources and Dependencies ###############################################
 ################################################################################
@@ -476,12 +475,24 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup)) +
         ggtitle("Female Kidney Samples ") +
         guides(color=guide_legend(title="Control/Exercise Groups"))
 
+# Collect the top 500 genes that demonstrate the most variance
+rv <- apply(assay(rld), 1, var)
+topgenes <- head(order(rv, decreasing = TRUE), 500)
+# Note: prcomp expect samples to be rows
+pca <- prcomp(t(assay(rld)[topgenes,]), center = TRUE, scale. = FALSE)
+#Doublecheck the plot
+#autoplot(pca)
+rv_500 <- head(rv[order(rv, decreasing = TRUE)], 500)
+# Capture the top 500 genes driving variance in the Naive PCA
+top500 <- row.names(assay(rld)[topgenes,])
+rld.500 <- rld[row.names(rld) %in% top500,]
+
 #' #### An (unrooted) euclidean distance dendrogram of the top 500 genes driving variance demonstrates further supports the notion that immediate exercise groups show relatively higher variance in their gene expressions. The dendrogram adds precision to the groupings (compared to and in support of PCA).
 hc <- hclust(dist(t(assay(rld.500))))
 # Create a dendrogram with different annotations
-myplclust(hc, labels=colData(rld.sub)[["animal.key.anirandgroup"]],
+myplclust(hc, labels=colData(rld.500)[["animal.key.anirandgroup"]],
           #cex=0.8, 
-          lab.col=as.fumeric(as.character(colData(rld.sub)[["animal.key.anirandgroup"]])), 
+          lab.col=as.fumeric(as.character(colData(rld.500)[["animal.key.anirandgroup"]])), 
           main="Euclidean Distance Dendrogram: \nExercise/Control Groups")
 # Including binned time of death annotation demonstrates the troubling experimental design but it may distract from the following findings; therefore it is not included in the final report but code is provided.
 #myplclust(hc, labels=colData(rld.sub)[["specimen.collection.t_death_bins.type"]],
@@ -502,18 +513,6 @@ ggplot(pcaData, aes(PC1, PC2, color=specimen.collection.t_death_bins.type)) +
         #coord_fixed() +
         ggtitle("Female Kidney Samples ") +
         guides(color=guide_legend(title="Time of Death\n(Binned by Hour Intervals)"))
-
-# Collect the top 500 genes that demonstrate the most variance
-rv <- apply(assay(rld), 1, var)
-topgenes <- head(order(rv, decreasing = TRUE), 500)
-# Note: prcomp expect samples to be rows
-pca <- prcomp(t(assay(rld)[topgenes,]), center = TRUE, scale. = FALSE)
-#Doublecheck the plot
-#autoplot(pca)
-rv_500 <- head(rv[order(rv, decreasing = TRUE)], 500)
-# Capture the top 500 genes driving variance in the Naive PCA
-top500 <- row.names(assay(rld)[topgenes,])
-rld.500 <- rld[row.names(rld) %in% top500,]
 
 #' ##### The variances associated with PC1 is quite significant (40% variance).
 summary(pca)$importance[,1:10]

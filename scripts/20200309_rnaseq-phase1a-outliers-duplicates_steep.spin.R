@@ -1,0 +1,172 @@
+#'---
+#' title: "PASS1A (Rat) RNA-Seq: Outliers and Duplicate Samples"
+#' author: "Alec Steep and Jiayu Zhang" 
+#' date: "20200309"
+#' output:
+#'     html_document:
+#'         code_folding: hide
+#'         toc: true
+#'         highlight: zenburn
+#'     
+#'---
+
+#+ setup, include=FALSE
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(cache = FALSE)
+
+#' ## Goals of Analysis
+#' * Investigate samples for a correlation of 1 (duplicate samples) and annotate them
+#' * Examine for any obvious outliers
+#'     
+#' ## Setup the Environment
+
+#+ Setup Environment, message=FALSE, results='hide', warning = FALSE
+################################################################################
+##### Resources and Dependencies ###############################################
+################################################################################
+
+# Set the working directory
+WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
+#setwd(WD)
+
+# Load the dependencies
+#source("https://bioconductor.org/biocLite.R")
+#BiocManager::install("org.Rn.eg.db")
+#install.packages("tidyverse")
+
+# Load dependencies
+pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2","GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr","org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt","feather","PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","reshape2","xtable")
+lapply(pacs...man, FUN = function(X) {
+        do.call("library", list(X)) })
+
+############################################################
+##### Functions ############################################
+############################################################
+
+# Set select
+select <- dplyr::select
+
+# Make the 'not in' operator
+################################################################################
+'%!in%' <- function(x,y) {
+        !('%in%'(x,y))
+}
+################################################################################
+
+# Capture the Date and AUthor
+################################################################################
+date <- format.Date( Sys.Date(), '%Y%m%d' )
+auth <- "steep"
+################################################################################
+
+## explicit gc, then execute `expr` `n` times w/o explicit gc, return timings
+################################################################################
+benchmark <- function(n = 1, expr, envir = parent.frame()) {
+        expr <- substitute(expr)
+        gc()
+        map(seq_len(n), ~ system.time(eval(expr, envir), gcFirst = FALSE))
+}
+################################################################################
+
+# Function to speed up making rows into lists for interation with lapply
+################################################################################
+f_pmap_aslist <- function(df) {
+        purrr::pmap(as.list(df), list)
+}
+################################################################################
+
+#' ## Load & Clean Data
+#' ##### Data files to load:
+#' * Count Matrix and Metadata Table from:
+#'     * RNA-Seq from Mt. Sinai
+#'         * 3 sequencing batches & metadata
+#'     * RNA-Seq from Stanford
+#'         * 2 sequencing batches & metadata
+
+#+ Load the Data
+
+################################################################################
+#####     Load & Clean Data      ###############################################
+################################################################################
+
+# Files last saved in: 20200309_exploration-rna-seq-phase1_steep.R
+
+# Count matrix
+in_file <- paste0(WD,'/data/20200309_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv')
+count_data <- read.table(in_file,sep = ',', header = TRUE,row.names = 1,check.names = FALSE)
+
+# Meatdata table
+in_file <- paste0(WD,'/data/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt')
+col_data <- read.table(in_file, header = TRUE, check.names = FALSE, sep = '\t')
+row.names(col_data) <- col_data$sample_key
+
+# Adjust columns
+col_data$animal.key.exlt4 <- as.factor(col_data$animal.key.exlt4)
+
+
+
+#+ Examination of Duplicate Samples
+################################################################################
+######### Duplicate Samples ####################################################
+################################################################################
+
+# Collect vial_labels that are duplicated
+dup_vials <- col_data$vial_label[duplicated(col_data$vial_label)] %>% unique()
+
+# Let's examine duplicates within sequencing batches
+
+dups_seq <- vector()
+for(dup in dup_vials){
+        # Collects the number of sequencing batches per sample
+        n_seq <- col_data %>% filter(vial_label %in% dup) %>%
+                select(Seq_batch) %>% unique() %>% unlist() %>% length()
+        if(n_seq > 1){
+                dups_seq <- c(dups_seq, dup)
+        }
+}
+# Collect dataframe of only duplicate samples
+dup_data <- col_data %>%
+        filter(vial_label %in% dup_vials)
+
+dup_data$vial_label <- factor(dup_data$vial_label)
+
+#+results='asis'
+print(xtable(table(dup_data$vial_label, dup_data$Seq_batch)), type = 'html', include.rownames = T)
+#table(dup_data$vial_label, dup_data$Seq_batch)
+
+
+
+# Outlier Detection
+################################################################################
+#DESeq2::plotPCA(vstd, intgroup ="animal.registration.sex") +
+#        guides(color=guide_legend(title="Sex"))
+
+#par(mar=c(8,5,2,2))
+#boxplot(log10(assays(dds)[["cooks"]]), range=0, las=2)
+
+#assays(dds)[["cooks"]]
+
+#https://support.bioconductor.org/p/35918/
+################################################################################
+
+
+
+#' #### End of Script Notes
+
+#+ End of Script Notes
+################################################################################
+################ End of Script Notes ###########################################
+################################################################################
+
+
+#' #### Session Information
+################################################################################
+####################### Session Info ###########################################
+################################################################################
+session_info()
+
+# Stops evaluation of code
+#knitr::opts_chunk$set(eval = FALSE)
+
