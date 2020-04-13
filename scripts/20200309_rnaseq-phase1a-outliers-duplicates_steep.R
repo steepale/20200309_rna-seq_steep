@@ -129,12 +129,87 @@ for(dup in dup_vials){
 # Collect dataframe of only duplicate samples
 dup_data <- col_data %>%
         filter(vial_label %in% dup_vials)
-
 dup_data$vial_label <- factor(dup_data$vial_label)
 
+#' #### Duplicate samples were included across 2 batches: There are 40 pairs of duplicates
 #+results='asis'
 print(xtable(table(dup_data$vial_label, dup_data$Seq_batch)), type = 'html', include.rownames = T)
 #table(dup_data$vial_label, dup_data$Seq_batch)
+
+#+ Visualize Variance Between Duplicates & Sequencing Batch
+################################################################################
+######### PCA & Correlation Matrix #############################################
+################################################################################
+
+
+#' #### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
+all(rownames(status) == colnames(all.data.m))
+
+#' ## PCA Visualization of Sequencing Batches (Unsupervised)
+#' TODO: Generate a summary of major inferences
+#' 
+
+#+ PCA Sequencing Batches (Unsupervised)
+##########################################################################
+############ PCA Sequencing Batches (Unsupervised) #######################
+##########################################################################
+
+# Perform unsupervised clustering
+# Build model
+count_data <- all.data.m
+col_data <- status # To look at all samples 
+design = ~ 1 # Primary variable needs to be last
+title = paste0('Design: ',as.character(design))
+# Create a DESeqDataSet Object
+dds <- DESeqDataSetFromMatrix(countData = count_data,
+                              colData = col_data,
+                              design = design)
+
+# Perform pre-filtering.
+# Filter genes with average count of 10 or less.
+# Reasoning from:
+#citation("PROPER")
+#dds
+keep <- rowSums(counts(dds))/ncol(dds) >= 10
+dds <- dds[keep,]
+#' #### Summary of counts and annotation data in a DESeqDataSet
+dds
+
+dds <- estimateSizeFactors(dds)
+rs <- rowSums(counts(dds))
+# Normalize the counts
+rld <- vst(dds) #vst and rlog comparable with all samples
+#rld <- rlog(dds, blind=FALSE)
+
+# Extract matrix of normalized counts
+norm_counts <- assay(rld)
+counts <- as.data.frame(norm_counts)
+
+# Annotate normalized counts
+counts$ensembl <- rownames(counts)
+counts$symbol <- mapIds(org.Rn.eg.db, counts$ensembl, "SYMBOL", "ENSEMBL")
+#counts$entrez <- mapIds(org.Rn.eg.db, counts$ensembl, "ENTREZID", "ENSEMBL")
+#counts$genename <- mapIds(org.Rn.eg.db, counts$ensembl, "GENENAME", "ENSEMBL")
+#counts$go <- mapIds(org.Rn.eg.db, counts$ensembl, "GO", "ENSEMBL")
+#counts$path <- mapIds(org.Rn.eg.db, counts$ensembl, "PATH", "ENSEMBL")
+
+#' #### Let's examine the stucture in the data to see if there is significant sample correlation
+#' It looks like much of the sample correlation is driven by sequencing batch
+s <- svd(norm_counts)
+dim(s$v)
+cols=colorRampPalette(rev(brewer.pal(11,"RdBu")))(100)
+image ( cor(norm_counts) ,col=cols,zlim=c(-1,1))
+
+#' #### Variance-explained plot: explained variance for PCs
+#' ##### This is what independent data would look like:
+norm_counts0 <- matrix( rnorm( nrow(norm_counts)*ncol(norm_counts) ) , nrow(norm_counts), ncol(norm_counts) )
+d0 <- svd(norm_counts0)$d
+plot(d0^2/sum(d0^2),ylim=c(0,.25))
+
+#' ##### This is what these data look like: Which shows that a majority of variance is explained by just 2 principle components
+plot(s$d^2/sum(s$d^2))
+
+
 
 
 
