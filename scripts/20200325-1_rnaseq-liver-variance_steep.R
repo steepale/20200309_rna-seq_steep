@@ -121,7 +121,6 @@ col_data$animal.key.exlt4 <- as.factor(col_data$animal.key.exlt4)
 #' GTF: Rattus_norvegicus.Rnor_6.0.96.gtf.gz ftp://ftp.ensembl.org/pub/release-96/gtf/rattus_norvegicus/Rattus_norvegicus.Rnor_6.0.96.gtf.gz
 
 #+ Annotate Genes by Chromosome
-
 ################################################################################
 #####     Annotate Genes by Chromosome       ###################################
 ################################################################################
@@ -142,6 +141,7 @@ Rn_TxDb <- makeTxDbFromGFF(ens_gtf,
                            miRBaseBuild=NA,
                            metadata=NULL)
 
+
 # Define Female specific sex genes (X chromosome)
 # To examine chromosome names
 seqlevels(Rn_TxDb)[1:23]
@@ -151,6 +151,7 @@ X_genes_gr <- genes(Rn_TxDb, columns = "TXCHROM", filter = list(tx_chrom=c("X"))
 X_ens_id <- names(X_genes_gr)
 # Examine the gene symbols
 X_sym <- mapIds(org.Rn.eg.db, names(X_genes_gr), "SYMBOL", "ENSEMBL")
+
 # Extract genes as GRanges object, then names
 Y_genes_gr <- genes(Rn_TxDb, columns = "TXCHROM", filter = list(tx_chrom=c("Y")))
 # Collect ensembl gene ids for female specific genes
@@ -229,7 +230,6 @@ summary(sizeFactors(dds))
 #' Size factors are from the median ratio of samples compared to a pseudo-sample, which is the geometric mean of all samples.
 loggeomeans <- rowMeans(log(counts(dds)))
 exp(median((log(counts(dds)[,1]) - loggeomeans)[is.finite(loggeomeans)])) == sizeFactors(dds)[1]
-
 
 #' ### Comparison of transformation techniques
 
