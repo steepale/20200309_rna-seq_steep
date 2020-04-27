@@ -262,6 +262,8 @@ Y_sym <- mapIds(org.Rn.eg.db, names(Y_genes_gr), "SYMBOL", "ENSEMBL")
 count_data = sford_2[, sort(colnames(sford_2))]
 col_data = status[sort(rownames(status)), ]
 
+
+
 design = ~1
 title = paste0('Design: ',as.character(design))
 # Create a DESeqDataSet Object
@@ -316,8 +318,6 @@ hypothalamus_cols = col_data %>% filter(Tissue == 'Hypothalamus')
 row.names(hypothalamus_cols) = hypothalamus_cols$vial_label
 # Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
 all(rownames(hypothalamus_cols) == colnames(hypothalamus_counts))
-
-hypothalamus_cols$acute
 
 hypo_dds <- DESeqDataSetFromMatrix(countData = hypothalamus_counts,
                               colData = hypothalamus_cols,
@@ -389,9 +389,9 @@ DESeq2::plotPCA(rlog_norm_counts, intgroup ="animal.registration.sex") +
   guides(color=guide_legend(title="sex"))
 
 
-pcaData <- DESeq2::plotPCA(rlog_norm_counts, intgroup=c("animal.key.anirandgroup","hour_death"), returnData=TRUE)
+pcaData <- DESeq2::plotPCA(rlog_norm_counts, intgroup=c("animal.key.anirandgroup","animal.registration.sex"), returnData=TRUE)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
-ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup, shape = rlog_norm_counts$animal.registration.sex)) +
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup, shape = animal.registration.sex)) +
   geom_point(size=3) +
   #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
   xlab(paste0("PC1: ",percentVar[1],"% variance")) +
@@ -491,7 +491,7 @@ DESeq2::plotPCA(rlog_norm_hypo_dds_rm_sex, intgroup ="animal.registration.sex") 
 
 pcaData <- DESeq2::plotPCA(rlog_norm_hypo_dds_rm_sex, intgroup=c("animal.key.anirandgroup","animal.registration.sex"), returnData=TRUE)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
-ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup, shape = animal.registration.sex)) +
+ggplot(pcaData, aes(PC1, PC2, color=animal.registration.sex)) +
   geom_point(size=3) +
   #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
   xlab(paste0("PC1: ",percentVar[1],"% variance")) +
@@ -505,34 +505,64 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup, shape = animal.regi
 
 now perform *differential gene expression* on the counts, try to find genes with dfference in counts across groups due to the condition of interest rises above the biological and technical variance we observe
 
+first prepare for col data and count data
 ```{r}
 # variables in design formula cannot contain NA, so I have to remove ref samples here
-count_data = sford_2[, sort(colnames(sford_2))]
-col_data = status[sort(rownames(status)), ] 
-count_data = count_data[,-which(is.na(col_data$animal.key.anirandgroup))]
-col_data = col_data[-which(is.na(col_data$animal.key.anirandgroup)),]
-count_data = count_data[,-which(col_data$Tissue != "Hypothalamus")]
-col_data = col_data[-which(col_data$Tissue != "Hypothalamus"), ]
-#group = col_data$animal.key.anirandgroup
-#design = ~ col_data$animal.key.anirandgroup
-title = paste0('Design: ',as.character(design))
-# Create a DESeqDataSet Object
-dds <- DESeqDataSetFromMatrix(countData = count_data,
-                              colData = col_data,
-                              design = ~ animal.key.anirandgroup)
+hypothalamus_counts_rm_sex = hypothalamus_counts_rm_sex[,-which(is.na(col_data$animal.key.anirandgroup))]
+hypothalamus_cols = hypothalamus_cols[-which(is.na(col_data$animal.key.anirandgroup)),]
 
+# group all samples by acute exercise or not c(0,1)
+for (i in 1:nrow(hypothalamus_cols)){
+  if (hypothalamus_cols[i,]$animal.key.anirandgroup %in% c("Exercise - 0.5 hr", "Exercise - 1 hr", "Exercise - IPE")){
+    hypothalamus_cols[i,]$acute_ex = 1
+  }else{
+    hypothalamus_cols[i,]$acute_ex = 0
+  }
+}
+hypothalamus_cols$acute_ex = as.factor(hypothalamus_cols$acute_ex)
+
+# one more step to remove batch effect between male and female
+f_counts = hypothalamus_counts_rm_sex[, female_hypothalamus[ which(female_hypothalamus %in% colnames(hypothalamus_counts_rm_sex))]]
+m_counts = hypothalamus_counts_rm_sex[, male_hypothalamus[ which(male_hypothalamus %in% colnames(hypothalamus_counts_rm_sex))]]
+f_median = rowMedians(f_counts)
+m_median = rowMedians(m_counts)
+f_var = matrixStats::rowVars(f_counts)
+m_var = matrixStats::rowVars(m_counts)
+
+# for lots of genes, there's 0 expression in all samples which results in a variance of 0
+# they will be removed after building dds object, so I'll just keep them here
+
+new_var = pmin(f_var, m_var)
+f_var_scale = ifelse(f_var == 0, 0, sqrt(new_var / f_var))
+m_var_scale = ifelse(m_var == 0, 0, sqrt(new_var / m_var))
+for (i in 1:nrow(hypothalamus_counts_rm_sex)){
+  f_counts[i] = f_counts[i] + max(f_median[i], m_median[i]) - f_median[i]
+  m_counts[i] = m_counts[i] + max(f_median[i], m_median[i]) - m_median[i]
+  # m_counts[i] = ifelse(m_var_scale == 0, m_counts[i], m_var_scale[i] * m_counts[i] - (m_var_scale[i] - 1) * mean(m_counts[i])) %>% as.integer()
+  # f_counts[i] = ifelse(f_var_scale == 0, f_counts[i], f_var_scale[i] * f_counts[i] - (f_var_scale[i] - 1) * mean(f_counts[i])) %>% as.integer()
+}
+
+hypothalamus_counts_scaled = cbind(f_counts, m_counts)
+hypothalamus_cols_scaled = hypothalamus_cols[c(female_hypothalamus[ which(female_hypothalamus %in% colnames(hypothalamus_counts_rm_sex))], male_hypothalamus[ which(male_hypothalamus %in% colnames(hypothalamus_counts_rm_sex))]),]
+```
+
+```{r}
+# Create a DESeqDataSet Object
+dds <- DESeqDataSetFromMatrix(countData = hypothalamus_counts_scaled,
+                              colData = hypothalamus_cols_scaled,
+                              design = ~ animal.registration.sex + acute_ex)
+# based on the vignette of DESeq2: acute_ex (the last variable in design) effect represents the overall effect controlling for differences due to sex
 
 # Filter genes with average count of 10 or less. (this time I won't perform this)
 # Reasoning from:
 #citation("PROPER")
 #dds
-# keep <- rowMeans(counts(dds)) >= 10
-# dds <- dds[keep,]
+keep <- rowMeans(counts(dds)) >= 1
+dds <- dds[keep,]
 
 dds_1 <- estimateSizeFactors(dds)
-rs <- rowSums(counts(dds_1))
 # Normalize the counts
-rld <- vst(dds_1) #vst and rlog comparable with all samples
+rld <- rlog(dds_1) #vst and rlog comparable with all samples
 #rld <- rlog(dds, blind=FALSE)
 
 # Extract matrix of normalized counts
@@ -547,8 +577,56 @@ counts$genename <- mapIds(org.Rn.eg.db, counts$ensembl, "GENENAME", "ENSEMBL")
 counts$go <- mapIds(org.Rn.eg.db, counts$ensembl, "GO", "ENSEMBL")
 counts$path <- mapIds(org.Rn.eg.db, counts$ensembl, "PATH", "ENSEMBL")
 
-# 
+pcaData <- DESeq2::plotPCA(rld, intgroup=c("animal.key.anirandgroup","animal.registration.sex"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup, shape = animal.registration.sex)) +
+  geom_point(size=3) +
+  #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  #coord_fixed() +
+  ggtitle("Hypothalamus Samples with sex median-centered") 
 ```
+### to Compare whether I have removed the sex-related variance
+* subset by sex == female
+* PCA show the data structure
+
+```{r}
+hypothalamus_cols_f = hypothalamus_cols[female_hypothalamus,]
+hypothalamus_counts_f = hypothalamus_counts[,female_hypothalamus]
+# Create a DESeqDataSet Object
+dds_f <- DESeqDataSetFromMatrix(countData = hypothalamus_counts_f,
+                              colData = hypothalamus_cols_f,
+                              design = ~ 1)
+
+
+# Filter genes with average count of 10 or less. (this time I won't perform this)
+# Reasoning from:
+#citation("PROPER")
+#dds
+keep <- rowMeans(counts(dds_f)) >= 1
+dds_f <- dds_f[keep,]
+
+dds_f <- estimateSizeFactors(dds_f)
+# Normalize the counts
+rld <- rlog(dds_f) #vst and rlog comparable 
+
+pcaData <- DESeq2::plotPCA(rld, intgroup=c("animal.key.anirandgroup","acute_ex"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup, shape = acute_ex)) +
+  geom_point(size=3) +
+  #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  #coord_fixed() +
+  ggtitle("Hypothalamus Samples (Female only)")
+```
+
+
+
+
+
+
 Then run the DESeq2 model:
 ```{r}
 dds <- DESeq2::DESeq(dds)
@@ -570,6 +648,11 @@ table(res2$padj < 0.05)
 
 # a sorted results table:
 resSort <- res2[order(res2$padj),]
+
+gene_ls = counts[rownames(res2[which(res2$padj <= 0.05),]),]$symbol
+gene_ls = gene_ls[!is.na(gene_ls)]
+write.table(gene_ls, file = paste0(WD, "/Data/intermediate/20200423-hypothalamus-DE-gene-list_Zhang.txt"), sep = "\t", col.names = F, row.names = F, quote = FALSE)
+
 ```
 ### Visualizing results
 ```{r}
@@ -581,7 +664,7 @@ Examine the counts for the top gene, sorting by FDR:
 ```{r}
 #plotCounts(dds, gene=which.min(res2$padj), intgroup="animal.key.anirandgroup")
 data <- plotCounts(dds, gene=which.min(res2$padj), intgroup="animal.key.anirandgroup", returnData=TRUE)
-ggplot(data, aes(x=animal.key.anirandgroup, y=count, col = col_data$hour_death)) +
+ggplot(data, aes(x=animal.key.anirandgroup, y=count, col = hypothalamus_cols$hour_death)) +
   geom_point(position=position_jitter(width=.1,height=0)) +
   #stat_smooth() + 
   scale_y_log10() +
@@ -598,7 +681,7 @@ mat <- assay(rld)[topgenes,]
 
 # standarized the count matrix
 mat <- mat - rowMeans(mat)
-df <- as.data.frame(colData(dds)[,"animal.key.anirandgroup"])
+df <- as.data.frame(colData(dds)$animal.key.anirandgroup)
 rownames(df) = colnames(mat)
 pheatmap(mat, annotation_col=df)
 ```
