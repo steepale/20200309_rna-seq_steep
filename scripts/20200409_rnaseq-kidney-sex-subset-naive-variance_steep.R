@@ -44,7 +44,7 @@ WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
 #install.packages("tidyverse")
 
 # Load dependencies
-pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som", "vsn","org.Mm.eg.db","VennDiagram","EBImage","reshape2")
+pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som", "vsn","org.Mm.eg.db","VennDiagram","EBImage","reshape2","xtable","kohonen")
 lapply(pacs...man, FUN = function(X) {
         do.call("library", list(X)) })
 
@@ -136,7 +136,6 @@ mouse2rat_ortho <- function(x) {
 #'         * 2 sequencing batches & metadata
 
 #+ Load the Data
-
 ################################################################################
 #####     Load & Clean Data      ###############################################
 ################################################################################
@@ -273,7 +272,7 @@ names(circ_df)[1] <- "SYMBOL_MOUSE"
 circ_kid <- circ_df %>%
         select(SYMBOL_MOUSE, KID, NUM.TISSUE, RANGE.P, PEAK.MEAN) %>%
         filter(!is.na(KID)) %>%
-        filter(NUM.TISSUE >= 4)
+        filter(NUM.TISSUE >= 1)
 input_n <- circ_kid$SYMBOL_MOUSE %>% unique() %>% length() %>% as.character()
 
 # Some genes were annotated with synonyms by Yan et al. We manually convert these synonyms to gene symbols
@@ -312,7 +311,7 @@ output_n <- circ_kid2$ENSEMBL_RAT %>% unique() %>% length() %>% as.character()
 #' * High confidence Rat orthologs output: `r output_n`
 #' ###### Steps in ortholog selection:
 #' * Demonstration of circadian oscilliations in mouse kidney (from Yan et. al.)
-#' * Demonstration of circadian oscilliations in 4 or more tissues (from Yan et. al.)
+#' * Demonstration of circadian oscilliations in 1 (min Kidney) or more tissues (from Yan et. al.)
 #' * Mouse genes were removed that did not have Ensembl gene symbol (or alias) to gene id 
 #'     * First choice of 1:many were included
 #' * Genes were removed if they did not have a high orthology confidence score between mouse gene id and rat gene id  (binary value 0|1)
@@ -326,7 +325,8 @@ rm(circ_kid2)
 # Make one custom adjustment (Biomart did not catch this annotation)
 circ_kid <- circ_kid %>%
         mutate(SYMBOL_RAT = ifelse(
-                ENSEMBL_RAT %in% c('ENSRNOG00000060956','ENSRNOG00000047309'), 
+                ENSEMBL_RAT %in% c('ENSRNOG00000060956','ENSRNOG00000047309',
+                                   'ENSRNOG00000000419','ENSRNOG00000018536'), 
                 SYMBOL_MOUSE, SYMBOL_RAT))
 
 # Collect kidney circadian kidney genes
@@ -378,7 +378,7 @@ all(rownames(fkid_cols) == colnames(fkid_counts))
 design = ~ 1 # Primary variable needs to be last
 title = paste0('Design: ',as.character(design))
 # Create a DESeqDataSet Object
-dds <- DESeqDataSetFromMatrix(countData = fkid_counts,
+dds1 <- DESeqDataSetFromMatrix(countData = fkid_counts,
                               colData = fkid_cols,
                               design = design)
 
@@ -389,12 +389,20 @@ dds <- DESeqDataSetFromMatrix(countData = fkid_counts,
 #dds
 #' #### We remove genes with an average sequencing depth of 10 or less
 #' Before Filtering
-dds
-keep <- rowSums(counts(dds))/ncol(dds) > 10
-dds <- dds[keep,]
+# dds1
+zero_n <- dds1[(rowSums(counts(dds1))/ncol(dds1) < 1), ] %>% nrow() %>% as.character()
+reads_n <- 10
+keep <- rowSums(counts(dds1))/ncol(dds1) >= reads_n
+dds2 <- dds1[keep,]
 #' #### Summary of counts and annotation data in a DESeqDataSet after filtering out genes with low sequencing depth
-dds
+#' TODO: Critic from Jun: Here we are removing features that have a low average expression. This may be removing important features that might have zero counts in some samples and higher counts in specific groups. Consider developing an algorithm that will account for features with expression in n or more samples.
+dds2
+filter_n <- nrow(dds1) - nrow(dds2) - as.numeric(zero_n)
+filter_p <- filter_n/(nrow(dds1) - as.numeric(zero_n))
+total_n <- nrow(dds1) - nrow(dds2)
 
+#' ##### Note: Number of genes with average counts between zero and 1 is `r zero_n` but removing reads with less than or equal to `r reads_n` removes an additional `r filter_n` features or removes `r filter_p*100`% of the non-zero reads (total of `r total_n` reads removed).
+dds <- dds2
 #' To see the reads per million for each sample
 sort(colSums(assay(dds)))/1e6
 
@@ -435,6 +443,8 @@ plot(assay(rld)[,c(1,2)],
      ylab = "Sample 2 rlog Gene Counts", 
      cex = 0.3, main = "rlog Transform")
 
+#' TODO: QC Check, Jun recommends demonstrating the number of features at different (perhaps dec) -tiles from different transforms. We need to double check that the transform did not remove features or shrink low expression features so extremely to demonstrate zero variance.
+
 #' ##### Another plot to examine the difference between transformations is a mean standard deviation plot, which calculates--for each gene--the mean over all samples and the standard deviation over all samples..
 mypar(1,1)
 #' #### rlog Transform
@@ -446,6 +456,8 @@ meanSdPlot(assay(rld)[rs > 0,], ranks=FALSE)
 ################################################################################
 ##########    PCA and Hierarchical Clustering (Female Kidneys)       ###########
 ################################################################################
+
+#' TODO: With all PCA's consider creating ordinal values for groups and generating more intuitive colors
 
 #' #### We decide to subset by sex and investigate how samples cluster annotated by exercise/control groups (first we show major 3 bin types)
 #' Top 500 genes ranked by total variance
@@ -532,7 +544,8 @@ venn.diagram(
         output=TRUE
 )
 img = readImage(venn_file)
-display(img, method = "raster")
+#TODO: Create a much more visually appealing venn diagram
+EBImage::display(img, method = "raster")
 shared_genes <- mapIds(org.Rn.eg.db, circ_kid_ens[circ_kid_ens %in% top500], "SYMBOL", "ENSEMBL")
 #' ##### The shared high variance orthologous genes:
 shared_genes
@@ -567,6 +580,7 @@ ggplot(pcaData, aes(PC1, PC2, color=specimen.collection.t_death_bins.type)) +
         guides(color=guide_legend(title="Time of Death\n(Binned by Hour Intervals)"))
 
 #' #### Instead, if we select 201 genes at random, we do not see the same pattern in variance. Note the low PC1.
+#' TODO: Critic from Jun: When we select genes by random, we should downsample. Genes should have comparible total and average expression levels, then place in PCA.
 set.seed(666)
 mypar()
 rld.sub <- rld[row.names(rld) %in% sample(row.names(rld),201),]
@@ -619,8 +633,7 @@ summary(rv_circ)
 #' #### 201 Randomly Selected Genes:
 summary(rv_random)
 
-#' ### Circadian Genes do capture variance in Female Kidney Samples under a naive model (~ 1)
-
+#' ### Circadian Genes capture variance in Female Kidney Samples under a naive model (~ 1)
 #' #### Model Expression of Circadian Genes
 #+
 ################################################################################
@@ -673,6 +686,32 @@ ggplot(top_plot,
 
 #' ##### TODO: Calculate maximum log2 fold chnage of circadian genes and show that is doesn't equate to noise in differential expression
 
+
+#' #### Differential Gene Expression Analysis
+
+#+ Differential Gene Expression Analysis
+################################################################################
+######## Differential Gene Expression Analysis #############################
+################################################################################
+
+Control0
+Ex0
+Ex0.5
+Ex1
+Ex4
+Ex7
+Ex24
+Ex48
+
+Control7
+Ex0
+Ex0.5
+Ex1
+Ex4
+Ex7
+Ex24
+Ex48
+
 #' #### Unsupervised Clustering w/ SOMs & K-means
 
 #+ Unsupervised Clustering w/ SOMs & K-means
@@ -680,9 +719,104 @@ ggplot(top_plot,
 ######## Unsupervised Clustering w/ SOMs & K-means #############################
 ################################################################################
 
-#' # TODO: Will support DE findings nicely.
+# Order samples by exercise group
+group_order <- fkid_cols %>%
+        arrange(animal.key.anirandgroup) %>%
+        select(sample_key) %>% unlist() %>% as.character()
+group_order2 <- fkid_cols %>%
+        arrange(animal.key.anirandgroup) %>%
+        select(animal.key.anirandgroup) %>% unlist() %>% as.character()
+
+# Arrange matrix in order of exercise and control groups
+# All expression values per gene are normalized to generate a level playing field. Means are subtracted by values and the resulting difference is divided by the standard deviation.
+som_xgroup <- assay(rld)[,group_order]
+
+som_xgroup <- som_xgroup %>% t() %>% data.frame()
 
 
+# Test for multiv
+x <- as.numeric(MVN::mvn(som_xgroup, mvnTest = "hz")$univariateNormality$`p value`)
+(p.adjust(x, method = "BH") > 0.05) %>% table()
+
+som_xgroup$animal.key.anirandgroup <- group_order2
+
+# MANOVA test
+colnames(som_xgroup)
+res.man <- manova(cbind(ENSRNOG00000059776,
+                        ENSRNOG00000020843,
+                        ENSRNOG00000056940,
+                        ENSRNOG00000012366) ~ animal.key.anirandgroup, data = som_xgroup)
+
+gi <- c("ENSRNOG00000059776",
+        "ENSRNOG00000020843",
+        "ENSRNOG00000056940",
+        "ENSRNOG00000012366")
+si <- mapIds(org.Rn.eg.db, gi, "SYMBOL", "ENSEMBL")
+tp <- melt_plot %>%
+        filter(variable %in% si)
+
+ggplot(tp, 
+       aes(x = specimen.collection.t_death, 
+           y = value, 
+           color = variable)) +
+        geom_point(alpha = 0.5) +
+        stat_smooth(alpha = 0.5) +
+        ylab("rlog Transformed Expression") +
+        xlab("Specimen collection time of death")
+
+res.man
+
+
+res.man <- manova(cbind(Sepal.Length, Petal.Length) ~ Species, data = iris)
+summary(res.man)
+
+summary.aov(res.man)
+
+# Order samples by time of death (time of day)
+tod_order <- fkid_cols %>%
+        arrange(specimen.collection.t_death) %>%
+        select(sample_key) %>% unlist() %>% as.character()
+# Arrange matrix in order of time of death
+reads_n <- 10
+keep <- rowSums(fkid_counts)/ncol(fkid_counts) >= reads_n
+fkid_counts_10 <- fkid_counts[keep,]
+fkid_counts_10 %>% scale()
+som_tod <- assay(rld.circ)[,tod_order] %>% scale()
+
+# Data should be normalized differently between
+
+# SOM
+set.seed(666)
+som::som(som_xgroup,10,10) %>% plot()
+som::som(som_tod,4,4) %>% plot()
+
+
+# SOM
+set.seed(666)
+# Specify grid parameters
+g <- somgrid(xdim = 10, ydim = 10, topo = "rectangular")
+# Specify map (alpha is the learning rate--default: 0.05 & 0.01)
+map <- som(som_tod,
+           grid = g,
+           alpha = c(0.05, 0.01),
+           radius = 1)
+
+
+
+
+# Visualize this map
+# Plot the average distance to the closest unit based on iterations: tells us how many iterations we need
+plot(map, type = 'changes')
+mypar(1,1)
+# For a codes plot
+plot(map, type = 'codes')
+# To plot a counts plot
+plot(map, type = 'count')
+mypar()
+# To plot elements (features) in each node plot
+plot(map, type = 'mapping')
+# To plot a neighbor distance plot, light colors indicate bigger distance
+plot(map, type = 'dist.neighbours')
 
 #' #### End of Script Notes
 
@@ -728,5 +862,6 @@ col_data[, sapply(col_data, class) == 'logical']
 ################################################################################
 session_info()
 
-
+# Stops evaluation of code
+#knitr::opts_chunk$set(eval = FALSE)
 

@@ -1,0 +1,15 @@
+INFO [2020-04-23 15:18:40] $x
+INFO [2020-04-23 15:18:40] list(colnames(som_tod), colnames(som_xgroup))
+INFO [2020-04-23 15:18:40] 
+INFO [2020-04-23 15:18:40] $category.names
+INFO [2020-04-23 15:18:40] c("Time of Death (MANOVA Genes)", "Exercise Control Group (MANOVA Genes")
+INFO [2020-04-23 15:18:40] 
+INFO [2020-04-23 15:18:40] $filename
+INFO [2020-04-23 15:18:40] venn_file
+INFO [2020-04-23 15:18:40] 
+INFO [2020-04-23 15:18:40] $imagetype
+INFO [2020-04-23 15:18:40] [1] "png"
+INFO [2020-04-23 15:18:40] 
+INFO [2020-04-23 15:18:40] $output
+INFO [2020-04-23 15:18:40] [1] TRUE
+INFO [2020-04-23 15:18:40] 
