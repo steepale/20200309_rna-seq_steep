@@ -2,10 +2,7 @@
 title: "2020005_hypothalamus-circadian-investigation-rna-seq_Zhang"
 author: "Jiayu Zhang"
 date: "4/5/2020"
-output: html_document:
-  code_folding: hide
-  toc: true
-  highlight: zenburn
+output: html_document
 ---
 
 ```{r setup, include=FALSE}
@@ -45,8 +42,11 @@ if (!requireNamespace("BiocManager", quietly = TRUE))
 BiocManager::install("PROPER")
 BiocManager::install("org.Rn.eg.db")
 BiocManager::install("pcaExplorer")
+BiocManager::install("GenomicFeatures")
+BiocManager::install("S4Vector")
+BiocManager::install("qvalue")
 mypackages = c("tidyverse","GenomicRanges", "DESeq2","devtools","ggplot2","dplyr","PROPER", "lubridate", "hms",
-               "org.Rn.eg.db", "AnnotationDbi", "pcaExplorer")
+               "org.Rn.eg.db", "AnnotationDbi", "pcaExplorer", "pheatmap","GenomicFeatures", "genefilter", "qvalue")
 lapply(mypackages, FUN = function(X) {
   do.call("library", list(X)) })
 
@@ -212,14 +212,56 @@ status$animal.key.anirandgroup = as.factor(status$animal.key.anirandgroup)
 # add a new column to status dataframe to differentiate time in hour in a day
 status$hour_death = hour(status$specimen.collection.t_death) %>% as.factor()
 table(status$hour_death)
-hist(status$hour_death, breaks = 8:17)
+#hist(as.numeric(status$hour_death))
 ```
+
+### Genomics Ranges (genel list)
+**Reference Genome and Annotation: Rnor_6.0 assembly from Ensembl database (release 99)**
+```{r}
+################################################################################
+#####     Annotate Genes by Chromosome       ###################################
+################################################################################
+
+### Determine which control samples are male and female
+# Get the list of genes on the W chromosome
+
+# Construct your own personal galgal5 reference genome annotation
+# Construct from gtf file from Ensembl (same file used in mapping)
+ens_gtf = paste0(WD,'/Data/library/Rattus_norvegicus.Rnor_6.0.99.gtf')
+
+Rn_TxDb <- makeTxDbFromGFF(ens_gtf,
+                           format=c("gtf"),
+                           dataSource="Ensembl_Rattus6_gtf",
+                           organism="Rattus norvegicus",
+                           taxonomyId=NA,
+                           circ_seqs=DEFAULT_CIRC_SEQS,
+                           chrominfo=NULL,
+                           miRBaseBuild=NA,
+                           metadata=NULL)
+
+seqlevels(Rn_TxDb)[1:23]
+
+# Extract genes as GRanges object, then names
+X_genes_gr <- genes(Rn_TxDb, columns = "TXCHROM", filter = list(tx_chrom=c("X")))
+# Collect ensembl gene ids for female specific genes
+X_ens_id <- names(X_genes_gr)
+# Examine the gene symbols
+X_sym <- mapIds(org.Rn.eg.db, names(X_genes_gr), "SYMBOL", "ENSEMBL")
+# Extract genes as GRanges object, then names
+Y_genes_gr <- genes(Rn_TxDb, columns = "TXCHROM", filter = list(tx_chrom=c("Y")))
+# Collect ensembl gene ids for female specific genes
+Y_ens_id <- names(Y_genes_gr)
+sex_ens_id <- c(X_ens_id,Y_ens_id)
+# Examine the gene symbols
+Y_sym <- mapIds(org.Rn.eg.db, names(Y_genes_gr), "SYMBOL", "ENSEMBL")
+```
+
+
 ### PCA Visualization
 ```{r}
-
-
 count_data = sford_2[, sort(colnames(sford_2))]
 col_data = status[sort(rownames(status)), ]
+
 design = ~1
 title = paste0('Design: ',as.character(design))
 # Create a DESeqDataSet Object
@@ -253,17 +295,103 @@ counts$genename <- mapIds(org.Rn.eg.db, counts$ensembl, "GENENAME", "ENSEMBL")
 counts$go <- mapIds(org.Rn.eg.db, counts$ensembl, "GO", "ENSEMBL")
 counts$path <- mapIds(org.Rn.eg.db, counts$ensembl, "PATH", "ENSEMBL")
 
+
 # Here we examine all samples by batch and tissue
 # 
 # first PCA with intGroup of tissue
 DESeq2::plotPCA(rld, intgroup ="Tissue") +
   guides(color=guide_legend(title="Tissues"))
+```
 
-# subset the dataset to only Gastro, which is my tissue of interest
-rld.sub <- rld[ , (rld$Tissue == "Hypothalamus") ]
-pcaData <- DESeq2::plotPCA(rld.sub, intgroup=c("animal.registration.sex","hour_death"), returnData=TRUE)
+
+```{r}
+################################################################################
+#####     Normalization for Sequencing Depth      ##############################
+################################################################################
+hypothalamus = col_data %>% filter(Tissue == 'Hypothalamus') %>%
+  select(vial_label) %>% unlist() %>% as.character()
+hypothalamus_counts = count_data[,hypothalamus] %>% as.matrix()
+# subset hypothalamus metadata
+hypothalamus_cols = col_data %>% filter(Tissue == 'Hypothalamus')
+row.names(hypothalamus_cols) = hypothalamus_cols$vial_label
+# Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
+all(rownames(hypothalamus_cols) == colnames(hypothalamus_counts))
+
+hypothalamus_cols$acute
+
+hypo_dds <- DESeqDataSetFromMatrix(countData = hypothalamus_counts,
+                              colData = hypothalamus_cols,
+                              design = design)
+
+# remove genes that have avg counts less than 1 (reduced to maintain more sex-relate genes)
+keep <- rowSums(counts(hypo_dds))/ncol(hypo_dds) > 1
+hypo_dds <- hypo_dds[keep,]
+
+# see how gene counts distributed
+plot(assay(hypo_dds)[,3:4], cex=.3)
+# DESeq2 uses median of ratios to normalize sequencing depth and RNA composition (not for within samaple comparison)
+hypo_dds = estimateSizeFactors(hypo_dds)
+# then view size factors:
+plot(sizeFactors(hypo_dds), colSums(counts(hypo_dds)), cex=.3)
+abline(lm(colSums(counts(hypo_dds)) ~ sizeFactors(hypo_dds) + 0))
+normalized_counts = counts(hypo_dds, normalized = T)
+#summary(normalized_counts)
+summary(sizeFactors(hypo_dds))
+```
+### Transformation
+
+```{r}
+# Comparison 3 transformation methods: log2 norm, vst and rlog
+log2_norm_counts = log2(normalized_counts + 1)
+vst_norm_counts = vst(hypo_dds)
+rlog_norm_counts = rlog(hypo_dds)
+par(mfrow=c(1,2))
+boxplot(log2_norm_counts, ylim = c(0,20), cex = 0.2, main = "log2 transformation")
+boxplot(assay(vst_norm_counts), ylim = c(0,20), cex = 0.2, main = "vst transformation")
+boxplot(log2_norm_counts, ylim = c(0,20), cex = 0.2, main = "log2 transformation")
+boxplot(assay(rlog_norm_counts), ylim = c(0,20), cex = 0.2, main = "rlog transformation")
+```
+* VST uses a subset of genes and divides each column of the counts matrix by size factors. It shrinked  
+the counts matrix range (to about 6 to 20) more than the other 2 methods.
+* Log2 and rlog are pretty much similar to each other.
+```{r}
+plot(assay(vst_norm_counts)[,3:4],
+     xlab = "sample 1 VST gene counts",
+     ylab = "sample 2 VST gene counts",
+     cex = .3)
+plot(assay(rlog_norm_counts)[,3:4],
+     xlab = "sample 1 rlog gene counts",
+     ylab = "sample 2 rlog gene counts",
+     cex = .3)
+plot(log2_norm_counts[,3:4],
+     xlab = "sample 1 log2 gene counts",
+     ylab = "sample 2 log2 gene counts",
+     cex = .3)
+```
+* Rlog (regularized log) transformation showed the most normal distributed variance among all genes (from  
+low counts to high counts), so here I continue on with rlog normalized S4.
+
+### PCA by tissue == Hypothalamus
+```{r}
+counts = as.data.frame(assay(rlog_norm_counts))
+# Annotate normalized counts
+counts$ensembl <- rownames(counts)
+counts$symbol <- mapIds(org.Rn.eg.db, counts$ensembl, "SYMBOL", "ENSEMBL")
+counts$entrez <- mapIds(org.Rn.eg.db, counts$ensembl, "ENTREZID", "ENSEMBL")
+counts$genename <- mapIds(org.Rn.eg.db, counts$ensembl, "GENENAME", "ENSEMBL")
+counts$go <- mapIds(org.Rn.eg.db, counts$ensembl, "GO", "ENSEMBL")
+counts$path <- mapIds(org.Rn.eg.db, counts$ensembl, "PATH", "ENSEMBL")
+
+# Here we examine all samples by batch and tissue
+# 
+# first PCA with intGroup of tissue
+DESeq2::plotPCA(rlog_norm_counts, intgroup ="animal.registration.sex") +
+  guides(color=guide_legend(title="sex"))
+
+
+pcaData <- DESeq2::plotPCA(rlog_norm_counts, intgroup=c("animal.key.anirandgroup","hour_death"), returnData=TRUE)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
-ggplot(pcaData, aes(PC1, PC2, color=hour_death, shape=animal.registration.sex)) +
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup, shape = rlog_norm_counts$animal.registration.sex)) +
   geom_point(size=3) +
   #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
   xlab(paste0("PC1: ",percentVar[1],"% variance")) +
@@ -271,16 +399,105 @@ ggplot(pcaData, aes(PC1, PC2, color=hour_death, shape=animal.registration.sex)) 
   #coord_fixed() +
   ggtitle("Hypothalamus Samples Across Groups")
 
-# visualize the distribution of PCs' variance explained
-pcaData_1 = prcomp(t(assay(rld.sub)))
-summary(pcaData_1)
-pcascree(pcaData_1, pc_nr = 25, type = "pev")
-```
-We can see that PC1 and PC2 explained limited proportion in variance.  
-Also, there might be an sample resided in opposite cluster  
-### Kmeans clustering
-```{r}
 
+```
+
+```{r}
+# Variables of interest
+male_hypothalamus <- (hypothalamus_cols %>% 
+                        filter(animal.registration.sex == 'Male'))$vial_label %>% 
+        as.character()
+female_hypothalamus <- (hypothalamus_cols %>% 
+                          filter(animal.registration.sex == 'Female'))$vial_label %>% 
+        as.character()
+ref_hypothalamus <- (hypothalamus_cols %>%
+                       filter(is.na(animal.registration.sex)))$vial_label %>% 
+        as.character()
+hypothalamus <- c(male_hypothalamus,female_hypothalamus,ref_hypothalamus)
+Y_genes <- Y_ens_id[Y_ens_id %in% row.names(assay(rlog_norm_counts))]
+X_genes <- X_ens_id[X_ens_id %in% row.names(assay(rlog_norm_counts))]
+sex <- hypothalamus_cols[hypothalamus,"animal.registration.sex"]
+group <- hypothalamus_cols[hypothalamus,"animal.key.anirandgroup"]
+
+
+# t-test on expression associated with sex
+tt = rowttests(hypothalamus_counts[, hypothalamus], sex)
+par(myfrow = c(1,2))
+# Histogram of p values associated with ttest
+hist(tt$p.value,main="",ylim=c(0,1300), breaks = 100)
+plot(tt$dm,-log10(tt$p.value))
+points(tt[X_genes,]$dm,-log10(tt[X_genes,]$p.value),col=3,pch=16)
+points(tt[Y_genes,]$dm,-log10(tt[Y_genes,]$p.value),col=2,pch=16, xlab="Effect size",ylab="-log10(p-value)")
+legend("bottomright",c("X","Y"),col=3:2,pch=16)
+p <- tt$p.value
+qvals <- qvalue(tt$p.value)$qvalue
+index <- which(qvals<=0.05)
+abline(h=-log10(max(tt$p.value[index])))
+```
+
+### PCA after removing sex-differentially expressed genes 
+#### (have I removed sex-related vairance?)
+```{r}
+# first try removing all sex-significant genes
+hypothalamus_counts_rm_sig = hypothalamus_counts[!(rownames(hypothalamus_counts)) %in% rownames(hypothalamus_counts[index,hypothalamus]),]
+
+# then try removing only X or Y related sex-significant genes
+# here's a new index
+sex_index = c(index[which(rownames(hypothalamus_counts[index,hypothalamus]) %in% X_genes)], index[which(rownames(hypothalamus_counts[index,hypothalamus]) %in% Y_genes)])
+
+hypothalamus_counts_rm_sex = hypothalamus_counts[!(rownames(hypothalamus_counts)) %in% rownames(hypothalamus_counts[sex_index,hypothalamus]),]
+
+# build dds with those 2 new count matrix
+hypo_dds_rm_sig <- DESeqDataSetFromMatrix(countData = hypothalamus_counts_rm_sig,
+                              colData = hypothalamus_cols,
+                              design = design)
+
+# remove genes that have avg counts less than 1 (reduced to maintain more sex-relate genes)
+keep <- rowSums(counts(hypo_dds_rm_sig))/ncol(hypo_dds_rm_sig) > 1
+hypo_dds_rm_sig <- hypo_dds_rm_sig[keep,]
+hypo_dds_rm_sig = estimateSizeFactors(hypo_dds_rm_sig)
+rlog_norm_hypo_dds_rm_sig = rlog(hypo_dds_rm_sig)
+
+
+DESeq2::plotPCA(rlog_norm_hypo_dds_rm_sig, intgroup ="animal.registration.sex") +
+  guides(color=guide_legend(title="sex"))
+
+
+pcaData <- DESeq2::plotPCA(rlog_norm_hypo_dds_rm_sig, intgroup=c("animal.key.anirandgroup","animal.registration.sex"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup, shape = animal.registration.sex)) +
+  geom_point(size=3) +
+  #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  #coord_fixed() +
+  ggtitle("Hypothalamus Samples With 22 Genes Removed")
+```
+```{r}
+hypo_dds_rm_sex <- DESeqDataSetFromMatrix(countData = hypothalamus_counts_rm_sex,
+                              colData = hypothalamus_cols,
+                              design = design)
+
+# remove genes that have avg counts less than 1 (reduced to maintain more sex-relate genes)
+keep <- rowSums(counts(hypo_dds_rm_sex))/ncol(hypo_dds_rm_sex) > 1
+hypo_dds_rm_sex <- hypo_dds_rm_sex[keep,]
+hypo_dds_rm_sex = estimateSizeFactors(hypo_dds_rm_sex)
+rlog_norm_hypo_dds_rm_sex = rlog(hypo_dds_rm_sex)
+
+
+DESeq2::plotPCA(rlog_norm_hypo_dds_rm_sex, intgroup ="animal.registration.sex") +
+  guides(color=guide_legend(title="sex"))
+
+
+pcaData <- DESeq2::plotPCA(rlog_norm_hypo_dds_rm_sex, intgroup=c("animal.key.anirandgroup","animal.registration.sex"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup, shape = animal.registration.sex)) +
+  geom_point(size=3) +
+  #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  #coord_fixed() +
+  ggtitle("Hypothalamus Samples with 16 Genes Removed")
 ```
 
 ## Defferential gene expression
@@ -334,7 +551,7 @@ counts$path <- mapIds(org.Rn.eg.db, counts$ensembl, "PATH", "ENSEMBL")
 ```
 Then run the DESeq2 model:
 ```{r}
-dds <- DESeq(dds)
+dds <- DESeq2::DESeq(dds)
 res = results(dds)
 head(res)
 
@@ -366,8 +583,12 @@ Examine the counts for the top gene, sorting by FDR:
 data <- plotCounts(dds, gene=which.min(res2$padj), intgroup="animal.key.anirandgroup", returnData=TRUE)
 ggplot(data, aes(x=animal.key.anirandgroup, y=count, col = col_data$hour_death)) +
   geom_point(position=position_jitter(width=.1,height=0)) +
+  #stat_smooth() + 
   scale_y_log10() +
   theme(axis.text.x = element_text(angle = 45))
+
+#which gene it is
+counts[which.min(res2$padj),c("symbol","genename")]
 ```
 Draw heatmap of the top genes:
 
@@ -378,6 +599,7 @@ mat <- assay(rld)[topgenes,]
 # standarized the count matrix
 mat <- mat - rowMeans(mat)
 df <- as.data.frame(colData(dds)[,"animal.key.anirandgroup"])
+rownames(df) = colnames(mat)
 pheatmap(mat, annotation_col=df)
 ```
 Generally, exercise-IPE and exercise-0.5hr are clustered together, apart from other groups.  
@@ -395,7 +617,21 @@ hist(res3$pvalue[res3$baseMean > 1],
 data <- plotCounts(dds, gene=which.min(res3$padj), intgroup="animal.key.anirandgroup", returnData=TRUE)
 ggplot(data, aes(x=animal.key.anirandgroup, y=count, col = col_data$hour_death)) +
   geom_point(position=position_jitter(width=.1,height=0)) +
-  scale_y_log10() +
+  #scale_y_log10() +
   theme(axis.text.x = element_text(angle = 45))
+
+counts[which.min(res3$padj),c("symbol","genename")]
+```
+
+
+Also draw a heatmap for the top DE genes in the control-7 group vs the exercise-7 group:
+```{r}
+resSort_7 <- res3[order(res3$padj),]
+topgenes_7 <- head(rownames(resSort_7),20)
+mat <- assay(rld)[topgenes_7,]
+
+# standarized the count matrix
+mat <- mat - rowMeans(mat)
+pheatmap(mat, annotation_col=df)
 ```
 
