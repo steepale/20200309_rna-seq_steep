@@ -38,7 +38,7 @@ WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
 #install.packages("tidyverse")
 
 # Load dependencies
-pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som", "vsn","org.Mm.eg.db","VennDiagram","EBImage","reshape2","xtable","kohonen","som","caret","enrichR")
+pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som", "vsn","org.Mm.eg.db","VennDiagram","EBImage","reshape2","xtable","kohonen","som","caret","enrichR","gplots")
 lapply(pacs...man, FUN = function(X) {
         do.call("library", list(X)) })
 
@@ -118,10 +118,10 @@ rat_mouse_ortho <- function(x, column = "ENSEMBL_RAT", direction = 'rat2mouse') 
                 names(ortho_df) <- c('ENSEMBL_RAT','CONFIDENCE','ENSEMBL_MOUSE') 
                 ortho_df <- ortho_df %>%
                         select(-CONFIDENCE)
-                # Assign the HUGO symbols to a new column
+                # Assign the symbols to a new column
                 x <- left_join(x, ortho_df, by = 'ENSEMBL_RAT') %>%
                         filter(!is.na(ENSEMBL_RAT)) %>%
-                        mutate(SYMBOL_RAT = mapIds(org.Rn.eg.db, ENSEMBL_RAT, "SYMBOL", "ENSEMBL"))
+                        mutate(SYMBOL_MOUSE = mapIds(org.Mm.eg.db, ENSEMBL_MOUSE, "SYMBOL", "ENSEMBL"))
                 
         }else{
                 ortho_df <- getLDS(attributes=c("ensembl_gene_id",
@@ -141,13 +141,14 @@ rat_mouse_ortho <- function(x, column = "ENSEMBL_RAT", direction = 'rat2mouse') 
                         select(-CONFIDENCE)
                 # Assign the HUGO symbols to a new column
                 x <- left_join(x, ortho_df, by = 'ENSEMBL_MOUSE') %>%
-                        filter(!is.na(ENSEMBL_MOUSE)) %>%
-                        mutate(SYMBOL_RAT = mapIds(org.Rn.eg.db, ENSEMBL_RAT, "SYMBOL", "ENSEMBL"))
+                        filter(!is.na(ENSEMBL_RAT)) %>%
+                        mutate(SYMBOL_RAT = mapIds(org.Rn.eg.db, 
+                                                   ENSEMBL_RAT, 
+                                                   "SYMBOL", "ENSEMBL"))
         }
         # Return the output
         x
 }
-
 #########################################################################################
 
 # Function to take lowercase strings and convert the first letter to uppercase
@@ -501,7 +502,7 @@ symbol_down <- de_df %>%
 desired <- c("KEGG_2019_Mouse",
              "GO_Biological_Process_2018",
              "GO_Molecular_Function_2018")
-
+desired <- c("KEGG_2019_Mouse")
 enriched_up <- enrichr(symbol_up, desired)
 enriched_down <- enrichr(symbol_down, desired)
 n<-1
@@ -524,7 +525,7 @@ enrichr_df$FDR_nlog <- -log(enrichr_df$Adjusted.P.value)
 enrichr_plot <- enrichr_df %>%
         filter(Total.N <= 500) %>%
         filter(Total.N >= 10) %>%
-        filter(Adjusted.P.value <= 0.05) %>%
+        filter(Adjusted.P.value <= 0.1) %>%
         arrange(desc(FDR_nlog)) %>%
         dplyr::slice(1:40) %>%
         group_by(Term, UPDOWN) %>%
@@ -599,7 +600,6 @@ summary(mod)
 # Perform a Chi-square analysis
 #######################
 # Create a proper data structure for chi squared
-
 de_circ <- logreg_df %>%
         filter(CIRC == 1 & DE == 1) %>%
         nrow()
@@ -639,8 +639,13 @@ round(c$expected)
 mosaic(~ CIRC + DE, data = mosaic_tbl,
        shade = TRUE, legend = TRUE)
 
-# Update the shared list of genes
-##############################################
+#' ## Update List of Circadian Genes (Combine CIRC genes from Kidney and from Kegg)
+
+#+ Update List of Circadian Genes (Combine CIRC genes from Kidney and from Kegg)
+################################################################################
+# Update List of Circadian Genes (Combine CIRC genes from Kidney and from Kegg) 
+################################################################################
+# Generate dataframe
 logreg_df$ENSEMBL_RAT <- row.names(logreg_df)
 de_kid_circ <- logreg_df %>%
         filter(CIRC == 1 & DE == 1) %>%
@@ -654,12 +659,104 @@ kegg_circ <- enrichr_df %>%
         tolower() %>% firstup() %>% as.data.frame()
 names(kegg_circ) <- 'SYMBOL_MOUSE'
 # Convert the mouse symbols to rat ensembl gene ids
-kegg_circ$ENSEMBL_MOUSE = mapIds(org.Mm.eg.db, 
+kegg_circ$ENSEMBL_MOUSE <-  mapIds(org.Mm.eg.db, 
                                  as.character(kegg_circ$SYMBOL_MOUSE), 
                                  "ENSEMBL", "SYMBOL")
 kegg_circ <- rat_mouse_ortho(kegg_circ, column = 'ENSEMBL_MOUSE', direction = 'mouse2rat')
-CIRC_GENES <- c(kegg_circ$ENSEMBL_RAT[kegg_circ$ENSEMBL_RAT %!in% de_kid_circ], de_kid_circ) %>% 
+CIRC_DE <- c(kegg_circ$ENSEMBL_RAT[kegg_circ$ENSEMBL_RAT %!in% de_kid_circ], de_kid_circ) %>% 
         unique()
+CIRC_DE <- data.frame('ENSEMBL_RAT' = CIRC_DE)
+CIRC_DE$SYMBOL_RAT <-  mapIds(org.Rn.eg.db, 
+                            as.character(CIRC_DE$ENSEMBL_RAT), 
+                            "SYMBOL","ENSEMBL")
+CIRC_DE <- rat_mouse_ortho(CIRC_DE, column = 'ENSEMBL_RAT', direction = 'rat2mouse')
+
+#' ## Visualize Circadian Genes Differentially Expressed Across Enriched Pathways
+
+#+ Visualize Circadian Genes Differentially Expressed Across Enriched Pathways
+################################################################################
+## Visualize Circadian Genes Differentially Expressed Across Enriched Pathways #
+################################################################################
+
+# Collect a list of CIRC genes that are also DE and enriched in pathways
+enrichr_df$Term.Key <- paste0(enrichr_df$Term,' ',enrichr_df$UPDOWN)
+enrichr_df_gene <- enrichr_df %>% 
+        select(Term, Genes) %>%
+        mutate(Gene=strsplit(Genes, ";")) %>% 
+        unnest(Gene) %>%
+        select(-Genes)
+enrichr_df_gene$SYMBOL_MOUSE <- firstup(tolower(as.character(enrichr_df_gene$Gene)))
+enrichr_df_gene$ENSEMBL_MOUSE <- mapIds(org.Mm.eg.db, 
+                                       as.character(enrichr_df_gene$SYMBOL_MOUSE), 
+                                       "ENSEMBL","SYMBOL")
+enrichr_df_gene <- rat_mouse_ortho(as.data.frame(enrichr_df_gene), 
+                                   column = 'ENSEMBL_MOUSE', 
+                                   direction = 'mouse2rat')
+
+# Grab enriched terms
+enriched_pathways <- enrichr_df %>%
+        filter(Adjusted.P.value <= 0.05) %>%
+        select(Term) %>% 
+        unlist() %>% as.character()
+plot_df <- enrichr_df_gene %>%
+        filter(SYMBOL_MOUSE %in% CIRC_DE$SYMBOL_MOUSE) %>%
+        filter(Term %in% enriched_pathways) %>%
+        select(Gene, Term, ENSEMBL_RAT)
+plot_df$Term <- gsub(" \\(GO:.+)", "", plot_df$Term)
+
+# Generate a matrix for heatmap
+plot_mat <- assay(rld)[plot_df$ENSEMBL_RAT,]
+preproc1 <- preProcess(plot_mat, method=c("center", "scale"))
+norm1 <- predict(preproc1, plot_mat)
+plot_mat <- t(norm1) %>% as.matrix()
+# Take the median values for each column
+cmeans_df <- data.frame('Mean' = colMeans(plot_mat),
+                        'ENSEMBL_RAT' = colnames(plot_mat))
+# Gene as column
+# Pathway as row
+# Cell as colMean
+plot_df <- left_join(plot_df, cmeans_df, by = 'ENSEMBL_RAT')
+df <- data.frame(matrix(, 
+                        nrow=length(unique(plot_df$Term)), 
+                        ncol=length(unique(plot_df$Gene))))
+colnames(df) <- unique(plot_df$Gene)
+row.names(df) <- unique(plot_df$Term)
+for(p in unique(plot_df$Term)){
+        # Collect genes in pathway
+        p_genes <- plot_df %>%
+                filter(Term == p) %>%
+                select(Gene) %>% 
+                unlist() %>% as.character() %>% unique()
+        for(g in unique(plot_df$Gene)){
+                if(g %in% p_genes){
+                      df[p,g] <- plot_df %>%
+                              filter(Gene == g) %>%
+                              select(Mean) %>%
+                              unlist() %>% unique() %>% as.numeric()
+                }
+        }
+}
+# Convert all na values to zero
+df[is.na(df)] <- 0
+plot_mat <- t(as.matrix(df))
+# Generate a heatmap of pathways and genes
+# Setup color paletter
+paletteLength <- 50
+myColor <- colorRampPalette(c("blue", "white", "red"))(paletteLength)
+myBreaks <- c(seq(min(plot_mat), 0, length.out=ceiling(paletteLength/2) + 1), 
+              seq(max(plot_mat)/paletteLength, max(plot_mat), length.out=floor(paletteLength/2)))
+pheatmap(plot_mat, 
+         fontsize = 12,
+         show_rownames=T,
+         show_colnames=T,
+         #color = rev(brewer.pal(n = 9, name ="RdBu")),
+         color = myColor,
+         cluster_cols = T,
+         cluster_rows = T,
+         legend=F,
+         annotation_legend = F,
+         breaks = myBreaks,
+         main = 'Heatmap')
 
 #' ## Visualize Circadian Genes Differentially Expressed
 
