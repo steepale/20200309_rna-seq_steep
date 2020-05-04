@@ -1,0 +1,37 @@
+INFO [2020-04-30 12:42:19] $x
+INFO [2020-04-30 12:42:19] list(C0 = C0_only, C7 = C7_only, COC7_joint = COC7_joint, CIRC = CIRC_DE$ENSEMBL_RAT)
+INFO [2020-04-30 12:42:19] 
+INFO [2020-04-30 12:42:19] $filename
+INFO [2020-04-30 12:42:19] paste0(WD, "/plots/20200426_rnaseq-kidney-C0C7-DE-venn_steep.tiff")
+INFO [2020-04-30 12:42:19] 
+INFO [2020-04-30 12:42:19] $height
+INFO [2020-04-30 12:42:19] [1] 900
+INFO [2020-04-30 12:42:19] 
+INFO [2020-04-30 12:42:19] $width
+INFO [2020-04-30 12:42:19] [1] 900
+INFO [2020-04-30 12:42:19] 
+INFO [2020-04-30 12:42:19] $resolution
+INFO [2020-04-30 12:42:19] [1] 300
+INFO [2020-04-30 12:42:19] 
+INFO [2020-04-30 12:42:19] $col
+INFO [2020-04-30 12:42:19] [1] "black"
+INFO [2020-04-30 12:42:19] 
+INFO [2020-04-30 12:42:19] $fill
+INFO [2020-04-30 12:42:19] c("dodgerblue", "goldenrod1", "darkorange1", "seagreen3")
+INFO [2020-04-30 12:42:19] 
+INFO [2020-04-30 12:42:19] $alpha
+INFO [2020-04-30 12:42:19] [1] 0.5
+INFO [2020-04-30 12:42:19] 
+INFO [2020-04-30 12:42:19] $cat.col
+INFO [2020-04-30 12:42:19] c("dodgerblue", "goldenrod1", "darkorange1", "seagreen3", "orchid3")
+INFO [2020-04-30 12:42:19] 
+INFO [2020-04-30 12:42:19] $cat.cex
+INFO [2020-04-30 12:42:19] [1] 0.8
+INFO [2020-04-30 12:42:19] 
+INFO [2020-04-30 12:42:19] $cat.fontface
+INFO [2020-04-30 12:42:19] [1] "bold"
+INFO [2020-04-30 12:42:19] 
+INFO [2020-04-30 12:42:19] $margin
+INFO [2020-04-30 12:42:19] [1] 0.05
+INFO [2020-04-30 12:42:19] 
+ERROR [2020-04-30 12:42:19] Unexpected parameter length for 'cat.col'

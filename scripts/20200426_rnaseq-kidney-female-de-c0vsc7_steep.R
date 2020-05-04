@@ -190,7 +190,46 @@ row.names(col_data) <- col_data$sample_key
 factor_cols <- c("labelid",
                  "vial_label",
                  "animal.registration.sex",
-                 "animal.key.exlt4")
+                 "animal.key.exlt4",
+                 "X2D_barcode",
+                 "BID",
+                 "Seq_flowcell_lane",
+                 "Seq_flowcell_run",
+                 "Seq_end_type",
+                 "Lib_UMI_cycle_num",
+                 "pid",
+                 "acute.test.staffid",
+                 "acute.test.siteid",
+                 "acute.test.versionnbr",
+                 "acute.test.contactshock",
+                 "animal.familiarization.staffid",
+                 "animal.familiarization.siteid",
+                 "animal.familiarization.versionnbr",
+                 "animal.familiarization.compliant",
+                 "animal.key.protocol",
+                 "animal.key.agegroup",
+                 "animal.key.batch",
+                 "animal.key.intervention",
+                 "animal.key.sitename",
+                 "animal.registration.staffid",
+                 "animal.registration.siteid",
+                 "animal.registration.versionnbr",
+                 "animal.registration.ratid",
+                 "animal.registration.batchnumber",
+                 "specimen.collection.bloodcomplete",
+                 "specimen.collection.bloodtechid",
+                 "specimen.collection.uterustype",
+                 "specimen.collection.uterustechid",
+                 "specimen.collection.deathtype",
+                 "specimen.processing.versionnbr",
+                 "specimen.processing.siteid",
+                 "bid",
+                 "specimen.processing.samplenumber",
+                 "specimen.processing.techid",
+                 "barcode",
+                 "shiptositeid",
+                 "receivedcas",
+                 "receivestatuscas")
 for(fc in factor_cols){
         col_data[[fc]] <- as.factor(col_data[[fc]])
 }
@@ -205,9 +244,20 @@ date_cols <- c("acute.test.d_visit",
                "animal.registration.d_arrive",
                "animal.registration.d_reverselight",
                "specimen.collection.d_visit",
-               "animal.registration.d_birth")
+               "animal.registration.d_birth",
+               "Seq_date")
 for(dc in date_cols){
         col_data[[dc]] <- ymd(col_data[[dc]])
+}
+
+
+
+
+# From Dates: 2/14/2019
+date_cols <- c("RNA_extr_date",
+               "Lib_prep_date")
+for(dc in date_cols){
+        col_data[[dc]] <- mdy(col_data[[dc]])
 }
 
 # To Times: 10:30:00
@@ -223,24 +273,35 @@ time_cols <- c("acute.test.t_complete",
                "specimen.processing.t_collection",
                "specimen.processing.t_edtaspin",
                "specimen.processing.t_freeze",
-               "acute.test.howlongshock")
+               "acute.test.howlongshock",
+               "acute.test.t_start")
 for(tc in time_cols){
         col_data[[tc]] <- col_data[[tc]] %>% as.character() %>% parse_time()
 }
 
+# Set a vector for Exercise/Control Levels and Colors
+ec_levels <- c("Exercise - IPE",
+               "Exercise - 0.5 hr",
+               "Exercise - 1 hr",
+               "Exercise - 4 hr",
+               "Exercise - 7 hr",
+               "Exercise - 24 hr",
+               "Exercise - 48 hr",
+               "Control - IPE",
+               "Control - 7 hr")
+ec_colors <- c("gold",
+               "darkgoldenrod1",
+               "orange",
+               "darkorange",
+               "darkorange2",
+               "darkorange3",
+               "darkorange4",
+               "steelblue1",
+               "steelblue4")
 # Releveling factors
 col_data$animal.key.anirandgroup <- as.character(col_data$animal.key.anirandgroup)
 col_data$animal.key.anirandgroup <- factor(col_data$animal.key.anirandgroup, 
-                                           levels = c("Control - IPE",
-                                                      "Control - 7 hr",
-                                                      "Exercise - IPE",
-                                                      "Exercise - 0.5 hr",
-                                                      "Exercise - 1 hr",
-                                                      "Exercise - 4 hr",
-                                                      "Exercise - 7 hr",
-                                                      "Exercise - 24 hr",
-                                                      "Exercise - 48 hr"))
-
+                                           levels = ec_levels)
 
 #' #### Retrieve Circadian Genes Associated with Tissue (Kidney)
 #' Data from Supplementary Table 2 from 1. Yan, J., Wang, H., Liu, Y. & Shao, C. Analysis of gene regulatory networks in the mammalian circadian rhythm. PLoS Comput. Biol. 4, (2008).
@@ -299,12 +360,11 @@ all(rownames(fkid_cols) == colnames(fkid_counts))
 
 # Create a design formula and load counts and supporting annotation into an S4 object (DESeq infrastructure)
 design = ~animal.registration.sex + controls_binary # Primary variable needs to be last.
-design = ~controls_binary # Primary variable needs to be last.
+#design = ~controls_binary # Primary variable needs to be last.
 title = paste0('Design: ',as.character(design))
 dds1 <- DESeqDataSetFromMatrix(countData = fkid_counts,
                                colData = fkid_cols,
                                design = design)
-
 # Reasoning from:
 #citation("PROPER")
 #dds
@@ -312,7 +372,7 @@ dds1 <- DESeqDataSetFromMatrix(countData = fkid_counts,
 #' Before Filtering
 # dds1
 zero_n <- dds1[(rowSums(counts(dds1))/ncol(dds1) < 1), ] %>% nrow() %>% as.character()
-reads_n <- 10
+reads_n <- 1
 keep <- rowSums(counts(dds1))/ncol(dds1) >= reads_n
 dds2 <- dds1[keep,]
 #' #### Summary of counts and annotation data in a DESeqDataSet after filtering out genes with low sequencing depth
@@ -415,23 +475,18 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registr
         xlab(paste0("PC1: ",percentVar[1],"% variance")) +
         ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
         #coord_fixed() +
-        ggtitle("PCA: Naive Model (~ 1)") +
+        ggtitle("PCA: Median Centered by Sex") +
         guides(color=guide_legend(title="animal.key.anirandgroup"))
-
 
 # Generate a DESeq2 Model
 dds <- DESeq(dds)
 
 # Generate a results table and sort by fdr
-res <- results(dds, alpha = 0.05,lfcThreshold=0)
+res <- results(dds, alpha = 0.05,lfcThreshold=0.5)
 res <- res[order(res$padj),]
 head(res)
 
-# Number of differentially expressed genes based on q value
-table(res$padj < 0.05)
-
 # Generate a summary of the results
-summary(res_old) # res_old has design for only primary variable of interest
 summary(res)
 
 #' ### Visualize Results: Control 0 hr vs Control 7 hr
@@ -616,6 +671,7 @@ x2_df <- data.frame("CIRC" = c(de_circ, no_de_circ),
                     "NON-CIRC" = c(de_no_circ, no_de_no_circ))
 row.names(x2_df) <- c('DE','NON-DE')
 
+
 # Create the proper data structure for visualization of chi square with mosaic plot
 mosaic_df <- data.frame(ENSEMBL_RAT)
 # Generate a column for circadian gene status
@@ -709,13 +765,18 @@ plot_mat <- assay(rld)[plot_df$ENSEMBL_RAT,]
 preproc1 <- preProcess(plot_mat, method=c("center", "scale"))
 norm1 <- predict(preproc1, plot_mat)
 plot_mat <- t(norm1) %>% as.matrix()
+
 # Take the median values for each column
-cmeans_df <- data.frame('Mean' = colMeans(plot_mat),
-                        'ENSEMBL_RAT' = colnames(plot_mat))
+lfc_df <- data.frame('L2FC' = res_df %>%
+                                filter(ENSEMBL_RAT %in% colnames(plot_mat)) %>%
+                                select(log2FoldChange) %>% unlist() %>% as.numeric(),
+                        'ENSEMBL_RAT' = res_df %>%
+                                filter(ENSEMBL_RAT %in% colnames(plot_mat)) %>%
+                                select(ENSEMBL_RAT) %>% unlist() %>% as.character())
 # Gene as column
 # Pathway as row
-# Cell as colMean
-plot_df <- left_join(plot_df, cmeans_df, by = 'ENSEMBL_RAT')
+# Cell as L2FC
+plot_df <- left_join(plot_df, lfc_df, by = 'ENSEMBL_RAT')
 df <- data.frame(matrix(, 
                         nrow=length(unique(plot_df$Term)), 
                         ncol=length(unique(plot_df$Gene))))
@@ -731,7 +792,7 @@ for(p in unique(plot_df$Term)){
                 if(g %in% p_genes){
                       df[p,g] <- plot_df %>%
                               filter(Gene == g) %>%
-                              select(Mean) %>%
+                              select(L2FC) %>%
                               unlist() %>% unique() %>% as.numeric()
                 }
         }
@@ -756,7 +817,7 @@ pheatmap(plot_mat,
          legend=F,
          annotation_legend = F,
          breaks = myBreaks,
-         main = 'Heatmap')
+         main = 'Differentially Expressed Circadian Rhythm Genes in Enriched Pathways')
 
 #' ## Visualize Circadian Genes Differentially Expressed
 
@@ -766,19 +827,602 @@ pheatmap(plot_mat,
 ################################################################################
 
 # Steps:
-#-Barplot of DE expression between C0 and C7
-#-Geom tile heatmap of circadian genes in other pathways
+
+#-Next to barplot show expression of identical gene in exercise groups
+
 #-Heatmap and k-means/SOM clustered circadian genes in control contrast and exercsie groups
 #- Same analysis but for downstream targets of CIRC genes
-#-Next to barplot show expression of identical gene in exercise groups
+
 #-Perform a ttest between peaks of both genes
 #-Venn diagram and supporting qqplot of DE genes between analyses
 #Examination of genes lost
 #Can it be corrected for?
 
+#-Barplot of DE expression between C0 and C7
+countp_list <- list()
+for(n in 1:length(CIRC_DE$ENSEMBL_RAT)){
+        # Collect count data
+        count_points <- plotCounts(dds, 
+                                   gene = CIRC_DE$ENSEMBL_RAT[n],
+                                   intgroup = c("controls_binary","animal.registration.sex"), 
+                                   returnData = TRUE)
+        # Plot counts
+        countp_list[[CIRC_DE$SYMBOL_RAT[n]]] <- ggplot(count_points, 
+               aes(x=controls_binary, y=log(count,2), col=animal.registration.sex)) +
+                geom_point(position=position_jitter(width=.1,height=0)) +
+                #scale_y_log10() +
+                expand_limits(y=0) +
+                ggtitle(CIRC_DE$SYMBOL_RAT[n]) +
+                xlab("") + 
+                ylab("Log2 Counts") +
+                labs(col = "")
+}
+
+# Arrange genes of interest
+coi_up <- c("Npas2","Arntl","Rorc","Cry1","Clock","Prkab1")
+coi_down <- c("Nr1d1","Prkab2","Bhlhe41","Per1","Per2")
+coi_symbol <- c(coi_up,coi_down)
+coi_ensembl <- mapIds(org.Rn.eg.db, coi_symbol, "ENSEMBL","SYMBOL")
+# SHow the plots
+for(coi in coi_symbol){
+        plot(countp_list[[coi]])
+}
+res_df$SYMBOL_RAT <- mapIds(org.Rn.eg.db, res_df$ENSEMBL_RAT,"SYMBOL","ENSEMBL")
+# Display the results in a table
+res_df %>%
+        filter(ENSEMBL_RAT %in% coi_ensembl) %>%
+        select(SYMBOL_RAT,log2FoldChange,padj) %>%
+        arrange(padj)
+
+#' ## Variance (Sex) Adjusted PCA 
+
+#+ Variance (Sex) Adjusted PCA 
+################################################################################
+##################### Variance (Sex) Adjusted PCA   ############################
+################################################################################
+
+fkid <- col_data %>%
+        filter(Tissue == 'Kidney') %>%
+        filter(sample_key != '90109015902_SN1') %>%
+        filter(!is.na(animal.registration.sex)) %>%
+        #filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
+        select(sample_key) %>% unlist() %>% as.character()
+fkid_counts <- count_data[,fkid] %>% as.matrix()
+
+# SUbset kidney metadata
+fkid_cols <- col_data %>%
+        filter(Tissue == 'Kidney') %>%
+        filter(sample_key != '90109015902_SN1') %>%
+        #filter(animal.registration.sex == 'Female') %>%
+        #filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
+        filter(!is.na(animal.registration.sex))
+
+fkid_cols$animal.key.anirandgroup <- factor(fkid_cols$animal.key.anirandgroup,
+                                            levels = ec_levels)
+row.names(fkid_cols) <- fkid_cols$sample_key
+#' #### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
+all(rownames(fkid_cols) == colnames(fkid_counts))
+
+# Create a design formula and load counts and supporting annotation into an S4 object (DESeq infrastructure)
+#design = ~animal.registration.sex + controls_binary # Primary variable needs to be last.
+design = ~1 # Primary variable needs to be last.
+title = paste0('Design: ',as.character(design))
+dds1 <- DESeqDataSetFromMatrix(countData = fkid_counts,
+                               colData = fkid_cols,
+                               design = design)
+# Reasoning from:
+#citation("PROPER")
+#dds
+#' #### We remove genes with an average sequencing depth of 10 or less
+#' Before Filtering
+# dds1
+zero_n <- dds1[(rowSums(counts(dds1))/ncol(dds1) < 1), ] %>% nrow() %>% as.character()
+reads_n <- 1
+keep <- rowSums(counts(dds1))/ncol(dds1) >= reads_n
+dds2 <- dds1[keep,]
+#' #### Summary of counts and annotation data in a DESeqDataSet after filtering out genes with low sequencing depth
+#' TODO: Critic from Jun: Here we are removing features that have a low average expression. This may be removing important features that might have zero counts in some samples and higher counts in specific groups. Consider developing an algorithm that will account for features with expression in n or more samples.
+dds2
+filter_n <- nrow(dds1) - nrow(dds2) - as.numeric(zero_n)
+filter_p <- filter_n/(nrow(dds1) - as.numeric(zero_n))
+total_n <- nrow(dds1) - nrow(dds2)
+
+#' ##### Note: Number of genes with average counts between zero and 1 is `r zero_n` but removing reads with less than or equal to `r reads_n` removes an additional `r filter_n` features or removes `r filter_p*100`% of the non-zero reads (total of `r total_n` features removed).
+dds <- dds2
+
+# estimateSizeFactors gives us a robust estimate in sequencing depth
+dds <- estimateSizeFactors(dds)
+
+rld <- DESeq2::vst(dds)
+#' Regularized Log (rlog) Transform
+for(n in 1){
+        start_time <- Sys.time()
+        #rld <- DESeq2::rlog(dds)
+        end_time <- Sys.time()
+        print(end_time - start_time)
+}
+
+# This command is redundent, but included for safety
+rs <- rowSums(counts(dds))
+
+countp_list_ex <- list()
+for(n in 1:length(CIRC_DE$ENSEMBL_RAT)){
+        # Collect count data
+        count_points <- plotCounts(dds, 
+                                   gene = CIRC_DE$ENSEMBL_RAT[n],
+                                   #gene = "ENSRNOG00000014448",
+                                   intgroup = c("animal.key.anirandgroup",
+                                                "animal.registration.sex"), 
+                                   returnData = TRUE)
+        count_points$animal.key.anirandgroup <- factor(count_points$animal.key.anirandgroup,
+                                                       levels = ec_levels)
+        # Plot counts
+        countp_list_ex[[CIRC_DE$SYMBOL_RAT[n]]] <- ggplot(count_points,
+                                                       aes(x = as.integer(animal.key.anirandgroup), 
+                                                           y = log(count,2), 
+                                                           color = animal.registration.sex),
+                                                       group = "1") +
+                geom_point(alpha = 0.05) +
+                #geom_line(aes(group = "1")) +
+                stat_smooth(alpha = 0.02, se = F) +
+                ylab("Log2 Counts") +
+                xlab("Exercise/Control Groups") +
+                scale_x_continuous(breaks = seq(1,9,by=1),
+                                   labels=ec_levels) +
+                theme(legend.position = "none") +
+                ggtitle(CIRC_DE$SYMBOL_RAT[n]) +
+                expand_limits(y=0)
+}
+
+# Arrange genes of interest
+coi_up <- c("Npas2","Arntl","Rorc","Cry1","Clock","Prkab1")
+coi_down <- c("Nr1d1","Prkab2","Bhlhe41","Per1","Per2")
+coi_symbol <- c(coi_up,coi_down)
+coi_ensembl <- mapIds(org.Rn.eg.db, coi_symbol, "ENSEMBL","SYMBOL")
+# SHow the plots
+mypar()
+for(coi in coi_symbol){
+        #plot(countp_list[[coi]])
+        plot(countp_list_ex[[coi]])
+}
+
+#' #### We see just how well duplicate samples correlate regardless of sequencing batch
+mypar()
+pcaData <- DESeq2::plotPCA(rld, 
+                           intgroup=c("animal.key.anirandgroup",
+                                      "animal.registration.sex",
+                                      "sample_key"), 
+                           returnData=TRUE, ntop = 500)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registration.sex)) +
+        geom_point(size=3) +
+        #geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        #coord_fixed() +
+        ggtitle("PCA: Naive Model (~ 1)") +
+        guides(color=guide_legend(title="animal.key.anirandgroup"))
+
+#' ### Adjust for Between Sex Variance
+
+#+ Adjust for Between Sex Variance
+################################################################################
+########### Adjust for Between Sex Variance  ###################################
+################################################################################
+
+# "To adjust for batch effects, we median- centered the expression levels of each transcript within each batch and confirmed, using the correlation matrices, that the batch effects were removed after the adjustment." 
+#~ Li, J. Z. et al. Circadian patterns of gene expression in the human brain and disruption in major depressive disorder. Proc. Natl. Acad. Sci. U. S. A. 110, 9950–9955 (2013).
+
+# Here we have 2 Groups: Control - IPE and Control 7 hr; we'll median center these groups to combine the sexes.
+M_samples <- col_data %>%
+        filter(Tissue == 'Kidney') %>%
+        filter(!is.na(animal.registration.sex)) %>%
+        filter(animal.registration.sex == 'Male') %>%
+        filter(sample_key != '90109015902_SN1') %>%
+        #filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
+        select(sample_key) %>% unlist() %>% as.character()
+F_samples <- col_data %>%
+        filter(Tissue == 'Kidney') %>%
+        filter(!is.na(animal.registration.sex)) %>%
+        filter(animal.registration.sex == 'Female') %>%
+        #filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
+        select(sample_key) %>% unlist() %>% as.character()
+# Select the counts
+M_counts <- assay(rld[, M_samples])
+F_counts <- assay(rld[, F_samples])
+
+# Median Center data
+# Collects median of each row, then subtracts by row medians
+M_medians <- apply(M_counts,1,median)
+M_centered <- M_counts - M_medians
+F_medians <- apply(F_counts,1,median)
+F_centered <- F_counts - F_medians
+counts_centered <- cbind(M_centered, F_centered)
+counts_centered <- counts_centered[, colnames(assay(rld))]
+rld_medcen <- rld
+assay(rld_medcen) <- counts_centered
+
+#' #### We see just how well duplicate samples correlate regardless of sequencing batch
+mypar()
+pcaData <- DESeq2::plotPCA(rld_medcen, 
+                           intgroup=c("animal.key.anirandgroup",
+                                      "animal.registration.sex",
+                                      "sample_key"), 
+                           returnData=TRUE, ntop = 500)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, 
+                    color=animal.key.anirandgroup,
+                    shape=animal.registration.sex)) +
+        geom_point(size=3) +
+        #geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        #coord_fixed() +
+        ggtitle("PCA: Adjusted for Sex-Specific Variance") +
+        guides(color=guide_legend(title="animal.key.anirandgroup")) +
+        scale_color_manual(values=ec_colors)
+
+# Visualize by TOD bins
+mypar()
+pcaData <- DESeq2::plotPCA(rld_medcen, 
+                           intgroup=c("animal.key.anirandgroup",
+                                      "animal.registration.sex",
+                                      "sample_key",
+                                      "specimen.collection.t_death_hour"), 
+                           returnData=TRUE, ntop = 500)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, 
+                    color=specimen.collection.t_death_hour)) +
+        geom_point(size=3) +
+        #geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        #coord_fixed() +
+        ggtitle("PCA: Adjusted for Sex-Specific Variance") +
+        guides(color=guide_legend(title="specimen.collection.t_death_hour"))
+
+# Subset the PCA set to contain only circadian genes
+rld_circ <- rld_medcen[row.names(rld_medcen) %in% circ_kid$ENSEMBL_RAT,]
+mypar()
+pcaData <- DESeq2::plotPCA(rld_circ, 
+                           intgroup=c("animal.key.anirandgroup",
+                                      "animal.registration.sex",
+                                      "sample_key"), 
+                           returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, 
+                    color=animal.key.anirandgroup,
+                    shape=animal.registration.sex)) +
+        geom_point(size=3) +
+        #geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        #coord_fixed() +
+        ggtitle("PCA: Adjusted for Sex-Specific Variance") +
+        guides(color=guide_legend(title="animal.key.anirandgroup")) +
+        scale_color_manual(values=ec_colors)
+
+# Visualize by TOD bins
+mypar()
+pcaData <- DESeq2::plotPCA(rld_circ, 
+                           intgroup=c("animal.key.anirandgroup",
+                                      "animal.registration.sex",
+                                      "sample_key",
+                                      "specimen.collection.t_death_hour"), 
+                           returnData=TRUE, ntop = 500)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, 
+                    color=specimen.collection.t_death_hour)) +
+        geom_point(size=3) +
+        #geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
+        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+        #coord_fixed() +
+        ggtitle("PCA: Adjusted for Sex-Specific Variance") +
+        guides(color=guide_legend(title="specimen.collection.t_death_hour"))
+
+
+#' ## Compare DE Experiments: 
+#' C0 vs Acute Response
+#' C7 vs Acute Response
+
+#+ Compare DE Experiments
+################################################################################
+##################### Compare DE Experiments  ##################################
+################################################################################
+
+#' C0 vs Acute Response
+##################################
+
+#' ##### Female Kidney Samples (39 unique) from 1 batch were filtered prior to normalization
+#' # TODO: Create a seperate script that explains why sample 90109015902_SN1 is considered in outlier
+fkid <- col_data %>%
+        filter(Tissue == 'Kidney') %>%
+        #filter(sample_key != '90109015902_SN1') %>%
+        filter(!is.na(animal.registration.sex)) %>%
+        filter(animal.key.anirandgroup %in% 
+                       c('Control - IPE',
+                         'Exercise - IPE',
+                         'Exercise - 0.5 hr',
+                         'Exercise - 1 hr')) %>%
+        select(sample_key) %>% unlist() %>% as.character()
+fkid_counts <- count_data[,fkid] %>% as.matrix()
+
+# SUbset kidney metadata
+fkid_cols <- col_data %>%
+        filter(Tissue == 'Kidney') %>%
+        #filter(sample_key != '90109015902_SN1') %>%
+        #filter(animal.registration.sex == 'Female') %>%
+        filter(animal.key.anirandgroup %in% 
+                       c('Control - IPE',
+                         'Exercise - IPE',
+                         'Exercise - 0.5 hr',
+                         'Exercise - 1 hr')) %>%
+        filter(!is.na(animal.registration.sex))
+
+row.names(fkid_cols) <- fkid_cols$sample_key
+#' #### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
+all(rownames(fkid_cols) == colnames(fkid_counts))
+
+# Generate an annotation specific to this analysis
+fkid_cols <- fkid_cols %>%
+        mutate(C_compare = case_when(animal.key.anirandgroup == 'Control - IPE' ~ 'Control',
+                                           animal.key.anirandgroup %!in% c('Control - IPE') ~ 'Exercise'))
+# Make sure the "control" or "untreated" level is first
+fkid_cols$C_compare <- factor(fkid_cols$C_compare, 
+                                    levels = c("Control","Exercise"))
+row.names(fkid_cols) <- fkid_cols$sample_key
+
+#' #### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
+all(rownames(fkid_cols) == colnames(fkid_counts))
+
+# Create a design formula and load counts and supporting annotation into an S4 object (DESeq infrastructure)
+design = ~animal.registration.sex + C_compare # Primary variable needs to be last.
+#design = ~1 # Primary variable needs to be last.
+title = paste0('Design: ',as.character(design))
+dds1 <- DESeqDataSetFromMatrix(countData = fkid_counts,
+                               colData = fkid_cols,
+                               design = design)
+
+# Reasoning from:
+#citation("PROPER")
+#dds
+#' #### We remove genes with an average sequencing depth of 10 or less
+#' Before Filtering
+# dds1
+zero_n <- dds1[(rowSums(counts(dds1))/ncol(dds1) < 1), ] %>% nrow() %>% as.character()
+reads_n <- 1
+keep <- rowSums(counts(dds1))/ncol(dds1) >= reads_n
+dds2 <- dds1[keep,]
+#' #### Summary of counts and annotation data in a DESeqDataSet after filtering out genes with low sequencing depth
+#' TODO: Critic from Jun: Here we are removing features that have a low average expression. This may be removing important features that might have zero counts in some samples and higher counts in specific groups. Consider developing an algorithm that will account for features with expression in n or more samples.
+dds2
+filter_n <- nrow(dds1) - nrow(dds2) - as.numeric(zero_n)
+filter_p <- filter_n/(nrow(dds1) - as.numeric(zero_n))
+total_n <- nrow(dds1) - nrow(dds2)
+
+#' ##### Note: Number of genes with average counts between zero and 1 is `r zero_n` but removing reads with less than or equal to `r reads_n` removes an additional `r filter_n` features or removes `r filter_p*100`% of the non-zero reads (total of `r total_n` features removed).
+dds <- dds2
+#' To see the reads per million for each sample
+sort(colSums(assay(dds)))/1e6
+
+# estimateSizeFactors gives us a robust estimate in sequencing depth
+dds <- estimateSizeFactors(dds)
+#' Size facotrs are generally around 1 (scaled) and calculated using the median and are robust to genes with large read counts
+summary(sizeFactors(dds))
+
+rld <- DESeq2::vst(dds)
+#' Regularized Log (rlog) Transform
+for(n in 1){
+        start_time <- Sys.time()
+        #rld <- DESeq2::rlog(dds)
+        end_time <- Sys.time()
+        print(end_time - start_time)
+}
+
+# This command is redundent, but included for safety
+rs <- rowSums(counts(dds))
+
+# Generate a DESeq2 Model
+dds <- DESeq(dds)
+
+# Generate a results table and sort by fdr
+res_C0 <- results(dds, alpha = 0.05,lfcThreshold=0.5)
+res_C0 <- res_C0[order(res_C0$padj),]
+
+# Generate a summary of the results
+summary(res_C0)
+
+#' C7 vs Acute Response
+###################################
+
+#' ##### Female Kidney Samples (39 unique) from 1 batch were filtered prior to normalization
+#' # TODO: Create a seperate script that explains why sample 90109015902_SN1 is considered in outlier
+fkid <- col_data %>%
+        filter(Tissue == 'Kidney') %>%
+        #filter(sample_key != '90109015902_SN1') %>%
+        filter(!is.na(animal.registration.sex)) %>%
+        filter(animal.key.anirandgroup %in% 
+                       c('Control - 7 hr',
+                         'Exercise - IPE',
+                         'Exercise - 0.5 hr',
+                         'Exercise - 1 hr')) %>%
+        select(sample_key) %>% unlist() %>% as.character()
+fkid_counts <- count_data[,fkid] %>% as.matrix()
+
+# SUbset kidney metadata
+fkid_cols <- col_data %>%
+        filter(Tissue == 'Kidney') %>%
+        #filter(sample_key != '90109015902_SN1') %>%
+        #filter(animal.registration.sex == 'Female') %>%
+        filter(animal.key.anirandgroup %in% 
+                       c('Control - 7 hr',
+                         'Exercise - IPE',
+                         'Exercise - 0.5 hr',
+                         'Exercise - 1 hr')) %>%
+        filter(!is.na(animal.registration.sex))
+
+row.names(fkid_cols) <- fkid_cols$sample_key
+#' #### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
+all(rownames(fkid_cols) == colnames(fkid_counts))
+
+# Generate an annotation specific to this analysis
+fkid_cols <- fkid_cols %>%
+        mutate(C_compare = case_when(
+                animal.key.anirandgroup == 'Control - 7 hr' ~ 'Control',
+                animal.key.anirandgroup %!in% c('Control - 7 hr') ~ 'Exercise'))
+# Make sure the "control" or "untreated" level is first
+fkid_cols$C_compare <- factor(fkid_cols$C_compare, 
+                              levels = c("Control","Exercise"))
+row.names(fkid_cols) <- fkid_cols$sample_key
+
+#' #### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
+all(rownames(fkid_cols) == colnames(fkid_counts))
+
+# Create a design formula and load counts and supporting annotation into an S4 object (DESeq infrastructure)
+design = ~animal.registration.sex + C_compare # Primary variable needs to be last.
+#design = ~1 # Primary variable needs to be last.
+title = paste0('Design: ',as.character(design))
+dds1 <- DESeqDataSetFromMatrix(countData = fkid_counts,
+                               colData = fkid_cols,
+                               design = design)
+
+# Reasoning from:
+#citation("PROPER")
+#dds
+#' #### We remove genes with an average sequencing depth of 10 or less
+#' Before Filtering
+# dds1
+zero_n <- dds1[(rowSums(counts(dds1))/ncol(dds1) < 1), ] %>% nrow() %>% as.character()
+reads_n <- 1
+keep <- rowSums(counts(dds1))/ncol(dds1) >= reads_n
+dds2 <- dds1[keep,]
+#' #### Summary of counts and annotation data in a DESeqDataSet after filtering out genes with low sequencing depth
+#' TODO: Critic from Jun: Here we are removing features that have a low average expression. This may be removing important features that might have zero counts in some samples and higher counts in specific groups. Consider developing an algorithm that will account for features with expression in n or more samples.
+dds2
+filter_n <- nrow(dds1) - nrow(dds2) - as.numeric(zero_n)
+filter_p <- filter_n/(nrow(dds1) - as.numeric(zero_n))
+total_n <- nrow(dds1) - nrow(dds2)
+
+#' ##### Note: Number of genes with average counts between zero and 1 is `r zero_n` but removing reads with less than or equal to `r reads_n` removes an additional `r filter_n` features or removes `r filter_p*100`% of the non-zero reads (total of `r total_n` features removed).
+dds <- dds2
+#' To see the reads per million for each sample
+sort(colSums(assay(dds)))/1e6
+
+# estimateSizeFactors gives us a robust estimate in sequencing depth
+dds <- estimateSizeFactors(dds)
+#' Size facotrs are generally around 1 (scaled) and calculated using the median and are robust to genes with large read counts
+summary(sizeFactors(dds))
+
+rld <- DESeq2::vst(dds)
+#' Regularized Log (rlog) Transform
+for(n in 1){
+        start_time <- Sys.time()
+        #rld <- DESeq2::rlog(dds)
+        end_time <- Sys.time()
+        print(end_time - start_time)
+}
+
+# This command is redundent, but included for safety
+rs <- rowSums(counts(dds))
+
+# Generate a DESeq2 Model
+dds <- DESeq(dds)
+
+# Generate a results table and sort by fdr
+res_C7 <- results(dds, alpha = 0.05,lfcThreshold=0.5)
+res_C7 <- res_C7[order(res_C7$padj),]
+
+# Generate a summary of the results
+summary(res_C7)
+
+#' Compare the Experiments
+###################################
+# Generate a venn diagram
+# Generate a qqplot of an MA plot
+
+# Grab the differentially expressed genes
+res0_df <- as.data.frame(res_C0)
+res7_df <- as.data.frame(res_C7)
+res0_df$ENSEMBL_RAT <- row.names(res0_df)
+res7_df$ENSEMBL_RAT <- row.names(res7_df)
+de0_df <- res0_df %>%
+        filter(padj <= 0.05)
+de7_df <- res7_df %>%
+        filter(padj <= 0.05)
+de0_df$SYMBOL_RAT <- mapIds(org.Rn.eg.db, de0_df$ENSEMBL_RAT, "SYMBOL", "ENSEMBL")
+de7_df$SYMBOL_RAT <- mapIds(org.Rn.eg.db, de7_df$ENSEMBL_RAT, "SYMBOL", "ENSEMBL")
+
+# Generate the Venn DF
+C0_only <- de0_df$ENSEMBL_RAT[de0_df$ENSEMBL_RAT %!in% de7_df$ENSEMBL_RAT]
+COC7_joint <- de0_df$ENSEMBL_RAT[de0_df$ENSEMBL_RAT %in% de7_df$ENSEMBL_RAT]
+C7_only <- de7_df$ENSEMBL_RAT[de7_df$ENSEMBL_RAT %!in% de0_df$ENSEMBL_RAT]
+CIRC_DE$ENSEMBL_RAT
 
 
 
 
+
+
+
+
+library(VennDiagram)
+
+# Venn DIagram
+venn.plot <- venn.diagram(
+        x = list(
+                C0 = de0_df$ENSEMBL_RAT,
+                C7 = de7_df$ENSEMBL_RAT),
+        filename = paste0(WD,"/plots/20200426_rnaseq-kidney-C0C7-DE-venn_steep.tiff"),
+        height = 900,
+        width = 900,
+        resolution = 300,
+        col = "black",
+        fill = c("dodgerblue", "goldenrod1"),
+        alpha = 0.50,
+        #cex = c(1.5, 1.5, 1.5, 1.5, 1.5, 1, 0.8, 1, 0.8, 1, 0.8, 1, 0.8,
+        #        1, 0.8, 1, 0.55, 1, 0.55, 1, 0.55, 1, 0.55, 1, 0.55, 1, 1, 1, 1, 1, 1.5),
+        #cex = c(rep(0.8, 4), rep(0.4,120)),
+        #cat.col = c("dodgerblue", "goldenrod1", "darkorange1", "seagreen3", "orchid3"),
+        cat.cex = 0.8,
+        cat.fontface = "bold",
+        margin = 0.05
+)
+
+# Venn DIagram (now with CIRC Genes)
+venn.plot <- venn.diagram(
+        x = list(
+                C0 = de0_df$ENSEMBL_RAT,
+                C7 = de7_df$ENSEMBL_RAT,
+                CIRC = circ_genes),
+        filename = paste0(WD,"/plots/20200426_rnaseq-kidney-C0C7-DE-CIRC-venn_steep.tiff"),
+        height = 900,
+        width = 900,
+        resolution = 300,
+        col = "black",
+        fill = c("dodgerblue", "goldenrod1", "seagreen3"),
+        alpha = 0.50,
+        #cex = c(1.5, 1.5, 1.5, 1.5, 1.5, 1, 0.8, 1, 0.8, 1, 0.8, 1, 0.8,
+        #        1, 0.8, 1, 0.55, 1, 0.55, 1, 0.55, 1, 0.55, 1, 0.55, 1, 1, 1, 1, 1, 1.5),
+        #cex = c(rep(0.8, 4), rep(0.4,120)),
+        #cat.col = c("dodgerblue", "goldenrod1", "darkorange1", "seagreen3", "orchid3"),
+        cat.cex = 0.8,
+        cat.fontface = "bold",
+        margin = 0.05
+)
+
+
+CIRC_DE[CIRC_DE$ENSEMBL_RAT %in% COC7_joint,]
+CIRC_DE[CIRC_DE$ENSEMBL_RAT %in% C7_only,]
+
+# Arrange genes of interest
+coi_up <- c("Npas2","Arntl","Rorc","Cry1","Clock","Prkab1")
+coi_down <- c("Nr1d1","Prkab2","Bhlhe41","Per1","Per2")
+coi_symbol <- c(coi_up,coi_down)
+coi_ensembl <- mapIds(org.Rn.eg.db, coi_symbol, "ENSEMBL","SYMBOL")
+# SHow the plots
+mypar()
+plot(countp_list[[coi]])
+plot(countp_list_ex[["Hspa1l"]])
 
 
