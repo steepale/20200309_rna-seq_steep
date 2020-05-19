@@ -1,5 +1,5 @@
 #'---
-#' title: "PASS1A Rat Kidney: -- Modeling of RNASeq Data Expression"
+#' title: "PASS1A Rat Tissue: -- Modeling of RNASeq Data Expression"
 #' author: "Alec Steep & Jiayu Zhang (Code copied and adapted from Jun Z. Li)" 
 #' date: "20200505"
 #' output:
@@ -38,11 +38,11 @@ WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
 
 # Load the dependencies
 #source("https://bioconductor.org/biocLite.R")
-#BiocManager::install("enrichR")
+#BiocManager::install("gapminder")
 #install.packages("tidyverse")
 
 # Load dependencies
-pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som", "vsn","org.Mm.eg.db","VennDiagram","EBImage","reshape2","xtable","kohonen","som","caret","enrichR","gplots","tiff")
+pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som", "vsn","org.Mm.eg.db","VennDiagram","EBImage","reshape2","xtable","kohonen","som","caret","enrichR","gplots","tiff","splines")
 lapply(pacs...man, FUN = function(X) {
         do.call("library", list(X)) })
 
@@ -52,6 +52,8 @@ lapply(pacs...man, FUN = function(X) {
 
 # Set select
 select <- dplyr::select
+counts <- DESeq2::counts
+map <- purrr::map
 
 # Make the 'not in' operator
 ################################################################################
@@ -308,6 +310,23 @@ p.test.4 <- function(data,TPE,iter,every=10) {
 }
 ################################################################################
 
+#' ## Declare Variables
+
+#+ Declare Variables
+################################################################################
+#####     Declare Variables     ################################################
+################################################################################
+# Declare Tissue
+TISSUE <- "Kidney"
+TIS <- "KID"
+# Declare Outliers
+OUTLIERS <- c('90042016803_SF1')
+
+#### Tissue:
+print(TISSUE)
+#### Outliers:
+print(OUTLIERS)
+
 #' ## Load & Clean Data
 #' ##### Data files to load:
 #' * Count Matrix and Metadata Table from:
@@ -332,14 +351,14 @@ in_file <- paste0(WD,'/data/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt
 col_data <- read.table(in_file, header = TRUE, check.names = FALSE, sep = '\t')
 row.names(col_data) <- col_data$sample_key
 
-#' #### Retrieve Circadian Genes Associated with Tissue (Kidney)
+#' #### Retrieve Circadian Genes Associated with Tissue (Liver)
 #' Data from Supplementary Table 2 from 1. Yan, J., Wang, H., Liu, Y. & Shao, C. Analysis of gene regulatory networks in the mammalian circadian rhythm. PLoS Comput. Biol. 4, (2008).
 #' Downloaded 20200326 by Alec Steep
-#' Data previosuly saved in script 20200413_rnaseq-kidney-female-temporal-clusters_steep.R
+#' Data previosuly saved in script:
 
-# Circadian Genes (Kidney)
-in_file <- paste0(WD,'/data/20200409_rnaseq-circadian-kidney-mouse-rat-ortho_steep-yan.txt')
-circ_kid <- read.table(file=in_file, sep = '\t', header = TRUE)
+# Circadian Genes (Liver)
+in_file <- paste0(WD,'/data/20200503_rnaseq-circadian-',TIS,'-mouse-rat-ortho_steep-yan.txt')
+circ_df <- read.table(file=in_file, sep = '\t', header = TRUE)
 
 # Adjust column objects
 ########################
@@ -464,19 +483,31 @@ col_data$animal.key.anirandgroup <- factor(col_data$animal.key.anirandgroup,
 #####     Collect Samples of Interest and Normalize      #######################
 ################################################################################
 
-# Filter Kidney Samples (meta)
+# Filter Liver Samples (meta)
 tod_cols <- col_data %>%
-        filter(Tissue == 'Kidney') %>%
+        filter(Tissue == TISSUE) %>%
         #filter(animal.registration.sex == 'Female') %>%
-        filter(sample_key != '90109015902_SN1') %>%
+        filter(sample_key != OUTLIERS) %>%
         filter(!is.na(animal.registration.sex)) %>%
-        filter(animal.key.anirandgroup %!in% c('Control - IPE', 'Control - 7 hr'))
+        filter(animal.key.anirandgroup %!in% c('Control - 7 hr'))
+
+# Time post exercise
+tod_cols <- tod_cols %>%
+        mutate(specimen.collection.t_exercise_hour = case_when(
+                animal.key.anirandgroup == 'Control - IPE' ~ 0,
+                animal.key.anirandgroup == 'Exercise - IPE' ~ 0,
+                animal.key.anirandgroup == 'Exercise - 0.5 hr' ~ 0.5,
+                animal.key.anirandgroup == 'Exercise - 1 hr' ~ 1,
+                animal.key.anirandgroup == 'Exercise - 4 hr' ~ 4,
+                animal.key.anirandgroup == 'Exercise - 7 hr' ~ 7,
+                animal.key.anirandgroup == 'Exercise - 24 hr' ~ 24,
+                animal.key.anirandgroup == 'Exercise - 48 hr' ~ -1))
 rownames(tod_cols) <- tod_cols$sample_key
 
 # Collect samples without NA values in TOD
 nona_sams <- tod_cols %>%
         filter(!is.na(specimen.collection.t_death_hour)) %>%
-        filter(sample_key != '90109015902_SN1') %>%
+        filter(sample_key != OUTLIERS) %>%
         filter(!is.na(animal.registration.sex)) %>%
         select(sample_key) %>% unlist() %>% as.character()
 # Collect tissue specific counts
@@ -497,7 +528,8 @@ dds1 <- DESeqDataSetFromMatrix(countData = tod_counts,
 #' #### We remove genes with an average sequencing depth of 10 or less
 #' Before Filtering
 # dds1
-zero_n <- dds1[(rowSums(counts(dds1))/ncol(dds1) < 1), ] %>% nrow() %>% as.character()
+zero_n <- dds1[(rowSums(counts(dds1))/ncol(dds1) < 1), ] %>% 
+        nrow() %>% as.character()
 reads_n <- 1
 keep <- rowSums(counts(dds1))/ncol(dds1) >= reads_n
 dds2 <- dds1[keep,]
@@ -518,11 +550,11 @@ dds <- estimateSizeFactors(dds)
 #' Size facotrs are generally around 1 (scaled) and calculated using the median and are robust to genes with large read counts
 summary(sizeFactors(dds))
 
-#rld <- DESeq2::vst(dds)
+rld <- DESeq2::vst(dds)
 #' Regularized Log (rlog) Transform
 for(n in 1){
         start_time <- Sys.time()
-        rld <- DESeq2::rlog(dds)
+        #rld <- DESeq2::rlog(dds)
         end_time <- Sys.time()
         print(end_time - start_time)
 }
@@ -560,17 +592,18 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registr
 # Here we have 2 Groups: Control - IPE and Control 7 hr; we'll median center these groups to combine the sexes.
 
 M_samples <- col_data %>%
-        filter(Tissue == 'Kidney') %>%
+        filter(Tissue == TISSUE) %>%
         filter(!is.na(animal.registration.sex)) %>%
         filter(animal.registration.sex == 'Male') %>%
-        filter(sample_key != '90109015902_SN1') %>%
-        filter(animal.key.anirandgroup %!in% c('Control - IPE', 'Control - 7 hr')) %>%
+        filter(sample_key != OUTLIERS) %>%
+        filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
         select(sample_key) %>% unlist() %>% as.character()
 F_samples <- col_data %>%
-        filter(Tissue == 'Kidney') %>%
+        filter(Tissue == TISSUE) %>%
         filter(!is.na(animal.registration.sex)) %>%
+        filter(sample_key != OUTLIERS) %>%
         filter(animal.registration.sex == 'Female') %>%
-        filter(animal.key.anirandgroup %!in% c('Control - IPE', 'Control - 7 hr')) %>%
+        filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
         select(sample_key) %>% unlist() %>% as.character()
 # Select the counts
 M_counts <- assay(rld[, M_samples])
@@ -606,6 +639,275 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registr
 
 # Select the normailzed counts
 tod_counts <- assay(rld) 
+t_counts <- setNames(melt(tod_counts), 
+                     c('ENSEMBL_RAT', 'sample_key', 'count'))
+
+# Join the dataframes and nest
+by_gene_df <- tod_cols %>%
+        left_join(t_counts, by = "sample_key") %>%
+        group_by(ENSEMBL_RAT) %>%
+        arrange(sample_key) %>%
+        nest()
+
+# To examine metadata
+by_gene_df$data[[1]]
+
+# Add Circadian status
+by_gene_df <- by_gene_df %>%
+        mutate(CIRC = as.factor(
+                ifelse(ENSEMBL_RAT %in% circ_df$ENSEMBL_RAT, 
+                       'CIRC','NON-CIRC')))
+
+# Cleanup
+rm(count_data, col_data, counts_centered, dds,dds1,dds2,F_centered,F_counts,
+   M_centered,M_counts,pcaData,t_counts)
+
+# Generate a model for the dataframes
+sin_mod <- function(df) {
+        lm(count ~ SIN(specimen.collection.t_death_hour) + 
+                   COS(specimen.collection.t_death_hour),
+           data = df)
+}
+poly_ns4_mod <- function(df) {
+        lm(count ~ ns(specimen.collection.t_exercise_hour,4), data = df)
+}
+dual_mod <- function(df) {
+        lm(count ~ ns(specimen.collection.t_exercise_hour,4) +
+                   SIN(specimen.collection.t_death_hour) + 
+                   COS(specimen.collection.t_death_hour), data = df)
+}
+
+# Run models and save as a column
+by_gene_df <- by_gene_df %>%
+        mutate(circ_model = map(data, sin_mod))
+by_gene_df <- by_gene_df %>%
+        mutate(poly_ns4_model = map(data, poly_ns4_mod))
+by_gene_df <- by_gene_df %>%
+        mutate(dual_model = map(data, dual_mod))
+
+# Add the residuals
+by_gene_df <- by_gene_df %>%
+        mutate(circ_resid = map2(data, circ_model, add_residuals))
+by_gene_df <- by_gene_df %>%
+        mutate(poly_ns4_resid = map2(data, poly_ns4_model, add_residuals))
+by_gene_df <- by_gene_df %>%
+        mutate(dual_resid = map2(data, dual_model, add_residuals))
+
+# Examine the model metrics
+circ_metrics <- by_gene_df %>%
+        mutate(circ_metrics = map(circ_model, broom::glance)) %>%
+        #select(-data,-circ_model,-poly_ns4_model,
+        #-circ_resid,-poly_ns4_resid) %>%
+        unnest(circ_metrics)
+poly_ns4_metrics <- by_gene_df %>%
+        mutate(poly_ns4_metrics = map(poly_ns4_model, broom::glance)) %>%
+        #select(-data,-circ_model,-poly_ns4_model,
+        #-circ_resid,-poly_ns4_resid) %>%
+        unnest(poly_ns4_metrics)
+dual_metrics <- by_gene_df %>%
+        mutate(dual_metrics = map(dual_model, broom::glance)) %>%
+        #select(-data,-circ_model,-poly_ns4_model,
+        #-circ_resid,-poly_ns4_resid) %>%
+        unnest(dual_metrics)
+
+# Examine the R_2 for CIRC and NON-CIRC genes
+# CIRC Model
+circ_metrics %>%
+        filter(p.value <= 0.017) %>%
+        as.data.frame() %>% as_tibble() %>%
+        ggplot(aes(CIRC, r.squared)) +
+        geom_jitter(width = 0.5, alpha = 0.2)
+# For a random set of noncirc genes equal in n to circ gene set
+circ_set <- circ_metrics %>%
+        filter(p.value <= 0.017) %>%
+        filter(CIRC == 'CIRC') %>%
+        select(ENSEMBL_RAT) %>%
+        unique() %>% unlist() %>% as.character()
+noncirc_set <- circ_metrics %>%
+        filter(p.value <= 0.017) %>%
+        filter(CIRC == 'NON-CIRC') %>%
+        select(ENSEMBL_RAT) %>%
+        unique() %>% unlist() %>% as.character() %>%
+        sample(length(circ_set))
+circ_metrics_sub <- circ_metrics %>%
+        filter(ENSEMBL_RAT %in% c(circ_set, noncirc_set))
+# Examine the R_2 for CIRC and NON-CIRC genes (SUBSET of NON-CIRC)
+circ_metrics_sub %>%
+        filter(p.value <= 0.017) %>%
+        as.data.frame() %>% as_tibble() %>%
+        ggplot(aes(CIRC, r.squared)) +
+        geom_violin() +
+        geom_boxplot(alpha = 0.4)
+
+# Examine the R_2 for CIRC and NON-CIRC genes
+# Polynomial model
+poly_ns4_metrics %>%
+        filter(p.value <= 0.017) %>%
+        as.data.frame() %>% as_tibble() %>%
+        ggplot(aes(CIRC, r.squared)) +
+        geom_jitter(width = 0.5, alpha = 0.2)
+# For a random set of noncirc genes equal in n to circ gene set
+circ_set <- poly_ns4_metrics %>%
+        filter(p.value <= 0.017) %>%
+        filter(CIRC == 'CIRC') %>%
+        select(ENSEMBL_RAT) %>%
+        unique() %>% unlist() %>% as.character()
+noncirc_set <- poly_ns4_metrics %>%
+        filter(p.value <= 0.017) %>%
+        filter(CIRC == 'NON-CIRC') %>%
+        select(ENSEMBL_RAT) %>%
+        unique() %>% unlist() %>% as.character() %>%
+        sample(length(circ_set))
+poly_ns4_metrics_sub <- poly_ns4_metrics %>%
+        filter(ENSEMBL_RAT %in% c(circ_set, noncirc_set))
+# Examine the R_2 for CIRC and NON-CIRC genes (SUBSET of NON-CIRC)
+poly_ns4_metrics_sub %>%
+        filter(p.value <= 0.017) %>%
+        as.data.frame() %>% as_tibble() %>%
+        ggplot(aes(CIRC, r.squared)) +
+        geom_violin() +
+        geom_boxplot(alpha = 0.4)
+
+# Examine the R_2 for CIRC and NON-CIRC genes
+# Dual model
+dual_metrics %>%
+        filter(p.value <= 0.017) %>%
+        as.data.frame() %>% as_tibble() %>%
+        ggplot(aes(CIRC, r.squared)) +
+        geom_jitter(width = 0.5, alpha = 0.2)
+# For a random set of noncirc genes equal in n to circ gene set
+circ_set <- dual_metrics %>%
+        filter(p.value <= 0.017) %>%
+        filter(CIRC == 'CIRC') %>%
+        select(ENSEMBL_RAT) %>%
+        unique() %>% unlist() %>% as.character()
+noncirc_set <- dual_metrics %>%
+        filter(p.value <= 0.017) %>%
+        filter(CIRC == 'NON-CIRC') %>%
+        select(ENSEMBL_RAT) %>%
+        unique() %>% unlist() %>% as.character() %>%
+        sample(length(circ_set))
+dual_metrics_sub <- dual_metrics %>%
+        filter(ENSEMBL_RAT %in% c(circ_set, noncirc_set))
+# Examine the R_2 for CIRC and NON-CIRC genes (SUBSET of NON-CIRC)
+dual_metrics_sub %>%
+        filter(p.value <= 0.017) %>%
+        as.data.frame() %>% as_tibble() %>%
+        ggplot(aes(CIRC, r.squared)) +
+        geom_violin() +
+        geom_boxplot(alpha = 0.4)
+
+# Examine the R_2 for CIRC and NON-CIRC genes
+# Dual
+poly_ns4_metrics %>%
+        filter(p.value <= 0.017) %>%
+        as.data.frame() %>% as_tibble() %>%
+        ggplot(aes(CIRC, r.squared)) +
+        geom_jitter(width = 0.5, alpha = 0.2)
+# For a random set of noncirc genes equal in n to circ gene set
+circ_set <- poly_ns4_metrics %>%
+        filter(p.value <= 0.017) %>%
+        filter(CIRC == 'CIRC') %>%
+        select(ENSEMBL_RAT) %>%
+        unique() %>% unlist() %>% as.character()
+noncirc_set <- poly_ns4_metrics %>%
+        filter(p.value <= 0.017) %>%
+        filter(CIRC == 'NON-CIRC') %>%
+        select(ENSEMBL_RAT) %>%
+        unique() %>% unlist() %>% as.character() %>%
+        sample(length(circ_set))
+poly_ns4_metrics_sub <- poly_ns4_metrics %>%
+        filter(ENSEMBL_RAT %in% c(circ_set, noncirc_set))
+# Examine the R_2 for CIRC and NON-CIRC genes (SUBSET of NON-CIRC)
+poly_ns4_metrics_sub %>%
+        filter(p.value <= 0.017) %>%
+        as.data.frame() %>% as_tibble() %>%
+        ggplot(aes(CIRC, r.squared)) +
+        geom_violin() +
+        geom_boxplot(alpha = 0.4)
+
+# Unnest the dataframe to collect the residuals
+circ_resid_df <- circ_metrics_sub %>%
+        filter(p.value <= 0.017) %>%
+        unnest(circ_resid)
+# Plot the residuals and facet
+circ_resid_df %>%
+        ggplot(aes(specimen.collection.t_death_hour, resid)) +
+        geom_line(aes(group = ENSEMBL_RAT), alpha = 0.1) +
+        geom_smooth(se = FALSE) +
+        facet_wrap(~CIRC)
+
+# Unnest the dataframe to collect the residuals
+poly_ns4_resid_df <- poly_ns4_metrics_sub %>%
+        filter(p.value <= 0.017) %>%
+        unnest(poly_ns4_resid)
+# Plot the residuals and facet
+poly_ns4_resid_df %>%
+        ggplot(aes(specimen.collection.t_exercise_hour, resid)) +
+        geom_line(aes(group = ENSEMBL_RAT), alpha = 0.1) +
+        geom_smooth(se = FALSE) +
+        facet_wrap(~CIRC)
+
+# Unnest the dataframe to collect the residuals
+dual_resid_df <- dual_metrics_sub %>%
+        filter(p.value <= 0.017) %>%
+        unnest(dual_resid)
+# Plot the residuals and facet
+dual_resid_df %>%
+        ggplot(aes(specimen.collection.t_exercise_hour, resid)) +
+        geom_line(aes(group = ENSEMBL_RAT), alpha = 0.1) +
+        geom_smooth(se = FALSE) +
+        facet_wrap(~CIRC)
+
+# Compare the R2 values and p values from models
+poly_ns4_metrics$r.squared.poly <- poly_ns4_metrics$r.squared
+poly_ns4_metrics$p.value.poly <- poly_ns4_metrics$p.value  
+circ_metrics$r.squared.circ <- circ_metrics$r.squared
+circ_metrics$p.value.circ <- circ_metrics$p.value 
+model_metrics <- poly_ns4_metrics %>%
+        select(ENSEMBL_RAT, r.squared.poly, p.value.poly) %>%
+        left_join(circ_metrics, by = "ENSEMBL_RAT") %>%
+        select(ENSEMBL_RAT, CIRC, r.squared.poly, p.value.poly,
+               r.squared.circ, p.value.circ)
+# Compare the R2 between plots
+ggplot(model_metrics, aes(r.squared.poly, r.squared.circ)) +
+        geom_point(alpha = 0.05) +
+        xlim(0,1) + ylim(0,1) +
+        geom_abline(intercept = 0, slope = 1) +
+        xlab("R^2 Polynomial Spline Model") +
+        ylab("R^2 Circadian Model")
+ggplot(model_metrics, aes(r.squared.poly, r.squared.circ, color = CIRC)) +
+        geom_point(alpha = 0.25) +
+        xlim(0,1) + ylim(0,1) +
+        geom_abline(intercept = 0, slope = 1) +
+        xlab("R^2 Polynomial Spline Model") +
+        ylab("R^2 Circadian Model") +
+        scale_color_manual(breaks = c("CIRC", "NON-CIRC"),
+                           values=c("black", "grey"))
+
+# COmpare the p value between models
+ggplot(model_metrics, aes(-log(p.value.poly), -log(p.value.circ))) +
+        geom_point(alpha = 0.05) +
+        geom_abline(intercept = 0, slope = 1) +
+        xlab("-Log(p-value) Polynomial Spline Model") +
+        ylab("-Log(p-value) Circadian Model")
+ggplot(model_metrics, 
+       aes(-log(p.value.poly), -log(p.value.circ), color = CIRC)) +
+        geom_point(alpha = 0.3) +
+        geom_abline(intercept = 0, slope = 1) +
+        xlab("-Log(p-value) Polynomial Spline Model") +
+        ylab("-Log(p-value) Circadian Model") +
+        scale_color_manual(breaks = c("CIRC", "NON-CIRC"),
+                           values=c("red", "white"))
+
+################################
+
+
+
+
+
+
+
 
 #' ## Model Circadian Rhythms by Time of Death (TOD)
 
@@ -669,9 +971,9 @@ sinmod_df <- data.frame("ENSEMBL_RAT" = row.names(tod_counts),
 sinmod_df$SYMBOL_RAT = mapIds(org.Rn.eg.db, as.character(sinmod_df$ENSEMBL_RAT), "SYMBOL", "ENSEMBL")
 
 # Save the phase values
-out_file <- paste0(WD,'/data/20200505_rnaseq--bothsexes-kidney-phases_steep.txt')
-write.table(sinmod_df, file = out_file, quote = FALSE, 
-            row.names = FALSE, col.names = TRUE, sep ='\t')
+out_file <- paste0(WD,'/data/20200505_rnaseq-bothsexes-liver-phases_steep.txt')
+#write.table(sinmod_df, file = out_file, quote = FALSE, 
+#            row.names = FALSE, col.names = TRUE, sep ='\t')
 
 # Filter data frame and arrange
 sinmod_df <- sinmod_df %>%
@@ -695,7 +997,7 @@ TPE <- tod_cols %>%
                 animal.key.anirandgroup == 'Exercise - 4 hr' ~ 4,
                 animal.key.anirandgroup == 'Exercise - 7 hr' ~ 7,
                 animal.key.anirandgroup == 'Exercise - 24 hr' ~ 24,
-                animal.key.anirandgroup == 'Exercise - 48 hr' ~ 0)) %>%
+                animal.key.anirandgroup == 'Exercise - 48 hr' ~ -1)) %>%
         select(specimen.collection.t_exercise_hour) %>% 
         unlist() %>% as.numeric()
 
@@ -835,7 +1137,7 @@ venn.plot <- venn.diagram(
         x = list(
                 SIN = sinmod_df$ENSEMBL_RAT,
                 POLY4 = p4mod_df$ENSEMBL_RAT),
-        filename = paste0(WD,"/plots/20200505_rnaseq-kidney-p4vssin-venn_steep.tiff"),
+        filename = paste0(WD,"/plots/20200505_rnaseq-liver-p4vssin-venn_steep.tiff"),
         height = 900,
         width = 900,
         resolution = 300,
@@ -852,7 +1154,7 @@ venn.plot <- venn.diagram(
 )
 # Display the Venn
 dev.off()
-tiff_file <- paste0(WD,"/plots/20200505_rnaseq-kidney-p4vssin-venn_steep.tiff")
+tiff_file <- paste0(WD,"/plots/20200505_rnaseq-liver-p4vssin-venn_steep.tiff")
 img <- readTIFF(tiff_file)
 grid::grid.raster(img)
 
@@ -861,7 +1163,7 @@ venn.plot <- venn.diagram(
         x = list(
                 SIN = sinmod_df$ENSEMBL_RAT,
                 POLY4 = p4mod_df$ENSEMBL_RAT,
-                CIRC = circ_kid$ENSEMBL_RAT),
+                CIRC = circ_df$ENSEMBL_RAT),
         filename = paste0(WD,"/plots/circ_steep.tiff"),
         height = 900,
         width = 900,
@@ -901,7 +1203,7 @@ shared_mod_df %>%
 # Visualize the models on CIRC Genes
 ##############################
 shared_mod_circ <- shared_mod_df %>%
-        filter(ENSEMBL_RAT %in% circ_kid$ENSEMBL_RAT) %>%
+        filter(ENSEMBL_RAT %in% circ_df$ENSEMBL_RAT) %>%
         mutate(SYMBOL_RAT = SYMBOL_RAT.x) %>%
         select(-SYMBOL_RAT.y, -SYMBOL_RAT.x) %>%
         arrange(desc(PVE_P4))
@@ -971,13 +1273,13 @@ for(ensembl in ensembl_genes){
 
 
 
-dim(circ_kid)
+dim(circ_df)
 
 
 ggplot(df, aes(x = TOD, y= Exp)) +
         geom_point() +
         stat_smooth()
-        
+
 
 
 

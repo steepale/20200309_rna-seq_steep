@@ -1,5 +1,5 @@
 #'---
-#' title: "PASS1A Rat (Female) Kidney: -- Control 0 hr vs Control 7 hr Differential Gene Expression"
+#' title: "PASS1A Rat Kidney: -- Control 0 hr vs Control 7 hr Differential Gene Expression"
 #' author: "Alec Steep and Jiayu Zhang" 
 #' date: "20200426"
 #' output:
@@ -38,7 +38,7 @@ WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
 #install.packages("tidyverse")
 
 # Load dependencies
-pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som", "vsn","org.Mm.eg.db","VennDiagram","EBImage","reshape2","xtable","kohonen","som","caret","enrichR","gplots")
+pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som", "vsn","org.Mm.eg.db","VennDiagram","EBImage","reshape2","xtable","kohonen","som","caret","enrichR","gplots","vcd")
 lapply(pacs...man, FUN = function(X) {
         do.call("library", list(X)) })
 
@@ -480,7 +480,7 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registr
 dds <- DESeq(dds)
 
 # Generate a results table and sort by fdr
-res <- results(dds, alpha = 0.05,lfcThreshold=0.5)
+res <- results(dds, alpha = 0.05,lfcThreshold=0)
 res <- res[order(res$padj),]
 head(res)
 
@@ -508,6 +508,44 @@ de_df <- res_df %>%
         filter(padj <= 0.05)
 de_df$SYMBOL_RAT <- mapIds(org.Rn.eg.db, de_df$ENSEMBL_RAT, "SYMBOL", "ENSEMBL")
 de_df$ENTREZ_RAT <- mapIds(org.Rn.eg.db, de_df$ENSEMBL_RAT, "ENTREZID", "ENSEMBL")
+
+# Visualize phase values (0-24) of differentially expressed genes (statified by circadian rhythm status)
+################################################################################
+# Load in the phase dataframe
+# Save the phase values
+in_file <- paste0(WD,'/data/20200505_rnaseq-bothsexes-kidney-phases_steep.txt')
+sinmod_df <- read.table(file = in_file, header = TRUE, sep ='\t') %>% 
+        as_tibble() %>%
+        select(ENSEMBL_RAT, PVAL_SIN, PHASE_SIN)
+de_df <- as_tibble(de_df)
+# Combine phase values with de values
+# Select only genes that demonstrated a p value less than 0.05 with SIN model
+# Add a new annotation as to whether the gene is a circ gene or not
+phase_df <- left_join(de_df, sinmod_df, by ="ENSEMBL_RAT") %>%
+        filter(PVAL_SIN <= 0.05) %>%
+        mutate(CIRC = as.factor(ifelse(ENSEMBL_RAT %in% circ_kid$ENSEMBL_RAT, 'CIRC', 'NON-CIRC')))
+
+# Generate a density plot of the phase data
+ggplot(phase_df, aes(x=PHASE_SIN, color=CIRC, fill=CIRC)) +
+        geom_density(alpha=0.5) +
+        #geom_histogram(aes(y=..density..), position="identity", alpha=0.5) +
+        labs(title="Density of Phases: \nPhases of DE  Genes Annotated by Circadian Rhythm Status",x="Phase (per gene)", y = "Frequency") +
+        xlim(0,24) +
+        theme_classic()
+
+# Generate a histogram of the phase data
+ggplot(phase_df, aes(x=PHASE_SIN, color=CIRC, fill=CIRC)) +
+        #geom_density(alpha=0.5) +
+        geom_histogram(aes(y=..density..), position="identity", alpha=0.5) +
+        labs(title="Histogram of Phases: \nPhases of DE Genes Annotated by Circadian Rhythm Status",x="Phase (per gene)", y = "Frequency") +
+        xlim(0,24) +
+        theme_classic()
+
+# Stats on the Density plot Bins
+phase_df %>%
+        filter(CIRC == 'CIRC') %>% nrow()
+phase_df %>%
+        filter(CIRC == 'NON-CIRC') %>% nrow()
 
 # Convert gene symbols to mouse orthologs
 de_df <- rat_mouse_ortho(de_df, column = 'ENSEMBL_RAT', direction = 'rat2mouse')
