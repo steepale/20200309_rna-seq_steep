@@ -1,5 +1,5 @@
 #'---
-#' title: "PASS1A Rat (Female) Kidney: -- Temporal Clusters"
+#' title: "PASS1A Rat Kidney: -- Temporal Clusters"
 #' author: "Alec Steep and Jiayu Zhang" 
 #' date: "20200413"
 #' output:

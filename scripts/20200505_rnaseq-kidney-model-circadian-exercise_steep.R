@@ -470,7 +470,7 @@ tod_cols <- col_data %>%
         #filter(animal.registration.sex == 'Female') %>%
         filter(sample_key != '90109015902_SN1') %>%
         filter(!is.na(animal.registration.sex)) %>%
-        filter(animal.key.anirandgroup %!in% c('Control - IPE', 'Control - 7 hr'))
+        filter(animal.key.anirandgroup %!in% c('Control - 7 hr'))
 rownames(tod_cols) <- tod_cols$sample_key
 
 # Collect samples without NA values in TOD
@@ -501,6 +501,7 @@ zero_n <- dds1[(rowSums(counts(dds1))/ncol(dds1) < 1), ] %>% nrow() %>% as.chara
 reads_n <- 1
 keep <- rowSums(counts(dds1))/ncol(dds1) >= reads_n
 dds2 <- dds1[keep,]
+
 #' #### Summary of counts and annotation data in a DESeqDataSet after filtering out genes with low sequencing depth
 #' TODO: Critic from Jun: Here we are removing features that have a low average expression. This may be removing important features that might have zero counts in some samples and higher counts in specific groups. Consider developing an algorithm that will account for features with expression in n or more samples.
 dds2
@@ -518,11 +519,11 @@ dds <- estimateSizeFactors(dds)
 #' Size facotrs are generally around 1 (scaled) and calculated using the median and are robust to genes with large read counts
 summary(sizeFactors(dds))
 
-#rld <- DESeq2::vst(dds)
+rld <- DESeq2::vst(dds)
 #' Regularized Log (rlog) Transform
 for(n in 1){
         start_time <- Sys.time()
-        rld <- DESeq2::rlog(dds)
+        #rld <- DESeq2::rlog(dds)
         end_time <- Sys.time()
         print(end_time - start_time)
 }
@@ -564,13 +565,13 @@ M_samples <- col_data %>%
         filter(!is.na(animal.registration.sex)) %>%
         filter(animal.registration.sex == 'Male') %>%
         filter(sample_key != '90109015902_SN1') %>%
-        filter(animal.key.anirandgroup %!in% c('Control - IPE', 'Control - 7 hr')) %>%
+        filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
         select(sample_key) %>% unlist() %>% as.character()
 F_samples <- col_data %>%
         filter(Tissue == 'Kidney') %>%
         filter(!is.na(animal.registration.sex)) %>%
         filter(animal.registration.sex == 'Female') %>%
-        filter(animal.key.anirandgroup %!in% c('Control - IPE', 'Control - 7 hr')) %>%
+        filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
         select(sample_key) %>% unlist() %>% as.character()
 # Select the counts
 M_counts <- assay(rld[, M_samples])
@@ -614,6 +615,7 @@ tod_counts <- assay(rld)
 #####     Model Circadian Rhythms by Time of Death (TOD)      ##################
 ################################################################################
 
+
 # Time of death
 TOD <- tod_cols %>%
         filter(sample_key %in% nona_sams) %>%
@@ -625,6 +627,23 @@ M <- as.matrix(cbind(rep(1,length(TOD)),SIN(TOD),COS(TOD)))
 # In case when we need to set up a cubic function: y~B0+B1*x+B2*x^2+B3*x^3.
 plot(M[,2],M[,3],type="n",axes=F, xlab=" ",,ylab=" ",main="Time of Death")
 text(M[,2],M[,3], labels = round(TOD),cex=0.8)
+
+time_cols <- tod_cols %>%
+        filter(sample_key %in% nona_sams)
+time_cols %>%
+        ggplot(aes(x = specimen.collection.t_death_hour, fill = animal.key.anirandgroup)) + 
+        geom_bar(breaks = seq(0, 24), width = 2, colour = "grey") + 
+        coord_polar(start = 0) + 
+        theme_minimal() + 
+        ggtitle("Death of Experimental Groups by Time of Day") + 
+        scale_x_continuous("", limits = c(0, 24), 
+                           breaks = seq(0, 24), 
+                           labels = seq(0, 24)) +
+        theme(legend.title = element_blank()) +
+        scale_fill_manual(values=ec_colors[1:8]) +
+        theme(axis.title.y =element_blank(),
+              axis.text.y =element_blank(),
+              axis.ticks.y=element_blank())
 
 #The traditional approach is to run linear regression and loop through each of the p genes.
 #The alternative approach is to solve for the three B’s (beta values) by matrix algebra where the vector beta can be calculated as B = (X^TX)^-1 * X^T * Y
@@ -640,7 +659,7 @@ for (i in 1:nrow(tod_counts)) {
 
 # Calculate the p value empirically with permutation tests: shuffle time points randomly
 set.seed(100)
-tod_counts_pval<-p.test.cos(tod_counts,TOD,iter=100,every=10)
+tod_counts_pval<-p.test.cos(tod_counts,TOD,iter=50,every=10)
 
 # Get the phase
 t<-c(1:24)

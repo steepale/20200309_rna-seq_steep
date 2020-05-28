@@ -42,7 +42,7 @@ WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
 #install.packages("tidyverse")
 
 # Load dependencies
-pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som", "vsn","org.Mm.eg.db","VennDiagram","EBImage","reshape2","xtable","kohonen","som","caret","enrichR","gplots","tiff","splines")
+pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som", "vsn","org.Mm.eg.db","VennDiagram","EBImage","reshape2","xtable","kohonen","som","caret","enrichR","gplots","tiff","splines","gam")
 lapply(pacs...man, FUN = function(X) {
         do.call("library", list(X)) })
 
@@ -309,6 +309,16 @@ p.test.4 <- function(data,TPE,iter,every=10) {
         pval <- pval / iter
 }
 ################################################################################
+# Extract p-value from linear model TODO: Adjust this code to generate permutation based p-value
+################################################################################
+lmp <- function (modelobject) {
+        if ("lm" %!in% class(modelobject)) stop("Not an object of class 'lm' ")
+        f <- summary(modelobject)$fstatistic
+        p <- pf(f[1],f[2],f[3],lower.tail=F)
+        attributes(p) <- NULL
+        return(p)
+}
+################################################################################
 
 #' ## Declare Variables
 
@@ -320,7 +330,9 @@ p.test.4 <- function(data,TPE,iter,every=10) {
 TISSUE <- "Kidney"
 TIS <- "KID"
 # Declare Outliers
-OUTLIERS <- c('90042016803_SF1')
+if(TISSUE == "Kidney"){
+        OUTLIERS <- c('90042016803_SF1')
+}
 
 #### Tissue:
 print(TISSUE)
@@ -351,12 +363,12 @@ in_file <- paste0(WD,'/data/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt
 col_data <- read.table(in_file, header = TRUE, check.names = FALSE, sep = '\t')
 row.names(col_data) <- col_data$sample_key
 
-#' #### Retrieve Circadian Genes Associated with Tissue (Liver)
+#' #### Retrieve Circadian Genes Associated with Tissue
 #' Data from Supplementary Table 2 from 1. Yan, J., Wang, H., Liu, Y. & Shao, C. Analysis of gene regulatory networks in the mammalian circadian rhythm. PLoS Comput. Biol. 4, (2008).
 #' Downloaded 20200326 by Alec Steep
 #' Data previosuly saved in script:
 
-# Circadian Genes (Liver)
+# Circadian Genes 
 in_file <- paste0(WD,'/data/20200503_rnaseq-circadian-',TIS,'-mouse-rat-ortho_steep-yan.txt')
 circ_df <- read.table(file=in_file, sep = '\t', header = TRUE)
 
@@ -483,26 +495,54 @@ col_data$animal.key.anirandgroup <- factor(col_data$animal.key.anirandgroup,
 #####     Collect Samples of Interest and Normalize      #######################
 ################################################################################
 
-# Filter Liver Samples (meta)
+# Filter Samples (meta)
 tod_cols <- col_data %>%
         filter(Tissue == TISSUE) %>%
-        #filter(animal.registration.sex == 'Female') %>%
         filter(sample_key != OUTLIERS) %>%
-        filter(!is.na(animal.registration.sex)) %>%
-        filter(animal.key.anirandgroup %!in% c('Control - 7 hr'))
+        filter(!is.na(animal.registration.sex))
+rownames(tod_cols) <- tod_cols$sample_key
 
 # Time post exercise
 tod_cols <- tod_cols %>%
         mutate(specimen.collection.t_exercise_hour = case_when(
-                animal.key.anirandgroup == 'Control - IPE' ~ 0,
+                animal.key.anirandgroup == 'Control - IPE' ~ -1,
+                animal.key.anirandgroup == 'Control - 7 hr' ~ 7,
                 animal.key.anirandgroup == 'Exercise - IPE' ~ 0,
                 animal.key.anirandgroup == 'Exercise - 0.5 hr' ~ 0.5,
                 animal.key.anirandgroup == 'Exercise - 1 hr' ~ 1,
                 animal.key.anirandgroup == 'Exercise - 4 hr' ~ 4,
                 animal.key.anirandgroup == 'Exercise - 7 hr' ~ 7,
                 animal.key.anirandgroup == 'Exercise - 24 hr' ~ 24,
-                animal.key.anirandgroup == 'Exercise - 48 hr' ~ -1))
-rownames(tod_cols) <- tod_cols$sample_key
+                animal.key.anirandgroup == 'Exercise - 48 hr' ~ 48))
+
+# Convert to seconds and take the square root (consider negative numbers)
+tod_cols$specimen.collection.t_exercise_seconds <- 
+        tod_cols$specimen.collection.t_exercise_hour * 60 * 60
+tod_cols <- tod_cols %>%
+        mutate(specimen.collection.t_exercise_hour_sqrt = ifelse(
+                specimen.collection.t_exercise_seconds < 0, 
+                (sqrt(abs(specimen.collection.t_exercise_seconds))/60/60)*(-1), 
+                (sqrt(abs(specimen.collection.t_exercise_seconds))/60/60)))
+tod_cols$specimen.collection.t_exercise_hour_sqrt_jit <- 
+        jitter(tod_cols$specimen.collection.t_exercise_hour_sqrt, 
+               factor = 0.1)
+# Examine histograms
+tod_cols %>%
+        filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
+        ggplot(aes(x=specimen.collection.t_exercise_hour)) +
+        geom_histogram(bins = 68)
+tod_cols %>%
+        filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
+        ggplot(aes(x=specimen.collection.t_exercise_seconds)) +
+        geom_histogram(bins = 68)
+tod_cols %>%
+        filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
+        ggplot(aes(x=specimen.collection.t_exercise_hour_sqrt)) +
+        geom_histogram(bins = 68)
+tod_cols %>%
+        filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
+        ggplot(aes(x=specimen.collection.t_exercise_hour_sqrt_jit)) +
+        geom_histogram(bins = 68)
 
 # Collect samples without NA values in TOD
 nona_sams <- tod_cols %>%
@@ -577,7 +617,8 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registr
         ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
         #coord_fixed() +
         ggtitle("PCA: Naive Model (~ 1)") +
-        guides(color=guide_legend(title="animal.key.anirandgroup"))
+        guides(color=guide_legend(title="animal.key.anirandgroup")) +
+        scale_color_manual(values=ec_colors)
 
 #' ### Adjust for Between Sex Variance
 
@@ -596,14 +637,14 @@ M_samples <- col_data %>%
         filter(!is.na(animal.registration.sex)) %>%
         filter(animal.registration.sex == 'Male') %>%
         filter(sample_key != OUTLIERS) %>%
-        filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
+        #filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
         select(sample_key) %>% unlist() %>% as.character()
 F_samples <- col_data %>%
         filter(Tissue == TISSUE) %>%
         filter(!is.na(animal.registration.sex)) %>%
         filter(sample_key != OUTLIERS) %>%
         filter(animal.registration.sex == 'Female') %>%
-        filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
+        #filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
         select(sample_key) %>% unlist() %>% as.character()
 # Select the counts
 M_counts <- assay(rld[, M_samples])
@@ -634,8 +675,380 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registr
         ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
         #coord_fixed() +
         ggtitle("PCA: Median Centered by Sex") +
-        guides(color=guide_legend(title="animal.key.anirandgroup"))
+        guides(color=guide_legend(title="animal.key.anirandgroup")) +
+        scale_color_manual(values=ec_colors)
 
+#' #### Unsupervised Clustering w/ SOMs & K-means (Ordered by Exercsie/Control Group)
+
+#+ Unsupervised Clustering w/ SOMs & K-means (Ordered by Exercsie/Control Group)
+################################################################################
+#Unsupervised Clustering w/ SOMs & K-means (Ordered by Exercsie/Control Group) #
+################################################################################
+
+#' #### Steps in Analysis:
+#' * Orient Count Matrix by sample (group) for temporal visualization
+#' * Perform a variant test to remove genes that do not vary across groups
+#'     * Ensure that variant filter parameters are met if test is parametric
+#' * Scale and center data to have a mean of zero and a variance of 1
+#' * Perform SOM clustering
+
+# Order samples by exercise group (polynomial model)
+group_order_poly <- tod_cols %>%
+        filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
+        arrange(factor(specimen.collection.t_exercise_hour), 
+                desc(specimen.collection.t_exercise_hour), 
+                desc(animal.registration.sex)) %>%
+        select(sample_key) %>% unlist() %>% as.character()
+# Order of exercise groups
+group_order_poly2 <- tod_cols %>%
+        filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
+        arrange(factor(specimen.collection.t_exercise_hour), 
+                desc(specimen.collection.t_exercise_hour), 
+                desc(animal.registration.sex)) %>%
+        select(specimen.collection.t_exercise_hour) %>% unlist() %>% as.character()
+
+# Arrange matrix in order of exercise and control groups
+# All expression values per gene are normalized to generate a level playing field. Means are subtracted by values and the resulting difference is divided by the standard deviation.
+som_xgroup <- assay(rld)[,group_order_poly]
+som_xgroup <- som_xgroup %>% t() %>% data.frame()
+
+# Test for multiv
+#x <- as.numeric(MVN::mvn(som_xgroup, mvnTest = "hz")$univariateNormality$`p value`)
+#(p.adjust(x, method = "BH") > 0.05) %>% table()
+som_xgroup$specimen.collection.t_exercise_hour <- group_order_poly2
+
+# MANOVA test
+# Generate a formula
+dependents <- colnames(som_xgroup)[colnames(som_xgroup) %!in% c("specimen.collection.t_exercise_hour")]
+form <- as.formula(paste0("cbind(",paste(dependents, collapse=","),")", "~specimen.collection.t_exercise_hour"))
+# Perform MANOVA
+res_man <- manova(form, data = som_xgroup)
+res_sum <- summary.aov(res_man)
+
+# Organize the index of genes by pvalue
+df_x <- data.frame(1:(ncol(som_xgroup)-1))
+names(df_x) <- 'idx'
+pvec <- vector()
+for(nr in 1:(ncol(som_xgroup)-1)){
+        pval <- res_sum[[nr]]$`Pr(>F)`[1]
+        pvec <- c(pvec, pval)
+}
+df_x$pval <- pvec
+
+# Choose row index with significant p value
+c_idx <- df_x %>%
+        filter(pval <= 0.05) %>%
+        select(idx) %>% unlist() %>% as.numeric()
+
+# Select only genes that show significant variance across timepoints
+som_xgroup <- som_xgroup[,c_idx]
+dim(som_xgroup)
+
+# Data should be normalized to have a mean zero and a variance of 1 (between -1 and 1)
+preproc1 <- preProcess(som_xgroup, method=c("center", "scale"))
+norm1 <- predict(preproc1, som_xgroup)
+som_mat <- t(norm1) %>% as.matrix()
+
+# Create a SOM (with som)
+set.seed(100)
+som_group <- som::som(som_mat,6,5)
+plot(som_group, ylim=c(-2,2))
+
+#som::som(som_xgroup,10,10) %>% plot()
+table(som_group$visual[,1:2])
+
+# Perform k-means clustering
+k6<-kmeans(som_mat,6)$cluster
+
+# Create an annotation for the heatmap
+ann_df <- tod_cols %>%
+        filter(sample_key %in% colnames(som_mat)) %>%
+        select(specimen.collection.t_exercise_hour)
+ann_df$specimen.collection.t_exercise_hour <- factor(ann_df$specimen.collection.t_exercise_hour)
+ann_df <- ann_df %>% arrange(specimen.collection.t_exercise_hour)
+row.names(ann_df) <- colnames(som_mat)
+ann_colors = list(
+        specimen.collection.t_exercise_hour = 
+                c("-1" = "gold",
+                  "0" = "darkgoldenrod1",
+                  "0.5" = "orange",
+                  "1" = "darkorange",
+                  "4" = "darkorange2",
+                  "7" = "darkorange3",
+                  "24" = "steelblue1",
+                  "48" = "steelblue4"))
+
+# Create heatmaps from kmeans
+heat_plots <- vector('list', 6)
+heat_plots[[1]] <- pheatmap(som_mat[k6==1,], 
+                            annotation_col = ann_df,
+                            annotation_colors = ann_colors,
+                            fontsize = 8,
+                            show_rownames=FALSE,
+                            show_colnames=FALSE,
+                            color = rev(brewer.pal(n = 9, name ="RdBu")),
+                            cluster_cols = FALSE,
+                            cluster_rows = FALSE,
+                            legend=F,
+                            annotation_legend = FALSE)
+heat_plots[[2]] <- pheatmap(som_mat[k6==2,], 
+                            annotation_col = ann_df,
+                            annotation_colors = ann_colors,
+                            fontsize = 8,
+                            show_rownames=FALSE,
+                            show_colnames=FALSE,
+                            color = rev(brewer.pal(n = 9, name ="RdBu")),
+                            cluster_cols = FALSE,
+                            cluster_rows = FALSE,
+                            legend=F,
+                            annotation_legend = FALSE)
+heat_plots[[3]] <- pheatmap(som_mat[k6==3,], 
+                            annotation_col = ann_df,
+                            annotation_colors = ann_colors,
+                            fontsize = 8,
+                            show_rownames=FALSE,
+                            show_colnames=FALSE,
+                            color = rev(brewer.pal(n = 9, name ="RdBu")),
+                            cluster_cols = FALSE,
+                            cluster_rows = FALSE,
+                            legend=F,
+                            annotation_legend = FALSE)
+heat_plots[[4]] <- pheatmap(som_mat[k6==4,], 
+                            annotation_col = ann_df,
+                            annotation_colors = ann_colors,
+                            fontsize = 8,
+                            show_rownames=FALSE,
+                            show_colnames=FALSE,
+                            color = rev(brewer.pal(n = 9, name ="RdBu")),
+                            cluster_cols = FALSE,
+                            cluster_rows = FALSE,
+                            legend=F,
+                            annotation_legend = FALSE)
+heat_plots[[5]] <- pheatmap(som_mat[k6==5,], 
+                            annotation_col = ann_df,
+                            annotation_colors = ann_colors,
+                            fontsize = 8,
+                            show_rownames=FALSE,
+                            show_colnames=FALSE,
+                            color = rev(brewer.pal(n = 9, name ="RdBu")),
+                            cluster_cols = FALSE,
+                            cluster_rows = FALSE,
+                            legend=F,
+                            annotation_legend = FALSE)
+heat_plots[[6]] <- pheatmap(som_mat[k6==6,], 
+                            annotation_col = ann_df,
+                            annotation_colors = ann_colors,
+                            fontsize = 8,
+                            show_rownames=FALSE,
+                            show_colnames=FALSE,
+                            color = rev(brewer.pal(n = 9, name ="RdBu")),
+                            cluster_cols = FALSE,
+                            cluster_rows = FALSE,
+                            legend=F,
+                            annotation_legend = FALSE)
+
+# Clusters are numbers in numerical order from 1 to 30 from bottom-left to top-right
+# Identify the circadian rhythm genes that belong to each cluster
+i <- 1
+cluster <- list()
+circ_cl <- list()
+circ_cldf <- list()
+ENSEMBL_RAT <- vector()
+for(yn in 0:4){
+        for(xn in 0:5){
+                # Collect gene ids for each cluster
+                c_rn <- som_group$visual[(som_group$visual$x == xn & som_group$visual$y == yn),] %>%
+                        row.names() %>% as.numeric()
+                cluster[[i]] <- som_group$data[c_rn,] %>% row.names()
+                # Collect all gene ids
+                ENSEMBL_RAT <- c(ENSEMBL_RAT, cluster[[i]])
+                # collect circadian gene ids per cluster
+                i <- i + 1
+        }
+}
+
+# Create a geom_tile to mimic the som and visualize the kmeans clusters
+grad_plots <- vector('list', 6)
+kmeans_cluster <- list()
+for(kn in 1:6){
+        # Kmeans cluster 1
+        x <- 0:5
+        y <- 0:4
+        tile_df <- expand.grid(X=x,Y=y)
+        # Kmeans cluster genes are in which som clusters
+        kgenes <- names(k6[k6==kn])
+        kmeans_cluster[[kn]] <- kgenes
+        circ_cl[[kn]] <- circ_df %>%
+                filter(ENSEMBL_RAT %in% kgenes) %>%
+                select(ENSEMBL_RAT) %>% unlist(use.names = FALSE)
+        # collect additional information for circadian genes in cluster
+        circ_cldf[[kn]] <- circ_df %>%
+                filter(ENSEMBL_RAT %in% kgenes) %>%
+                select(NUM.TISSUE, ENSEMBL_RAT, SYMBOL_RAT)
+        Z <- vector()
+        for(i in 1:30){
+                Z <- c(Z, (kgenes[kgenes %in% cluster[[i]]] %>% length()))
+        }
+        tile_df$Z <- Z
+        # Generate the kmeans plot
+        grad_plots[[kn]] <- local({
+                kn <- kn
+                kmsom <- ggplot(tile_df, aes(x = X, y = Y, fill =Z)) +
+                        geom_raster(interpolate=TRUE) +
+                        scale_fill_gradient2(low="navy", mid="white", high="red", 
+                                             midpoint=30, limits=range(tile_df$Z),
+                                             guide = FALSE) +
+                        theme(axis.text        = element_blank(),
+                              axis.ticks       = element_blank(),
+                              axis.title       = element_blank(),
+                              panel.background = element_blank())
+                print(kmsom)
+        })
+}
+
+# Create a dataframe for logistic regression
+logreg_df <- data.frame(ENSEMBL_RAT)
+# Generate a column for circadian gene status
+logreg_df <- mutate(logreg_df, CIRC = ifelse(ENSEMBL_RAT %in% circ_df$ENSEMBL_RAT, 1, 0))
+# Generate 6 columns for each kmeans cluster status
+for(i in 1:6){
+        new_col_name <- paste0('C',i)
+        logreg_df <- logreg_df %>% 
+                mutate(!!sym(new_col_name) := ifelse(ENSEMBL_RAT %in% kmeans_cluster[[i]], 1, 0))
+}
+
+# Remove gene ids and set them to rownames
+row.names(logreg_df) <- logreg_df$ENSEMBL_RAT
+logreg_df <-  logreg_df %>% select(-ENSEMBL_RAT)
+
+# Adjust column objects
+factor_cols <- colnames(logreg_df)
+for(fc in factor_cols){
+        logreg_df[[fc]] <- as.factor(logreg_df[[fc]])
+}
+str(logreg_df)
+
+# Fit a logistic regression model
+mod <- glm(formula = CIRC ~ C1 + C2 + C3 + C4 + C5 + C6, 
+           family = binomial(link = logit), 
+           data = logreg_df)
+summary(mod)
+
+# Perform a Chi-square analysis
+#######################
+# Create a proper data structure for chi squared
+x2_list <- list()
+for(i in 1:6){
+        n_clust <- length(kmeans_cluster[[i]])
+        n_circ <- length(circ_cl[[i]])
+        n_no_circ <- n_clust - n_circ
+        x2_list[[i]] <- c(n_circ, n_no_circ)
+}
+
+x2_df <- as.data.frame(x2_list)
+row.names(x2_df) <- c('CIRC','NON-CIRC')
+for(i in 1:6){
+        new_col_name <- paste0('C',i)
+        colnames(x2_df)[i] <- new_col_name
+}
+
+# Create the proper data structure for visualization of chi square with mosaic plot
+mosaic_df <- data.frame(ENSEMBL_RAT)
+# Generate a column for circadian gene status
+mosaic_df <- mutate(mosaic_df, CIRC = ifelse(ENSEMBL_RAT %in% circ_df$ENSEMBL_RAT, 'CIRC', "NON-CIRC"))
+# Generate a Cluster columcluster status
+mosaic_df <- mosaic_df %>%
+        mutate(CLUSTER = case_when(ENSEMBL_RAT %in% kmeans_cluster[[1]] ~ 1,
+                                   ENSEMBL_RAT %in% kmeans_cluster[[2]] ~ 2,
+                                   ENSEMBL_RAT %in% kmeans_cluster[[3]] ~ 3,
+                                   ENSEMBL_RAT %in% kmeans_cluster[[4]] ~ 4,
+                                   ENSEMBL_RAT %in% kmeans_cluster[[5]] ~ 5,
+                                   ENSEMBL_RAT %in% kmeans_cluster[[6]] ~ 6))
+# Generate a table of results
+mosaic_tbl <- table(mosaic_df$CIRC, mosaic_df$CLUSTER, dnn=c("CIRC","CLUSTER"))
+
+# Perform Chi-squared
+#sink('')
+(( c=chisq.test(x2_df, simulate.p.value = TRUE) ))
+(( fisher.test(x2_df, simulate.p.value = TRUE) ))
+
+#sink()
+c$observed
+round(c$expected)
+
+# Visualize the chisquare analysis with a mosaic plot
+mosaic(~ CIRC + CLUSTER, data = mosaic_tbl,
+       shade = TRUE, legend = TRUE)
+
+grad_plots[[4]]
+
+# Clusters enriched WITH circadian genes
+# 4
+grad_plots[[4]]
+heat_plots[[4]]
+mypar()
+plot(som_group, ylim=c(-2,2))
+plot(som_group)
+
+# Cluster enriched WITHOUT circadian genes
+# 5
+grad_plots[[5]]
+heat_plots[[5]]
+plot(som_group, ylim=c(-2,2))
+
+# Plot the circadian genes in cluster 4
+# Create a dataframe for the plot
+df1 <- data.frame(t(som_mat))
+df1$sample_key<- row.names(df1)
+df2 <- tod_cols %>%
+        select(specimen.collection.t_death, 
+               specimen.collection.t_exercise_hour)
+df2$sample_key <- row.names(df2)
+# Adjust the column names to be symbols for ease of plot interpretation
+df_plot <- left_join(df1, df2, by = "sample_key")
+genes <- colnames(df_plot)[grepl('ENSRNOG', colnames(df_plot))]
+symbols <- mapIds(org.Rn.eg.db, genes, "SYMBOL", "ENSEMBL")
+colnames(df_plot)[grepl('ENSRNOG', colnames(df_plot))] <- symbols
+
+# Melt the plot
+melt_plot <- reshape2::melt(df_plot, id.vars = c("specimen.collection.t_death", 
+                                                 "specimen.collection.t_exercise_hour"))
+# Adjust columns and factor levels
+melt_plot$value <- as.numeric(melt_plot$value)
+melt_plot$specimen.collection.t_exercise_hour <- factor(melt_plot$specimen.collection.t_exercise_hour)
+
+# To re-examine SOM
+plot(som_group, ylim=c(-2,2))
+
+# Plot the circadian genes for cluster of choice
+# Show all plots they are enriched with and without in powerpoint
+plot(grad_plots[[6]])
+heat_plots[[6]]
+
+melt_plot %>%
+        filter(variable %in% circ_cldf[[3]]$SYMBOL_RAT) %>%
+        ggplot(aes(
+                x = as.integer(as.character(specimen.collection.t_exercise_hour)), 
+                y = value, 
+                color = variable),
+               group = "1") +
+        geom_point(alpha = 0.01) +
+        #geom_smooth(alpha = 0.2, se = F, method = "loess") +
+        #geom_smooth(method = "lm", formula = y ~ poly(x, 3), se = FALSE) +
+        geom_line(stat = "smooth", alpha = 0.5, 
+                  method = "lm", formula = y ~ ns(x, 4), se = T) +
+        ylab("rlog Transformed Expression") +
+        xlab("Hours Pre/Post Exercise") +
+        theme(legend.position = "none")
+        #geom_line(aes(group = "1")) +
+        #scale_x_continuous(breaks = seq(-1,48,by=10))
+
+#' #### Annotate Data for Modeling By Cluster
+
+#+ Annotate Data for Modeling By Cluster
+################################################################################
+################ Annotate Data for Modeling By Cluster #########################
+################################################################################
 
 # Select the normailzed counts
 tod_counts <- assay(rld) 
@@ -645,53 +1058,486 @@ t_counts <- setNames(melt(tod_counts),
 # Join the dataframes and nest
 by_gene_df <- tod_cols %>%
         left_join(t_counts, by = "sample_key") %>%
+        filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
         group_by(ENSEMBL_RAT) %>%
         arrange(sample_key) %>%
         nest()
-
-# To examine metadata
-by_gene_df$data[[1]]
-
-# Add Circadian status
+# Add Cluster and Circ Status
 by_gene_df <- by_gene_df %>%
-        mutate(CIRC = as.factor(
-                ifelse(ENSEMBL_RAT %in% circ_df$ENSEMBL_RAT, 
-                       'CIRC','NON-CIRC')))
+        left_join(mosaic_df, by = "ENSEMBL_RAT") %>%
+        filter(!is.na(CIRC)) # This filter removes genes that did not pass variance filter (MANOVA)
+# Add the gene symbol
+by_gene_df$SYMBOL_RAT = mapIds(org.Rn.eg.db, as.character(by_gene_df$ENSEMBL_RAT), "SYMBOL", "ENSEMBL")
+
+# Join the dataframes and nest
+by_gene_df7 <- tod_cols %>%
+        left_join(t_counts, by = "sample_key") %>%
+        filter(animal.key.anirandgroup %in% c('Control - 7 hr')) %>%
+        group_by(ENSEMBL_RAT) %>%
+        arrange(sample_key) %>%
+        nest()
+# Add Cluster and Circ Status
+by_gene_df7 <- by_gene_df7 %>%
+        left_join(mosaic_df, by = "ENSEMBL_RAT") %>%
+        filter(!is.na(CIRC)) # This filter removes genes that did not pass variance filter (MANOVA)
+# Add the gene symbol
+by_gene_df7$SYMBOL_RAT = mapIds(org.Rn.eg.db, as.character(by_gene_df7$ENSEMBL_RAT), "SYMBOL", "ENSEMBL")
 
 # Cleanup
-rm(count_data, col_data, counts_centered, dds,dds1,dds2,F_centered,F_counts,
-   M_centered,M_counts,pcaData,t_counts)
+#rm(count_data, col_data, counts_centered, dds ,dds1,dds2,F_centered,F_counts,
+#   M_centered,M_counts,pcaData,t_counts)
+# TODO: The entire dataframe cannot be unnested. It may be a memory issue or it may be a corrupted row -- come back and troubleshoot. For now, randomly select 2K rows to continue analysis.
+#by_gene_df2 <- by_gene_df
+#by_gene_df72 <- by_gene_df7
+by_gene_df <- by_gene_df2
+by_gene_df7 <- by_gene_df72
 
-# Generate a model for the dataframes
+# Load in the DE genes between C0 and C7 for appropriate tissues
+in_file <- paste0(WD, '/data/20200426_rnaseq-kidneyMF-C0C7DE-phaseMDD_steep.txt')
+de_df <- read.table(in_file, sep = '\t', header = T)
+# Take all the differentially expressed genes
+de_all <- de_df %>%
+        arrange(padj) %>%
+        filter(padj <= 0.05) %>%
+        select(ENSEMBL_RAT) %>%
+        unlist() %>% as.character()
+# Take the top 20 differentially expressed genes
+de_top <- de_df %>%
+        arrange(padj) %>%
+        select(ENSEMBL_RAT) %>%
+        dplyr::slice(1:50) %>%
+        unlist() %>% as.character()
+de_top20 <- de_df %>%
+        arrange(padj) %>%
+        select(ENSEMBL_RAT) %>%
+        dplyr::slice(1:20) %>%
+        unlist() %>% as.character()
+
+#randomRows = sample(1:nrow(by_gene_df[,1]), 500, replace=F)
+#by_gene_df <- by_gene_df[randomRows, ]
+#by_gene_df7 <- by_gene_df7[randomRows, ]
+by_gene_df <- by_gene_df %>% filter(ENSEMBL_RAT %in% de_all)
+by_gene_df7 <- by_gene_df7 %>% filter(ENSEMBL_RAT %in% de_all)
+# Must be true
+all(by_gene_df$ENSEMBL_RAT == by_gene_df7$ENSEMBL_RAT)
+
+# Generate model functions for the dataframes
+gam_mod <- function(df) {
+        lm(count ~ ns(specimen.collection.t_exercise_hour_sqrt_jit, df = 4), data = df)
+}
+# Generate a model function for the dataframes
 sin_mod <- function(df) {
         lm(count ~ SIN(specimen.collection.t_death_hour) + 
                    COS(specimen.collection.t_death_hour),
            data = df)
 }
-poly_ns4_mod <- function(df) {
-        lm(count ~ ns(specimen.collection.t_exercise_hour,4), data = df)
-}
-dual_mod <- function(df) {
-        lm(count ~ ns(specimen.collection.t_exercise_hour,4) +
-                   SIN(specimen.collection.t_death_hour) + 
-                   COS(specimen.collection.t_death_hour), data = df)
-}
 
+# Generalized Additive Models
+################################################################################
 # Run models and save as a column
 by_gene_df <- by_gene_df %>%
-        mutate(circ_model = map(data, sin_mod))
+        mutate(gam_model = map(data, gam_mod))
+# Examine the ANOVA report on models
 by_gene_df <- by_gene_df %>%
-        mutate(poly_ns4_model = map(data, poly_ns4_mod))
-by_gene_df <- by_gene_df %>%
-        mutate(dual_model = map(data, dual_mod))
-
+        mutate(gam_ANOVA = map(gam_model, anova))
 # Add the residuals
 by_gene_df <- by_gene_df %>%
-        mutate(circ_resid = map2(data, circ_model, add_residuals))
+        mutate(gam_resid = map2(data, gam_model, add_residuals))
+# Examine the model metrics
+gam_metrics <- by_gene_df %>%
+        mutate(gam_metrics = map(gam_model, broom::glance)) %>%
+        unnest(gam_metrics)
+# Examine the model metrics
 by_gene_df <- by_gene_df %>%
-        mutate(poly_ns4_resid = map2(data, poly_ns4_model, add_residuals))
+        mutate(gam_metrics = map(gam_model, broom::glance))
+# Examine some model summaries
 by_gene_df <- by_gene_df %>%
-        mutate(dual_resid = map2(data, dual_model, add_residuals))
+        mutate(gam_summary = map(gam_model, summary))
+
+# SIN/COS Model
+################################################################################
+# Run models and save as a column
+by_gene_df <- by_gene_df %>%
+        mutate(sin_model = map(data, sin_mod))
+# Examine the ANOVA report on models
+by_gene_df <- by_gene_df %>%
+        mutate(sin_ANOVA = map(sin_model, anova))
+# Add the residuals
+by_gene_df <- by_gene_df %>%
+        mutate(sin_resid = map2(data, sin_model, add_residuals))
+# Examine the model metrics
+sin_metrics <- by_gene_df %>%
+        mutate(sin_metrics = map(sin_model, broom::glance)) %>%
+        unnest(sin_metrics)
+# Examine the model metrics
+by_gene_df <- by_gene_df %>%
+        mutate(sin_metrics = map(sin_model, broom::glance))
+# Examine some model summaries
+by_gene_df <- by_gene_df %>%
+        mutate(sin_summary = map(sin_model, summary))
+
+# Arrange the dataframe by model R2
+row_order <- by_gene_df %>%
+        unnest(gam_metrics) %>%
+        arrange(desc(adj.r.squared)) %>%
+        select(ENSEMBL_RAT) %>% 
+        unlist() %>% as.character()
+by_gene_df <- by_gene_df %>%
+        ungroup() %>%
+        arrange(factor(ENSEMBL_RAT, levels = row_order))
+
+# Add the predictions (GAM model)
+genes <- by_gene_df$ENSEMBL_RAT %>% as.character() %>% unique()
+# Must be true
+all(genes == by_gene_df$ENSEMBL_RAT)
+gam_pred <- list()
+i <- 1
+for( g in genes){
+        # Subset the dataframe by gene
+        sub_data <- (by_gene_df %>% 
+                             filter(ENSEMBL_RAT == g) %>%
+                             ungroup() %>%
+                             select(data))[[1]] %>% as.data.frame()
+        # Generate a grid
+        grid <- data.frame(specimen.collection.t_exercise_hour_sqrt_jit = 
+                                   seq_range(
+                                           sub_data$specimen.collection.t_exercise_hour_sqrt_jit, n = 68))
+        #grid$ENSEMBL_RAT <- g
+        mod <- (by_gene_df %>% 
+                        filter(ENSEMBL_RAT == g) %>% ungroup() %>% 
+                        select(gam_model))[[1]][[1]]
+        summary(mod)
+        grid <- add_predictions(grid, mod, "pred") %>% as_tibble()
+        names(grid)[1] <- "grid_t_exercise_hour_sqrt_jit"
+        grid$specimen.collection.t_exercise_hour_sqrt_jit <- 
+                sub_data$specimen.collection.t_exercise_hour_sqrt_jit
+        grid$count <- sub_data$count
+        gam_pred[[i]] <- grid
+        i <- i + 1
+}
+by_gene_df$gam_pred <- gam_pred
+
+# Add the predictions (SIN Model)
+genes <- by_gene_df$ENSEMBL_RAT %>% as.character() %>% unique()
+# Must be true
+all(genes == by_gene_df$ENSEMBL_RAT)
+sin_pred <- list()
+i <- 1
+for( g in genes){
+        # Subset the dataframe by gene
+        sub_data <- (by_gene_df %>% 
+                             filter(ENSEMBL_RAT == g) %>%
+                             ungroup() %>%
+                             select(data))[[1]] %>% as.data.frame()
+        # Generate a grid
+        grid <- data.frame(specimen.collection.t_death_hour = 
+                                   seq_range(
+                                           sub_data$specimen.collection.t_death_hour, n = 68))
+        #grid$ENSEMBL_RAT <- g
+        mod <- (by_gene_df %>% 
+                        filter(ENSEMBL_RAT == g) %>% ungroup() %>% 
+                        select(sin_model))[[1]][[1]]
+        summary(mod)
+        grid <- add_predictions(grid, mod, "pred") %>% as_tibble()
+        names(grid)[1] <- "grid_t_death_hour"
+        grid$grid_t_death_hour <- round(grid$grid_t_death_hour, digits = 1)
+        grid$specimen.collection.t_death_hour <- 
+                sub_data$specimen.collection.t_death_hour
+        grid$count <- sub_data$count
+        sin_pred[[i]] <- grid
+        i <- i + 1
+}
+by_gene_df$sin_pred <- sin_pred
+
+gene_n <- 5
+# Visualize the GAM model by gene
+gam_pred_df <- by_gene_df %>%
+        select(ENSEMBL_RAT, SYMBOL_RAT, data, CIRC, CLUSTER, gam_model, gam_pred) %>%
+        ungroup() %>%
+        filter(row_number() == gene_n) %>%
+        unnest(gam_pred)
+gam_gene <- unique(gam_pred_df$ENSEMBL_RAT) %>% as.character()
+# Visualize the SIN model by gene
+sin_pred_df <- by_gene_df %>%
+        select(ENSEMBL_RAT, SYMBOL_RAT, data, CIRC, CLUSTER, sin_model, sin_pred) %>%
+        ungroup() %>%
+        filter(row_number() == gene_n) %>%
+        unnest(sin_pred)
+sin_gene <- unique(sin_pred_df$ENSEMBL_RAT) %>% as.character()
+# Must be true
+gam_gene == sin_gene
+
+# Collect the Control 7 hr data points
+gam_hr7_df <- by_gene_df7 %>%
+        filter(ENSEMBL_RAT == gam_gene) %>%
+        select(ENSEMBL_RAT, SYMBOL_RAT, data) %>%
+        ungroup() %>%
+        unnest(data) %>%
+        select(ENSEMBL_RAT, SYMBOL_RAT, specimen.collection.t_exercise_hour_sqrt_jit, count)
+
+# Collect the hours of death that occur for each exercise group
+sac_hrs <- sort(unique(round(tod_cols$specimen.collection.t_death_hour, digits = 1)))
+#names(tod_cols)
+#e_df <- tod_cols %>%
+#        select(specimen.collection.t_death_hour, specimen.collection.t_exercise_hour_sqrt) %>%
+#        arrange(specimen.collection.t_death_hour)
+#e_df$specimen.collection.t_death_hour <- round(e_df$specimen.collection.t_death_hour, digits = 1)
+
+# Perform a second prediction (for hour post exercise -- predictions from SIN Model)
+sin_pred_hour <- sin_pred_df %>%
+        filter(round(grid_t_death_hour, digits = 1) %in% sac_hrs) %>%
+        mutate(grid_t_exercise_hour = case_when(grid_t_death_hour == 9.9 ~ -0.01666667,
+                                                grid_t_death_hour == 10.0 ~ -0.01666667,
+                                                grid_t_death_hour == 10.2 ~ -0.01666667,
+                                                grid_t_death_hour == 10.3 ~ -0.01666667,
+                                                grid_t_death_hour == 10.6 ~ 0.08164966,
+                                                grid_t_death_hour == 10.9 ~ 0.08164966,
+                                                grid_t_death_hour == 11.2 ~ 0.11547005,
+                                                grid_t_death_hour == 11.6 ~ 0.11547005,
+                                                grid_t_death_hour == 11.9 ~ 0.01178511,
+                                                grid_t_death_hour == 12.2 ~ 0.01178511,
+                                                grid_t_death_hour == 12.3 ~ 0.01178511,
+                                                grid_t_death_hour == 13.2 ~ 0.00000000,
+                                                grid_t_death_hour == 13.3 ~ 0.00000000,
+                                                grid_t_death_hour == 13.6 ~ 0.00000000,
+                                                grid_t_death_hour == 13.9 ~ 0.01666667,
+                                                grid_t_death_hour == 14.2 ~ 0.01666667,
+                                                grid_t_death_hour == 14.3 ~ 0.01666667,
+                                                grid_t_death_hour == 14.6 ~ 0.03333333,
+                                                grid_t_death_hour == 14.9 ~ 0.03333333,
+                                                grid_t_death_hour == 16.9 ~ 0.04409586,
+                                                grid_t_death_hour == 17.2 ~ 0.04409586,
+                                                grid_t_death_hour == 17.3 ~ 0.04409586,
+                                                grid_t_death_hour == 17.6 ~ 0.04409586,
+                                                grid_t_death_hour == 17.9 ~ 0.04409586))
+
+# Visualize the raw counts, model predictions, and control 7 counts (x=Hours Post Exercise)
+gam_pred_df %>%
+        ggplot(aes(specimen.collection.t_exercise_hour_sqrt_jit, count), 
+                   color = ENSEMBL_RAT) +
+        geom_point() +
+        geom_line(data = gam_pred_df, 
+                  aes(grid_t_exercise_hour_sqrt_jit, pred), 
+                  size = 1, alpha = 0.8, color = "blue") +
+        geom_point(data = gam_hr7_df, 
+                   mapping = aes(specimen.collection.t_exercise_hour_sqrt_jit, count),
+                   color = "red") +
+        geom_point(data = sin_pred_hour, 
+                  mapping = aes(x = grid_t_exercise_hour, y = pred), 
+                  size = 3, alpha = 1, color = "orange") +
+        theme(legend.position = "none") +
+        ggtitle(
+                paste0("Expression of ",
+                       unique(gam_pred_df$SYMBOL_RAT),
+                       ":\nExercise Groups & Control IPE")) +
+        ylab("Expression (Transformed/Normalized)") + 
+        xlab("Hours Post Acute Exercise (Transformed)") +
+        geom_vline(xintercept = 0, linetype = "dashed", alpha = 0.5)
+
+# Visualize the raw counts, model predictions, and control 7 counts (x=Hours Post Exercise)
+# Collect the Control 7 hr data points
+sin_hr7_df <- by_gene_df7 %>%
+        filter(ENSEMBL_RAT == sin_gene) %>%
+        select(ENSEMBL_RAT, SYMBOL_RAT, data) %>%
+        ungroup() %>%
+        unnest(data) %>%
+        select(ENSEMBL_RAT, SYMBOL_RAT, specimen.collection.t_death_hour, count)
+# Visualize the raw counts, model predictions, and control 7 counts (x=Hours Post Exercise)
+sin_pred_df %>%
+        ggplot(aes(specimen.collection.t_death_hour, count), 
+               color = ENSEMBL_RAT) +
+        geom_point() +
+        geom_point(data = sin_hr7_df, 
+                   mapping = aes(specimen.collection.t_death_hour, count),
+                   color = "red") +
+        #geom_point(data = sin_pred_hour, 
+        #           mapping = aes(x = grid_t_death_hour, y = pred), 
+        #           size = 1, alpha = 1, color = "orange") +
+        geom_line(data = sin_pred_df, 
+                  aes(grid_t_death_hour, pred), 
+                  size = 1, alpha = 0.8, color = "orange") +
+        theme(legend.position = "none") +
+        ggtitle(
+                paste0("Expression of ",
+                       unique(sin_pred_df$SYMBOL_RAT),
+                       ":\nExercise Groups & Control IPE")) +
+        ylab("Expression (Transformed/Normalized)") + 
+        xlab("Time of Death")
+
+# Visualize the gam model metrics
+(by_gene_df %>%
+        dplyr::slice(gene_n) %>%
+        select(gam_model) %>%
+        ungroup %>% 
+        select(gam_model))[[1]][[1]] %>%
+        anova()
+by_gene_df[gene_n,"gam_metrics"][[1]][[1]]
+by_gene_df[gene_n,"sin_metrics"][[1]][[1]]
+# Visualize the model ANOVA summary
+#by_gene_df$gam_ANOVA[[1]]
+#by_gene_df$sin_ANOVA[[1]]
+################################################################################
+
+# Compare the R2 values and p values from models
+sin_metrics$r.squared.sin <- sin_metrics$r.squared
+sin_metrics$p.value.sin <- sin_metrics$p.value  
+gam_metrics$r.squared.gam <- gam_metrics$r.squared
+gam_metrics$p.value.gam <- gam_metrics$p.value 
+model_metrics <- sin_metrics %>%
+        select(ENSEMBL_RAT, r.squared.sin, p.value.sin) %>%
+        left_join(gam_metrics, by = "ENSEMBL_RAT") %>%
+        select(ENSEMBL_RAT, SYMBOL_RAT, CIRC, CLUSTER, r.squared.sin, p.value.sin,
+               r.squared.gam, p.value.gam)
+
+# Join the log fold change for sake of graph annotation
+de_join <- de_df %>% 
+        select(ENSEMBL_RAT, log2FoldChange)
+# Annotate the top 20 de genes
+model_metrics <- model_metrics %>%
+        ungroup() %>% 
+        left_join(de_join, by = "ENSEMBL_RAT") %>%
+        mutate(Expression = factor(ifelse(log2FoldChange > 0, "UP", "DOWN"),
+                                   levels = c("UP", "DOWN"))) %>%
+        mutate(top_de = ifelse(ENSEMBL_RAT %in% de_top, "TOP GENE", "NOT TOP GENE"))
+top_metrics <- model_metrics %>%
+        filter(ENSEMBL_RAT %in% de_top)
+top20_metrics <- model_metrics %>%
+        filter(ENSEMBL_RAT %in% de_top20)
+circ_metrics <- model_metrics %>%
+        filter(CIRC == "CIRC")
+
+# Compare the R2 between plots
+# First show circadian genes
+ggplot(model_metrics, aes(r.squared.gam, r.squared.sin)) +
+        geom_point(alpha = 0.1) +
+        xlim(0,1) + ylim(0,1) +
+        geom_abline(intercept = 0, slope = 1) +
+        xlab("R^2 Natural Spline Model (Exercise)") +
+        ylab("R^2 SIN/COS Model (Circadian)") +
+        ggtitle("R2 Comparisons Between Models:\nDifferentially Expressed Genes (C0 -> C7)")
+ggplot(model_metrics, aes(r.squared.gam, r.squared.sin)) +
+        geom_point(alpha = 0.1) +
+        xlim(0,1) + ylim(0,1) +
+        geom_abline(intercept = 0, slope = 1) +
+        xlab("R^2 Natural Spline Model (Exercise)") +
+        ylab("R^2 SIN/COS Model (Circadian)") +
+        ggtitle("R2 Comparisons Between Models:\nDifferentially Expressed Genes (C0 -> C7)") +
+        geom_point(data = circ_metrics,
+                   mapping = aes(r.squared.gam, r.squared.sin), 
+                   alpha = 1)
+
+# Map the top DE genes
+ggplot(model_metrics, aes(r.squared.gam, r.squared.sin)) +
+        geom_point(alpha = 0.1) +
+        xlim(0,1) + ylim(0,1) +
+        geom_abline(intercept = 0, slope = 1) +
+        xlab("R^2 Natural Spline Model (Exercise)") +
+        ylab("R^2 SIN/COS Model (Circadian)") +
+        geom_point(data = top_metrics,
+                   mapping = aes(r.squared.gam, r.squared.sin, color = Expression), 
+                   alpha = 1)
+# Label the top DE genes
+ggplot(model_metrics, aes(r.squared.gam, r.squared.sin)) +
+        geom_point(alpha = 0.1) +
+        xlim(0,1) + ylim(0,1) +
+        geom_abline(intercept = 0, slope = 1) +
+        xlab("R^2 Natural Spline Model (Exercise)") +
+        ylab("R^2 SIN/COS Model (Circadian)") +
+        geom_point(data = top_metrics,
+                   mapping = aes(r.squared.gam, r.squared.sin, color = Expression), 
+                   alpha = 1)+
+        geom_label_repel(data = top20_metrics,
+                         mapping = aes(label=SYMBOL_RAT), alpha = 0.8, 
+                         hjust=0, vjust=0)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+# COmpare the p value between models
+ggplot(model_metrics, aes(-log(p.value.poly), -log(p.value.circ))) +
+        geom_point(alpha = 0.05) +
+        geom_abline(intercept = 0, slope = 1) +
+        xlab("-Log(p-value) Polynomial Spline Model") +
+        ylab("-Log(p-value) Circadian Model")
+ggplot(model_metrics, 
+       aes(-log(p.value.poly), -log(p.value.circ), color = CIRC)) +
+        geom_point(alpha = 0.3) +
+        geom_abline(intercept = 0, slope = 1) +
+        xlab("-Log(p-value) Polynomial Spline Model") +
+        ylab("-Log(p-value) Circadian Model") +
+        scale_color_manual(breaks = c("CIRC", "NON-CIRC"),
+                           values=c("red", "white"))
+
+names(poly_resid_df)[grepl("mod",names(poly_resid_df))]
+
+# Visualize the model
+poly_resid_df %>%
+        data_grid(count, 
+                  specimen.collection.t_exercise_hour = 
+                          seq_range(specimen.collection.t_exercise_hour, n = 8)) %>%
+        add_predictions(poly_model)
+seq_range(poly_resid_df$specimen.collection.t_exercise_hour, n=100)
+
+# Now we can plot the residuals
+# As a grand model
+poly_resid_df %>%
+        ggplot(aes(specimen.collection.t_exercise_hour, resid)) +
+        geom_line(aes(group = ENSEMBL_RAT), alpha = 1/3) +
+        geom_smooth(se = F)
+# Facetted by k means cluster
+poly_resid_df %>%
+        ggplot(aes(specimen.collection.t_exercise_hour, resid, 
+                   group = ENSEMBL_RAT)) +
+        geom_line(alpha = 1/3) +
+        facet_wrap(~CLUSTER)
+# Demonstrate the residual for a particular gene of interest
+genes <- poly_resid_df %>%
+        select(ENSEMBL_RAT) %>%
+        unlist() %>% as.character()
+poly_resid_df %>%
+        filter(ENSEMBL_RAT == genes[1]) %>%
+        ggplot(aes(specimen.collection.t_exercise_hour, resid)) +
+        geom_line(aes(group = ENSEMBL_RAT), alpha = 1/3) +
+        geom_smooth(se = F)
+
+grid <- poly_pred_df[1:8,] %>%
+        data_grid(
+                specimen.collection.t_exercise_hour = 
+                        seq_range(specimen.collection.t_exercise_hour, 8))
+grid <- add_predictions(grid, poly_pred_df[1:8,]$poly_model[[1]], "count")
+
+poly_pred_df[1:8,] %>%
+        ggplot(aes(specimen.collection.t_exercise_hour, count)) +
+        geom_point() +
+        geom_line(data = grid, color = "red", size = 1)
+
+
+
+        
+by_gene_df$data[[1]]
+
+############
+# Investigation of poly model
+
 
 # Examine the model metrics
 circ_metrics <- by_gene_df %>%
@@ -699,11 +1545,7 @@ circ_metrics <- by_gene_df %>%
         #select(-data,-circ_model,-poly_ns4_model,
         #-circ_resid,-poly_ns4_resid) %>%
         unnest(circ_metrics)
-poly_ns4_metrics <- by_gene_df %>%
-        mutate(poly_ns4_metrics = map(poly_ns4_model, broom::glance)) %>%
-        #select(-data,-circ_model,-poly_ns4_model,
-        #-circ_resid,-poly_ns4_resid) %>%
-        unnest(poly_ns4_metrics)
+
 dual_metrics <- by_gene_df %>%
         mutate(dual_metrics = map(dual_model, broom::glance)) %>%
         #select(-data,-circ_model,-poly_ns4_model,
@@ -902,7 +1744,11 @@ ggplot(model_metrics,
 
 ################################
 
+qqnorm( -log(model_metrics$p.value.poly), main='Splines Model')
+qqline( -log(model_metrics$p.value.poly) )
 
+qqnorm( -log(model_metrics$p.value.circ), main='Circadian Model')
+qqline( -log(model_metrics$p.value.circ) )
 
 
 

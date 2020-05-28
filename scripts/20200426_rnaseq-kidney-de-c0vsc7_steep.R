@@ -48,6 +48,7 @@ lapply(pacs...man, FUN = function(X) {
 
 # Set select
 select <- dplyr::select
+counts <- DESeq2::counts
 
 # Make the 'not in' operator
 ################################################################################
@@ -104,7 +105,7 @@ rat_mouse_ortho <- function(x, column = "ENSEMBL_RAT", direction = 'rat2mouse') 
         # Create ortholog table
         if (direction == 'rat2mouse'){
                 ortho_df <- getLDS(attributes=c("ensembl_gene_id",
-                                             "mmusculus_homolog_orthology_confidence"),
+                                                "mmusculus_homolog_orthology_confidence"),
                                    filters="ensembl_gene_id", 
                                    values = x[[column]], 
                                    mart=mart_rn_ens,
@@ -112,7 +113,7 @@ rat_mouse_ortho <- function(x, column = "ENSEMBL_RAT", direction = 'rat2mouse') 
                                    martL=mart_mm_ens) # Use biomart to get orthologs
                 # Filter out any low confidence orthologs and any genes 
                 #that are not one-to-one orthologs in both directions
-                ortho_df <- ortho_df[ortho_df$Mouse.orthology.confidence..0.low..1.high. == '1',]
+                #ortho_df <- ortho_df[ortho_df$Mouse.orthology.confidence..0.low..1.high. == '1',]
                 ortho_df <- ortho_df[!duplicated(ortho_df[,1]),]
                 ortho_df <- ortho_df[!duplicated(ortho_df[,3]),]
                 names(ortho_df) <- c('ENSEMBL_RAT','CONFIDENCE','ENSEMBL_MOUSE') 
@@ -133,7 +134,7 @@ rat_mouse_ortho <- function(x, column = "ENSEMBL_RAT", direction = 'rat2mouse') 
                                    martL=mart_rn_ens) # Use biomart to get orthologs
                 # Filter out any low confidence orthologs and any genes 
                 #that are not one-to-one orthologs in both directions
-                ortho_df <- ortho_df[ortho_df$Rat.orthology.confidence..0.low..1.high. == '1',]
+                #ortho_df <- ortho_df[ortho_df$Rat.orthology.confidence..0.low..1.high. == '1',]
                 ortho_df <- ortho_df[!duplicated(ortho_df[,1]),]
                 ortho_df <- ortho_df[!duplicated(ortho_df[,3]),]
                 names(ortho_df) <- c('ENSEMBL_MOUSE','CONFIDENCE','ENSEMBL_RAT') 
@@ -310,6 +311,26 @@ col_data$animal.key.anirandgroup <- factor(col_data$animal.key.anirandgroup,
 in_file <- paste0(WD,'/data/20200409_rnaseq-circadian-kidney-mouse-rat-ortho_steep-yan.txt')
 circ_kid <- read.table(file=in_file, sep = '\t', header = TRUE)
 
+# Load in the phase dataframe (estimate from these data)
+in_file <- paste0(WD,'/data/20200505_rnaseq-bothsexes-kidney-phases_steep.txt')
+sinmod_df <- read.table(file = in_file, header = TRUE, sep ='\t') %>% 
+        as_tibble() %>%
+        select(ENSEMBL_RAT, PVAL_SIN, PHASE_SIN)
+
+# Load in the phase dataframe (estimated from Jun's experiment)
+# File generated in script: 20200426_process-phases-mdd_steep.R
+in_file <- paste0(WD,'/data/20200426_phase-mdd_steep.txt')
+mdd_phase_df <- read.table(file = in_file, header = TRUE, sep ='\t') %>% 
+        as_tibble() %>%
+        select(Phase, new_mean_6, ENSEMBL_RAT)
+names(mdd_phase_df)[1] <- "PHASE_MDD"
+
+# Load in the phase dataframe (estimated from Yan experiment)
+# File generated in script: 20200525_process-phases-yan_steep.R
+in_file <- paste0(WD,'/data/20200525_phase-yan_steep.txt')
+yan_phase_df <- read.table(file = in_file, header = TRUE, sep ='\t') %>% 
+        as_tibble()
+
 #' ## Subset Data for Samples of Interest
 
 #+ Subset Data for Samples of Interest
@@ -317,7 +338,7 @@ circ_kid <- read.table(file=in_file, sep = '\t', header = TRUE)
 ###########     Subset Data for Samples of Interest   ##########################
 ################################################################################
 
-#' ##### Female Kidney Samples (39 unique) from 1 batch were filtered prior to normalization
+#' ##### Kidney Samples (n unique) from 1 batch were filtered prior to normalization
 #' # TODO: Create a seperate script that explains why sample 90109015902_SN1 is considered in outlier
 fkid <- col_data %>%
         filter(Tissue == 'Kidney') %>%
@@ -481,6 +502,7 @@ dds <- DESeq(dds)
 
 # Generate a results table and sort by fdr
 res <- results(dds, alpha = 0.05,lfcThreshold=0)
+#res <- results(dds, alpha = 0.1,lfcThreshold=0)
 res <- res[order(res$padj),]
 head(res)
 
@@ -494,44 +516,116 @@ summary(res)
 ########### Visualize Results: Control 0 hr vs Control 7 hr  ###################
 ################################################################################
 
-# Generate an MA-plot: plots log2 fold change (y-axis) over the mean of normalized counts (x-axis)
-DESeq2::plotMA(res, ylim =c(-4,4))
+# Grab the differentially expressed genes
+res_df <- as.data.frame(res)
+res_df$ENSEMBL_RAT <- row.names(res_df)
+res_df$SYMBOL_RAT <- mapIds(org.Rn.eg.db, res_df$ENSEMBL_RAT, "SYMBOL", "ENSEMBL")
+ 
+# Generate an MA-plot
+#DESeq2::plotMA(res, ylim =c(-4,4))
+ggmaplot(res_df, main = expression("Control - IPE" %->% "Control - 7 hr"),
+         fdr = 0.05, fc = 0, size = 0.4,
+         palette = c("#B31B21", "#1465AC", "darkgray"),
+         genenames = as.vector(res_df$SYMBOL_RAT),
+         legend = "top", top = 20,
+         #font.label = c("bold", 11),
+         font.legend = "bold",
+         font.main = "bold",
+         ggtheme = ggplot2::theme_minimal())
 
 # Generate a pvalue histogram
 hist(res$pvalue[res$baseMean > 1], 
      col="grey", border="white", xlab="", ylab="", main="")
 
-# Grab the differentially expressed genes
-res_df <- as.data.frame(res)
-res_df$ENSEMBL_RAT <- row.names(res_df)
 de_df <- res_df %>%
         filter(padj <= 0.05)
+de_df <- res_df
+#de_df <- res_df %>% filter(padj <= 0.1)
 de_df$SYMBOL_RAT <- mapIds(org.Rn.eg.db, de_df$ENSEMBL_RAT, "SYMBOL", "ENSEMBL")
 de_df$ENTREZ_RAT <- mapIds(org.Rn.eg.db, de_df$ENSEMBL_RAT, "ENTREZID", "ENSEMBL")
+de_df <- as_tibble(de_df)
 
 # Visualize phase values (0-24) of differentially expressed genes (statified by circadian rhythm status)
 ################################################################################
-# Load in the phase dataframe
-# Save the phase values
-in_file <- paste0(WD,'/data/20200505_rnaseq-bothsexes-kidney-phases_steep.txt')
-sinmod_df <- read.table(file = in_file, header = TRUE, sep ='\t') %>% 
-        as_tibble() %>%
-        select(ENSEMBL_RAT, PVAL_SIN, PHASE_SIN)
-de_df <- as_tibble(de_df)
+
 # Combine phase values with de values
 # Select only genes that demonstrated a p value less than 0.05 with SIN model
 # Add a new annotation as to whether the gene is a circ gene or not
-phase_df <- left_join(de_df, sinmod_df, by ="ENSEMBL_RAT") %>%
-        filter(PVAL_SIN <= 0.05) %>%
+phase_df <- left_join(res_df, sinmod_df, by ="ENSEMBL_RAT") %>%
+        #filter(PVAL_SIN <= 0.05) %>%
         mutate(CIRC = as.factor(ifelse(ENSEMBL_RAT %in% circ_kid$ENSEMBL_RAT, 'CIRC', 'NON-CIRC')))
+# Join the MDD phase information
+phase_df <- phase_df %>%
+        left_join(mdd_phase_df, by = "ENSEMBL_RAT")
+# Join the YAN phase information
+names(yan_phase_df)[2] <- "YAN_pval" 
+names(yan_phase_df)[3] <- "YAN_peak_mean" 
+yan_phase_df <- yan_phase_df %>% select(ENSEMBL_RAT, YAN_pval, YAN_peak_mean)
+phase_df <- phase_df %>%
+        left_join(yan_phase_df, by = "ENSEMBL_RAT")
 
-# Generate a density plot of the phase data
-ggplot(phase_df, aes(x=PHASE_SIN, color=CIRC, fill=CIRC)) +
+# Annotate the up or down gene
+up_genes <- res_df %>%
+        filter(!is.na(ENSEMBL_RAT)) %>%
+        filter(log2FoldChange > 0) %>%
+        filter(padj <= 0.05) %>%
+        select(ENSEMBL_RAT) %>% unlist() %>% as.character()
+down_genes <- res_df %>%
+        filter(!is.na(ENSEMBL_RAT)) %>%
+        filter(log2FoldChange < 0) %>%
+        filter(padj <= 0.05) %>%
+        select(ENSEMBL_RAT) %>% unlist() %>% as.character()
+length(up_genes)
+length(down_genes)
+# Annotate the genes for up or down DE status
+phase_df <- phase_df %>%
+        mutate(updown = case_when(
+                ENSEMBL_RAT %in% up_genes ~ 'UP',
+                ENSEMBL_RAT %in% down_genes ~ 'DOWN',
+                ENSEMBL_RAT %!in% c(up_genes,down_genes) ~ 'NOT_SIG'))
+# Reorder the factor level
+phase_df$updown <- factor(phase_df$updown,
+                          levels = c("UP","DOWN","NOT_SIG"))
+
+# Save the file (MDD)
+out_df <- phase_df %>% 
+        select(ENSEMBL_RAT, SYMBOL_RAT, log2FoldChange, 
+               pvalue, padj, PHASE_MDD, new_mean_6)
+out_file <- paste0(WD, '/data/20200426_rnaseq-kidneyMF-C0C7DE-phaseMDD_steep.txt')
+write.table(out_df, file = out_file, quote = F, row.names = F, sep = '\t')
+
+# Save the file (YAN)
+out_df <- phase_df %>% 
+        select(ENSEMBL_RAT, SYMBOL_RAT, log2FoldChange, 
+               pvalue, padj, YAN_peak_mean, YAN_pval) %>% as_tibble()
+out_file <- paste0(WD, '/data/20200426_rnaseq-kidneyMF-C0C7DE-phaseYAN_steep.txt')
+write.table(out_df, file = out_file, quote = F, row.names = F, sep = '\t')
+
+phase_df %>% filter(is.na(YAN_peak_mean)) %>% dim()
+# Generate a density plot of the phase data (from MDD model)
+phase_df %>%
+        filter(YAN_pval <= 0.05) %>%
+ggplot(aes(x=YAN_peak_mean, color=updown)) +
         geom_density(alpha=0.5) +
+        #geom_histogram() +
         #geom_histogram(aes(y=..density..), position="identity", alpha=0.5) +
-        labs(title="Density of Phases: \nPhases of DE  Genes Annotated by Circadian Rhythm Status",x="Phase (per gene)", y = "Frequency") +
-        xlim(0,24) +
-        theme_classic()
+        labs(title="Density of Phases (Yan): \nPhases of Genes Annotated by Differential Expression Status",x="Phase (per gene)", y = "Frequency") +
+        theme_classic() +
+        theme(legend.title = element_blank()) +
+        scale_color_manual(values=c("red", "blue", "grey60"))
+
+# Generate a density plot of the phase data (from MDD model)
+phase_df %>%
+        filter(new_mean_6 <= 0.05) %>%
+        ggplot(aes(x=PHASE_MDD, color=updown)) +
+        geom_density(alpha=0.5) +
+        #geom_histogram() +
+        #geom_histogram(aes(y=..density..), position="identity", alpha=0.5) +
+        labs(title="Density of Phases (MDD): \nPhases of Genes Annotated by Differential Expression Status",x="Phase (per gene)", y = "Frequency") +
+        theme_classic() +
+        theme(legend.title = element_blank()) +
+        scale_color_manual(values=c("red", "blue", "grey60"))
+
 
 # Generate a histogram of the phase data
 ggplot(phase_df, aes(x=PHASE_SIN, color=CIRC, fill=CIRC)) +
@@ -548,7 +642,11 @@ phase_df %>%
         filter(CIRC == 'NON-CIRC') %>% nrow()
 
 # Convert gene symbols to mouse orthologs
-de_df <- rat_mouse_ortho(de_df, column = 'ENSEMBL_RAT', direction = 'rat2mouse')
+de_df <- rat_mouse_ortho(as.data.frame(de_df), column = 'ENSEMBL_RAT', direction = 'rat2mouse')
+
+# COllect the gene symbols
+de_df$SYMBOL_MOUSE <- mapIds(org.Mm.eg.db, de_df$ENSEMBL_MOUSE, "SYMBOL", "ENSEMBL")
+de_df$SYMBOL_MOUSE <- as.character(de_df$SYMBOL_MOUSE)
 
 output_n <- de_df$ENSEMBL_RAT %>% unique() %>% length() %>% as.character()
 #' ##### High confidence ortholgos were collected from Yan et. al. (Supplementary Table 2) and converted to high confidence rat orthologs with Ensembl.
@@ -558,16 +656,21 @@ output_n <- de_df$ENSEMBL_RAT %>% unique() %>% length() %>% as.character()
 #' * Mouse genes input: `r input_n`
 #' * High confidence Rat orthologs output: `r output_n`
 #' ###### Steps in ortholog selection:
-#' * Demonstration of circadian oscilliations in mouse kidney (from Yan et. al.)
-#' * Demonstration of circadian oscilliations in 1 (min Kidney) or more tissues (from Yan et. al.)
 #' * Mouse genes were removed that did not have Ensembl gene symbol (or alias) to gene id 
 #'     * First choice of 1:many were included
 #' * Genes were removed if they did not have a high orthology confidence score between mouse gene id and rat gene id  (binary value 0|1)
 #' * Duplicate orthologs were removed
 #'     * First choice of 1:many were included
 
-# COllect the gene symbols
-de_df$SYMBOL_MOUSE <- mapIds(org.Mm.eg.db, de_df$ENSEMBL_MOUSE, "SYMBOL", "ENSEMBL")
+
+#' ### Pathway Enrichment Analysis (w/ Enrichr)
+
+#+ Visualize Results: Control 0 hr vs Control 7 hr
+################################################################################
+########### Visualize Results: Control 0 hr vs Control 7 hr  ###################
+################################################################################
+
+# Collect gene symbols
 symbol_up <- de_df %>%
         filter(!is.na(SYMBOL_MOUSE)) %>%
         filter(log2FoldChange > 0) %>%
@@ -577,22 +680,15 @@ symbol_down <- de_df %>%
         filter(log2FoldChange < 0) %>%
         select(SYMBOL_MOUSE) %>% unlist() %>% unique() %>% as.character()
 
-#' ### Pathway Enrichment Analysis (w/ Enrichr)
-
-#+ Visualize Results: Control 0 hr vs Control 7 hr
-################################################################################
-########### Visualize Results: Control 0 hr vs Control 7 hr  ###################
-################################################################################
-
 # To check available databases from enrichr
 #dbs <- listEnrichrDbs()
 #if (is.null(dbs)) websiteLive <- FALSE
 #dbs$libraryName
 
 # Collect the desired pathways to query for enrichment
-desired <- c("KEGG_2019_Mouse",
-             "GO_Biological_Process_2018",
-             "GO_Molecular_Function_2018")
+#desired <- c("KEGG_2019_Mouse",
+#             "GO_Biological_Process_2018",
+#             "GO_Molecular_Function_2018")
 desired <- c("KEGG_2019_Mouse")
 enriched_up <- enrichr(symbol_up, desired)
 enriched_down <- enrichr(symbol_down, desired)
