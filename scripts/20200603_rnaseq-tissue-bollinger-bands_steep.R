@@ -1,7 +1,7 @@
-#'---
-#' title: "PASS1A Rat Tissue: -- Modeling of RNASeq Data Expression"
-#' author: "Alec Steep & Jiayu Zhang (Code copied and adapted from Jun Z. Li)" 
-#' date: "20200505"
+'---
+#' title: "PASS1A Rat Tissue: -- Bollinger Bands on Circadian Model"
+#' author: "Alec Steep & Jiayu Zhang" 
+#' date: "20200604"
 #' output:
 #'     html_document:
 #'         code_folding: hide
@@ -17,13 +17,14 @@ knitr::opts_chunk$set(message = FALSE)
 knitr::opts_chunk$set(cache = FALSE)
 
 #' ## Goals of Analysis:
-#' * Model Circadian Rhythms (5 major time points)
+#' * Model Circadian Rhythms
 #'     * SIN/COS Linear Model
 #'     * y = B_0 + B_1SIN(TOD) + B_2COS(TOD)
-#' * Model Exercise Effects (7 time points)
-#'     * Comparison of linear models:
-#'     * Cubic: y = ax^3 + bx^2 + cx + d
-#'     * y = ax^4 + bx^3 + cx^2 + dx + e
+#'     * Apply Bollinger bands to Model
+#' * Model Exercise Effects (68 df)
+#'     * ns(x, 4)
+#'     * Calculate the time (seconds) post exercise, and transform (Done)
+#' * Investigate Effect of Covariants: Sex and Feeding on both models
 #' 
 #' ## Setup the Environment
 
@@ -178,6 +179,8 @@ lmp <- function (modelobject) {
 # TES: Testes
 TISSUE <- "Hypothalamus"
 TIS <- "SCN"
+OUTLIERS <- c('')
+MIS_ID_Mw2Fc <- c('')
 # Declare Outliers
 if(TISSUE == "Kidney"){
         #OUTLIERS <- c('90042016803_SF1','90109015902_SN1')
@@ -187,6 +190,7 @@ if(TISSUE == "Kidney"){
         OUTLIERS <- c('90042016803_SF1')
 }else if(TISSUE == "Hypothalamus"){
         OUTLIERS <- c('')
+        MIS_ID_Mw2Fc <- c('90010015402_SF2')
 }else if(TISSUE == "Aorta"){
         OUTLIERS <- c('')
 }else if(TISSUE == "Gastrocnemius"){
@@ -217,6 +221,7 @@ if(TISSUE == "Kidney"){
 print(TISSUE)
 #### Outliers:
 print(OUTLIERS)
+print(MIS_ID_BY_SEX)
 
 #' ## Load & Clean Data
 #' ##### Data files to load:
@@ -249,7 +254,7 @@ row.names(col_data) <- col_data$sample_key
 
 # Circadian Genes 
 in_file <- paste0(WD,'/data/20200503_rnaseq-circadian-',TIS,'-mouse-rat-ortho_steep-yan.txt')
-circ_df <- read.table(file=in_file, sep = '\t', header = TRUE)
+circ_df <- read.table(file=in_file, sep = '\t', header = TRUE) %>% as_tibble()
 
 # Adjust column objects
 ########################
@@ -367,6 +372,54 @@ col_data$animal.key.anirandgroup <- as.character(col_data$animal.key.anirandgrou
 col_data$animal.key.anirandgroup <- factor(col_data$animal.key.anirandgroup, 
                                            levels = ec_levels)
 
+
+#' ## Place Genes in Genomic Ranges
+#' #### Reference Genome and Annotation: Rnor_6.0 (GCA_000001895.4) assembly from Ensembl database (Release 96)
+#' Found at: http://uswest.ensembl.org/Rattus_norvegicus/Info/Index.
+#' 
+#' FASTA: Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz ftp://ftp.ensembl.org/pub/release-96/fasta/rattus_norvegicus/dna/Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz
+#' 
+#' GTF: Rattus_norvegicus.Rnor_6.0.96.gtf.gz ftp://ftp.ensembl.org/pub/release-96/gtf/rattus_norvegicus/Rattus_norvegicus.Rnor_6.0.96.gtf.gz
+
+#+ Annotate Genes by Chromosome
+
+################################################################################
+#####     Annotate Genes by Chromosome       ###################################
+################################################################################
+
+### Determine which control samples are male and female
+# Get the list of genes on the W chromosome
+
+# Construct your own personal galgal5 reference genome annotation
+# Construct from gtf file from Ensembl (same file used in mapping)
+ens_gtf <- paste0(WD,'/data/Rattus_norvegicus.Rnor_6.0.96.gtf')
+Rn_TxDb <- makeTxDbFromGFF(ens_gtf,
+                           format=c("gtf"),
+                           dataSource="Ensembl_Rattus6_gtf",
+                           organism="Rattus norvegicus",
+                           taxonomyId=NA,
+                           circ_seqs=DEFAULT_CIRC_SEQS,
+                           chrominfo=NULL,
+                           miRBaseBuild=NA,
+                           metadata=NULL)
+
+# Define Female specific sex genes (X chromosome)
+# To examine chromosome names
+seqlevels(Rn_TxDb)[1:23]
+# Extract genes as GRanges object, then names
+X_genes_gr <- genes(Rn_TxDb, columns = "TXCHROM", filter = list(tx_chrom=c("X")))
+# Collect ensembl gene ids for female specific genes
+X_ens_id <- names(X_genes_gr)
+# Examine the gene symbols
+X_sym <- mapIds(org.Rn.eg.db, names(X_genes_gr), "SYMBOL", "ENSEMBL")
+# Extract genes as GRanges object, then names
+Y_genes_gr <- genes(Rn_TxDb, columns = "TXCHROM", filter = list(tx_chrom=c("Y")))
+# Collect ensembl gene ids for female specific genes
+Y_ens_id <- names(Y_genes_gr)
+sex_ens_id <- c(X_ens_id,Y_ens_id)
+# Examine the gene symbols
+Y_sym <- mapIds(org.Rn.eg.db, names(Y_genes_gr), "SYMBOL", "ENSEMBL")
+
 #' ## Collect Samples of Interest and Normalize
 
 #+ Collect Samples of Interest and Normalize
@@ -381,6 +434,10 @@ tod_cols <- col_data %>%
         filter(!is.na(animal.registration.sex))
 rownames(tod_cols) <- tod_cols$sample_key
 
+# Adjust for the sex ID of misidentified samples
+
+names(tod_cols)
+
 # Time post exercise
 tod_cols <- tod_cols %>%
         mutate(specimen.collection.t_exercise_hour = case_when(
@@ -394,35 +451,28 @@ tod_cols <- tod_cols %>%
                 animal.key.anirandgroup == 'Exercise - 24 hr' ~ 24,
                 animal.key.anirandgroup == 'Exercise - 48 hr' ~ 48))
 
-# Convert to seconds and take the square root (consider negative numbers)
-tod_cols$specimen.collection.t_exercise_seconds <- 
-        tod_cols$specimen.collection.t_exercise_hour * 60 * 60
+# Take the absolute value of the square root of seconds post exercise (consider negative numbers)
+# Make sure to Subtract 1 hour (3600s) from "Control - IPE" groups to account for exercise effect
+tod_cols <- tod_cols %>%
+        mutate(calculated.variables.deathtime_after_acute =
+                       ifelse(animal.key.anirandgroup == 'Control - IPE', 
+                              calculated.variables.deathtime_after_acute - 3600,
+                              calculated.variables.deathtime_after_acute))
 tod_cols <- tod_cols %>%
         mutate(specimen.collection.t_exercise_hour_sqrt = ifelse(
-                specimen.collection.t_exercise_seconds < 0, 
-                (sqrt(abs(specimen.collection.t_exercise_seconds))/60/60)*(-1), 
-                (sqrt(abs(specimen.collection.t_exercise_seconds))/60/60)))
-tod_cols$specimen.collection.t_exercise_hour_sqrt_jit <- 
-        jitter(tod_cols$specimen.collection.t_exercise_hour_sqrt, 
-               factor = 0.1)
+                calculated.variables.deathtime_after_acute < 0, 
+                (sqrt(abs(calculated.variables.deathtime_after_acute))/60/60)*(-1), 
+                (sqrt(abs(calculated.variables.deathtime_after_acute))/60/60)))
 
 row.names(tod_cols) <- tod_cols$sample_key
 # Examine histograms
 tod_cols %>%
         filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
-        ggplot(aes(x=specimen.collection.t_exercise_hour)) +
-        geom_histogram(bins = 68)
-tod_cols %>%
-        filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
-        ggplot(aes(x=specimen.collection.t_exercise_seconds)) +
+        ggplot(aes(x=calculated.variables.deathtime_after_acute)) +
         geom_histogram(bins = 68)
 tod_cols %>%
         filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
         ggplot(aes(x=specimen.collection.t_exercise_hour_sqrt)) +
-        geom_histogram(bins = 68)
-tod_cols %>%
-        filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
-        ggplot(aes(x=specimen.collection.t_exercise_hour_sqrt_jit)) +
         geom_histogram(bins = 68)
 
 # Collect samples without NA values in TOD
@@ -482,6 +532,124 @@ for(n in 1){
 
 # This command is redundent, but included for safety
 rs <- rowSums(counts(dds))
+
+#' #### Do Tissue Samples cluster by sex.
+#' Grey samples represent "reference samples".
+DESeq2::plotPCA(rld, intgroup ="animal.registration.sex") +
+    guides(color=guide_legend(title="Sex"))
+
+#' #### We see just how well duplicate samples correlate regardless of sequencing batch
+mypar()
+pcaData <- DESeq2::plotPCA(rld, 
+                           intgroup=c("animal.key.anirandgroup",
+                                      "animal.registration.sex",
+                                      "sample_key"), 
+                           returnData=TRUE, ntop = 500)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+#pdf(paste0(WD,"/plots/20200505_rnaseq-",TIS,"-PCA-naive-modeling_steep.pdf"),
+#    width = 6, height = 4)
+ggplot(pcaData, aes(PC1, PC2, color=animal.registration.sex)) +
+    geom_point(size=3) +
+    geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
+    xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+    ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+    #coord_fixed() +
+    ggtitle(paste0("PCA of ",TISSUE," Gene Expression:\nNaive Model (~ 1)")) +
+    guides(color=guide_legend(title="animal.key.anirandgroup")) +
+    theme(legend.title=element_blank())
+#dev.off()
+
+
+# Variables of interest
+male_tis <- (tod_cols %>% 
+                     filter(animal.registration.sex == 'Male'))$sample_key %>% 
+    as.character()
+female_tis <- (tod_cols %>% 
+                       filter(animal.registration.sex == 'Female'))$sample_key %>% 
+    as.character()
+
+Y_genes <- Y_ens_id[Y_ens_id %in% row.names(assay(rld))]
+X_genes <- X_ens_id[X_ens_id %in% row.names(assay(rld))]
+sex <- tod_cols$animal.registration.sex
+group <- tod_cols$animal.key.anirandgroup
+
+#' #### Predict the sex of reference samples (all samples for that matter) by calculating the median expression of genes on the Y chromosome. We should expect a bimodal distribution with males demonstrating significantly higher median expression.
+chryexp <- colMeans(assay(rld)[Y_genes,])
+
+chryexp_df <- data.frame("counts" = chryexp)
+chryexp_df$sample <- row.names(chryexp_df) %>% as.factor()
+chryexp_df <- chryexp_df %>%
+    mutate(sex = ifelse(sample %in% male_tis, 'Male', 'Female'))
+
+#' ##### If we create a histogram of the median gene expression values on chromosome Y, we should expect to see a bimodal distribution. Indeed, we do in kidney.
+mypar()
+hist(chryexp_df$counts, breaks = 200, 
+     main = "Histogram: \nY Chromosome Genes across Samples",
+     xlab = "Total reads on Y chromosome genes per sample")
+ggplot(chryexp_df, aes(counts, colour = sex)) +
+    geom_freqpoly() +
+    xlab("Total reads on Y chromosome genes per sample") +
+    ylab("Frequency") +
+    ggtitle("Frequency Polygon: \nY Chromosome Genes across Samples")
+# summary(chryexp)
+
+#' The distribution of sex by group
+table(group, sex) # <- Bad idea.
+
+#' #### Generate a heatmap of expression from 3 sets of genes:
+#' * Genes from the Y chromosome
+#' * The top and bottom 25 genes (50 total) associated with sex
+#' * Randomly selected genes
+
+#' ##### Males and Females demonstrate distinctly different gene expression profiles.
+#' * Genes on the Y chromosome are a good predictor of sex in Kidney mRNA measures (Figure 1)
+#' * Male and female samples show distinct correlation to one another (Figure 2)
+
+# Ensure males and females are ordered
+kidney_counts <- assay(rld)[,c(male_tis,female_tis,ref_kidneys)] %>% as.matrix()
+
+# T-test of expression associated with sex
+tt <- rowttests(kidney_counts,sex)
+
+# Take genes from the Y chromosome
+# Y_genes
+# Take the top and bottom 25 genes associated with variable of interest (remove any genes in Y chromosome)
+top <- row.names(tt[order(-tt$dm),][1:25,])
+bot <- row.names(tt[order(tt$dm),][1:25,])
+top_n_bot <- setdiff(c(top,bot), Y_genes)
+
+# Randomly select 50 genes not in prior sets 
+set.seed(123)
+randos <- setdiff(row.names(tt[sample(seq(along=tt$dm),50),]), c(Y_genes,top_n_bot))
+geneindex <- c(randos,top_n_bot,Y_genes)
+# Generate the heatmap and support with a plot of a correlation matrix
+mat <- kidney_counts[geneindex,]
+mat <- mat -rowMeans(mat)
+icolors <- colorRampPalette(rev(brewer.pal(11,"RdYlBu")))(100)
+mypar(1,2)
+image(t(mat),xaxt="n",yaxt="n",col=icolors)
+y <- kidney_counts - rowMeans(kidney_counts)
+image(1:ncol(y),1:ncol(y),cor(y),col=icolors,zlim=c(-1,1),
+      xaxt="n",xlab="",yaxt="n",ylab="")
+axis(2,1:ncol(y),sex,las=2)
+axis(1,1:ncol(y),sex,las=2)
+
+#' #### A naive t-test and genes with q values less than or equal to 0.05
+#' ##### The left figure represents a histogram of p values from a naive t-test (all genes). We see that a significant proportion of genes correlate with sex. To investigate if these genes are located on sex chromosomes or autosomal chromosomes, we contruct a volcano plot on the right. To our suprise, again, genes on the Y chromosome do not show signifcant correlation to sex. Rather some genes on the X chromosome demonstrate significance, however, these genes do not make up the majority of significantly assocaited genes.
+#' ## The variance in gene expression is not dicated by differential expression of genes on sex chromosomes.
+mypar(1,2)
+# Histogram of p values associated with ttest
+hist(tt$p.value,main="",ylim=c(0,1300), breaks = 100)
+plot(tt$dm,-log10(tt$p.value))
+points(tt[X_genes,]$dm,-log10(tt[X_genes,]$p.value),col=1,pch=16)
+points(tt[Y_genes,]$dm,-log10(tt[Y_genes,]$p.value),col=2,pch=16, xlab="Effect size",ylab="-log10(p-value)")
+legend("bottomright",c("X","Y"),col=1:2,pch=16)
+p <- tt$p.value
+qvals <- qvalue(tt$p.value)$qvalue
+index <- which(qvals<=0.05)
+abline(h=-log10(max(tt$p.value[index])))
+
+
 
 #' #### We see just how well duplicate samples correlate regardless of sequencing batch
 mypar()
@@ -688,10 +856,10 @@ by_gene_df <- by_gene_df %>%
         mutate(gam_resid = map2(data, gam_model, add_residuals))
 # Examine the model metrics
 by_gene_df <- by_gene_df %>%
-    mutate(gam_metrics = map(gam_model, broom::glance))
+        mutate(gam_metrics = map(gam_model, broom::glance))
 # Examine some model summaries
 by_gene_df <- by_gene_df %>%
-    mutate(gam_summary = map(gam_model, summary))
+        mutate(gam_summary = map(gam_model, summary))
 # Save the model metrics
 gam_metrics <- by_gene_df %>%
         mutate(gam_metrics = map(gam_model, broom::glance)) %>%

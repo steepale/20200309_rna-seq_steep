@@ -250,9 +250,6 @@ for(dc in date_cols){
         col_data[[dc]] <- ymd(col_data[[dc]])
 }
 
-
-
-
 # From Dates: 2/14/2019
 date_cols <- c("RNA_extr_date",
                "Lib_prep_date")
