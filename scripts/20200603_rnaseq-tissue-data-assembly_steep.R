@@ -172,8 +172,8 @@ lmp <- function (modelobject) {
 # OVR: Ovaries
 # SPL: Spleen
 # TES: Testes
-TISSUE <- "Hypothalamus"
-TIS <- "SCN"
+TISSUE <- "White Adipose"
+TIS <- "WAT"
 OUTLIERS <- c('None')
 MIS_ID <- c('None')
 MIS_ID_Fw2Mc <- c('None')
@@ -479,14 +479,14 @@ Y_sym <- mapIds(org.Rn.eg.db, names(Y_genes_gr), "SYMBOL", "ENSEMBL")
 # Filter Samples (meta)
 tod_cols <- col_data %>%
         filter(Tissue == TISSUE) %>%
-        filter(sample_key != OUTLIERS) %>%
+        #filter(sample_key != OUTLIERS) %>%
         filter(!is.na(animal.registration.sex))
 rownames(tod_cols) <- tod_cols$sample_key
 
 # Collect samples without NA values in TOD
 nona_sams <- tod_cols %>%
         filter(!is.na(specimen.collection.t_death_hour)) %>%
-        filter(sample_key != OUTLIERS) %>%
+        #filter(sample_key != OUTLIERS) %>%
         filter(!is.na(animal.registration.sex)) %>%
         select(sample_key) %>% unlist() %>% as.character()
 # Collect tissue specific counts
@@ -541,64 +541,6 @@ for(n in 1){
 # This command is redundent, but included for safety
 rs <- rowSums(counts(dds))
 
-#' ## Outlier Detection (By Sample)
-
-#+ Outlier Detection (By Sample)
-################################################################################
-#####     Outlier Detection (By Sample)     ####################################
-################################################################################
-
-# (iii) standardization of the data so that the expression measures for each array have mean 0 and variance 1 across genes.
-edata <- scale(t(assay(rld)))
-
-# check that we get mean of 0 and sd of 1
-apply(edata , 2, mean)
-apply(edata , 2, sd)
-
-# Sometimes genes will demonstrate Median Absolute Deviation (mad) == 0, this causes pcout() to stop. We have manually examined these genes, remove them.
-remove_genes <- names(edata.mad[edata.mad == 0])
-sig_genes <- res_vp %>%
-  filter(SIG == 'SIG') %>%
-  select()
-
-remove_genes %in% 
-
-
-# identify multivariate outliers
-x.out <- pcout(edata, makeplot = F)
-
-p=ncol(edata)
-n=nrow(edata)
-
-
-
-
-
-if (any(edata.mad==0))
-  stop("More than 50% equal values in one or more variables!")
-
-# Create a dataframe with 3 columns: gene, weight_combined, gene_index
-df_out <- data.frame(names(x.out$wfinal), x.out$wfinal) %>% as_tibble()
-names(df_out) <- c("sample", 'weight_combined')
-df_out$index <- row.names(df_out)
-
-# Arrange the dataframe by weight
-df_out <- df_out %>%
-  arrange(weight_combined)
-
-# Plot the Outliers by combined weight
-df_out %>%
-  sample_n(100) %>%
-  ggplot(aes(index, weight_combined)) +
-  geom_point(alpha = 0.3) +
-  geom_hline(yintercept = 0.25)
-
-# Number of strong outlier genes
-genes_out <- df_out %>%
-  filter(weight_combined < 0.10) %>%
-  select(gene) %>% unlist() %>% as.character()
-
-
 #' ## Qualitative Assessment of Variance in Tissue
 
 #+ Qualitative Assessment of Variance in Tissue
@@ -642,6 +584,7 @@ cor_PC_1_4 <- function(rld = rld, ntop = 500, intgroups){
   
 }
 #########
+# Find variables associated with PCs
 pc_cor_df <- cor_PC_1_4(rld = rld, ntop = 500, intgroups = names(tod_cols)) %>%
   filter(Adjusted_R_Sq > 0.3) %>%
   arrange(PC)
@@ -665,16 +608,20 @@ for( v in voi){
 DESeq2::plotPCA(rld, intgroup ="animal.registration.sex") +
         guides(color=guide_legend(title="Sex"))
 
-for(pri_var in PRI_VAR){
+################################################################################
+###### Manual Annotation Opportunity: Fill in PRI_VAR variable #################
+################################################################################
+
+#for(pri_var in PRI_VAR){
   pri_var <- "animal.registration.sex"
-}
+#}
 
 # Examine a labled PCA Plot
 ################################################################################
 #' #### We see just how well duplicate samples correlate regardless of sequencing batch
 mypar()
 pcaData <- DESeq2::plotPCA(rld, 
-                           intgroup=c(pri_var, "sample_key"), 
+                           intgroup=c(pri_var, "sample_key","animal.key.anirandgroup"), 
                            returnData=TRUE, ntop = 500)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
 #pdf(paste0(WD,"/plots/20200505_rnaseq-",TIS,"-PCA-naive-modeling_steep.pdf"),
@@ -682,7 +629,7 @@ percentVar <- round(100 * attr(pcaData, "percentVar"))
 pcaData %>%
   ggplot(aes_string("PC1", "PC2", color=pri_var)) +
         geom_point(size=3) +
-        geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
+        #geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
         xlab(paste0("PC1: ",percentVar[1],"% variance")) +
         ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
         #coord_fixed() +
@@ -747,12 +694,13 @@ edata <- scale(assay(rld))
 apply(edata , 2, mean)
 apply(edata , 2, sd)
 
-#' ## Outlier Detection (Per Gene)
+#' ## Reassign Annotation Groups to MisIdentified Samples: Outlier Detection (Per Gene)
 
-#+ Outlier Detection
+#+ Reassign Annotation Groups to MisIdentified Samples
 ################################################################################
-#####     Outlier Detection      ###############################################
+#####     Reassign Annotation Groups to MisIdentified Samples      #############
 ################################################################################
+# TODO: Add a conditional statement if samples we misidentieid or not
 
 # identify multivariate outliers
 x.out <- pcout(edata, makeplot = T)
@@ -868,9 +816,12 @@ true_sex = predict(rf.fit, mis_df)
 MIS_ID
 mis_df$animal.registration.sex
 
-#' ##### Males and Females demonstrate distinctly different gene expression profiles.
-#' * Genes on the Y chromosome are a good predictor of sex in Kidney mRNA measures (Figure 1)
-#' * Male and female samples show distinct correlation to one another (Figure 2)
+#' ## Correct for Sex Specific Variance: Examine Genes Driving Sex-Specific Variance
+
+#+ Examine Genes Driving Sex-Specific Variance
+################################################################################
+#########     Examine Genes Driving Sex-Specific Variance      #################
+################################################################################
 
 # DE Test for Sex (Ensure males and females are ordered)
 design = ~ animal.registration.sex # Primary variable needs to be last.
@@ -893,11 +844,12 @@ res_vp <- res_vp %>%
                         levels = c("X", "Y", "AUTO"))) %>%
   arrange(padj) %>%
   as_tibble()
+res_vp 
 
 # Generate a volcano plot
 res_vp %>%  
-  ggplot(aes(log2FoldChange, -log10(padj), color = CHROM)) +
-  geom_point(alpha = 0.7, size = 3) +
+  ggplot(aes(log2FoldChange, -log10(padj), color = CHROM, size = CHROM)) +
+  geom_point(alpha = 0.5) +
   geom_hline(yintercept = -log10(0.05), linetype="dashed") +
   geom_vline(xintercept = 0.5, linetype="dashed") +
   geom_vline(xintercept = -0.5, linetype="dashed") +
@@ -905,6 +857,7 @@ res_vp %>%
 Adjusted p-value <= 0.05; |Log2FC| >= 0.5") +
   ylab(bquote('-'~Log[10]~ 'Adjusted p-value (Bonferroni)')) +
   scale_color_manual(values=c('blue', 'red', 'grey')) +
+  scale_size_manual(values=c(3, 3, 1)) +
   theme_bw()
 
 # Generate an accompanying pvalue histogram
@@ -919,64 +872,266 @@ res_vp %>%
   scale_fill_manual(values=c('blue', 'red', 'grey')) +
   theme_bw()
 
+################################################################################
+###### Manual Annotation Opportunity: Fill in VAR_SEX_CRT variable #############
+################################################################################
+# Determine that Strategy for Sex-Specific Variance Adjustment
+
 #' ### Adjust for Between Sex Variance
 
 #+ Adjust for Between Sex Variance
 ################################################################################
 ########### Adjust for Between Sex Variance  ###################################
 ################################################################################
+# TODO: Generate a decision tree for which Sex-Specific Strategy to utilize
+# TODO: Adjust rld.test to just rld
+# Key:
+# Remove - Rm
+# Median center - Mc
+# Model - Mo
+# Sex Genes - Sg
+# Autosomal Genes - Au
+# DE Genes (Sex) - DEg
+# All Genes - Ag
 
-# "To adjust for batch effects, we median- centered the expression levels of each transcript within each batch and confirmed, using the correlation matrices, that the batch effects were removed after the adjustment." 
-#~ Li, J. Z. et al. Circadian patterns of gene expression in the human brain and disruption in major depressive disorder. Proc. Natl. Acad. Sci. U. S. A. 110, 9950–9955 (2013).
+VAR_SEX_CRT <- "MC_DEg"
 
-# Here we have 2 Groups: Control - IPE and Control 7 hr; we'll median center these groups to combine the sexes.
-
+# Collect male and female samples
 M_samples <- col_data %>%
-        filter(Tissue == TISSUE) %>%
-        filter(!is.na(animal.registration.sex)) %>%
-        filter(animal.registration.sex == 'Male') %>%
-        filter(sample_key != OUTLIERS) %>%
-        #filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
-        select(sample_key) %>% unlist() %>% as.character()
+  filter(Tissue == TISSUE) %>%
+  filter(animal.registration.sex == 'Male') %>%
+  dplyr::select(sample_key) %>% unlist() %>% as.character()
 F_samples <- col_data %>%
-        filter(Tissue == TISSUE) %>%
-        filter(!is.na(animal.registration.sex)) %>%
-        filter(sample_key != OUTLIERS) %>%
-        filter(animal.registration.sex == 'Female') %>%
-        #filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
-        select(sample_key) %>% unlist() %>% as.character()
+  filter(Tissue == TISSUE) %>%
+  filter(animal.registration.sex == 'Female') %>%
+  dplyr::select(sample_key) %>% unlist() %>% as.character()
+SIG_genes <- res_vp %>%
+  filter(SIG == "SIG") %>%
+  dplyr::select(ENSEMBL_RAT) %>% unlist() %>% as.character()
+NS_genes <- res_vp %>%
+  filter(SIG == "NS") %>%
+  dplyr::select(ENSEMBL_RAT) %>% unlist() %>% as.character()
 # Select the counts
-M_counts <- assay(rld[, M_samples])
-F_counts <- assay(rld[, F_samples])
-
-# Median Center data
-# Collects median of each row, then subtracts by row medians
-M_medians <- apply(M_counts,1,median)
-M_centered <- M_counts - M_medians
-F_medians <- apply(F_counts,1,median)
-F_centered <- F_counts - F_medians
-counts_centered <- cbind(M_centered, F_centered)
-counts_centered <- counts_centered[, colnames(assay(rld))]
-assay(rld) <- counts_centered
-
+MSIG_counts <- assay(rld[SIG_genes, M_samples])
+FSIG_counts <- assay(rld[SIG_genes, F_samples])
+MNS_counts <- assay(rld[NS_genes, M_samples])
+FNS_counts <- assay(rld[NS_genes, F_samples])
+  
+if(VAR_SEX_CRT == "MC_DEg"){
+  # Median Center Significant Genes
+  # Collects median of each row, then subtracts by row medians
+  M_medians <- apply(MSIG_counts,1,median)
+  MSIG_counts <- MSIG_counts - M_medians
+  F_medians <- apply(FSIG_counts,1,median)
+  FSIG_counts <- FSIG_counts - F_medians
+  SIG_counts <- cbind(MSIG_counts, FSIG_counts)
+  
+  # Non-Significant Genes
+  NS_counts <- cbind(MNS_counts, FNS_counts)
+  MC_DEg_counts <- rbind(SIG_counts, NS_counts)
+  MC_DEg_counts <- MC_DEg_counts[, colnames(assay(rld))]
+  #rld.test <- rld
+  assay(rld.test) <- MC_DEg_counts
+}else if(VAR_SEX_CRT == "MC_Ag"){
+  # Median Center Significant Genes
+  # Collects median of each row, then subtracts by row medians
+  M_medians <- apply(MSIG_counts,1,median)
+  MSIG_counts <- MSIG_counts - M_medians
+  F_medians <- apply(FSIG_counts,1,median)
+  FSIG_counts <- FSIG_counts - F_medians
+  SIG_counts <- cbind(MSIG_counts, FSIG_counts)
+  
+  # Non-Significant Genes
+  M_medians <- apply(MNS_counts,1,median)
+  MNS_counts <- MNS_counts - M_medians
+  F_medians <- apply(FNS_counts,1,median)
+  FNS_counts <- FNS_counts - F_medians
+  NS_counts <- cbind(MNS_counts, FNS_counts)
+  MC_Ag_counts <- rbind(SIG_counts, NS_counts)
+  MC_Ag_counts <- MC_Ag_counts[, colnames(assay(rld))]
+  #rld.test <- rld
+  assay(rld.test) <- MC_Ag_counts
+}
+  
+# Find variables associated with PCs
+pc_cor_df <- cor_PC_1_4(rld = rld.test, ntop = 500, intgroups = names(colData(rld.test))) %>%
+  filter(Adjusted_R_Sq > 0.1) %>%
+  arrange(PC)
+# Examine Variables of interest for Pcs 1 and 2
+pc_cor_df %>%
+  filter(PC %in% c(1,2))
+# Visualize variables in PC's 1 and 2
+voi <- pc_cor_df %>%
+  filter(PC %in% c(1,2)) %>%
+  dplyr::select(Condition) %>% unlist() %>% as.character() %>% unique()
+# Plot the top variables associated with PCs 1 or 2
+for( v in voi){
+  # Quick investigation of variables
+  plot(DESeq2::plotPCA(rld.test, intgroup =v) +
+         guides(color=guide_legend(title=v)))
+}
 #' #### We see just how well duplicate samples correlate regardless of sequencing batch
+DESeq2::plotPCA(rld.test, intgroup ="animal.registration.sex") +
+  guides(color=guide_legend(title="Sex"))
+
 mypar()
-pcaData <- DESeq2::plotPCA(rld, 
+pcaData <- DESeq2::plotPCA(rld.test, 
                            intgroup=c("animal.key.anirandgroup",
                                       "animal.registration.sex",
-                                      "sample_key"), 
+                                      "sample_key", unique(voi)), 
+                           returnData=TRUE, ntop = 10000)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registration.sex)) +
+  geom_point(size=3) +
+  geom_label_repel(aes(label=RNA_extr_conc),hjust=0, vjust=0) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  #coord_fixed() +
+  ggtitle(paste0("PCA of ",TISSUE," Gene Expression:\ny ~ sex + cohort")) +
+  guides(color=guide_legend(title="animal.key.anirandgroup")) +
+  scale_color_manual(values=ec_colors) +
+  theme(legend.title=element_blank())
+
+#' ## Outlier Detection (By Sample)
+
+#+ Outlier Detection (By Sample)
+################################################################################
+#####     Outlier Detection (By Sample)     ####################################
+################################################################################
+pri_var <- "animal.registration.sex"
+mypar()
+pcaData <- DESeq2::plotPCA(rld.test, 
+                           intgroup=c(pri_var, "sample_key",
+                                      "animal.key.anirandgroup"), 
                            returnData=TRUE, ntop = 500)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
-pdf(paste0(WD,"/plots/20200426_rnaseq-",TIS,"-PCA-sexmod-modeling_steep.pdf"),
-    width = 6, height = 4)
-ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registration.sex)) +
-        geom_point(size=3) +
-        #geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
-        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
-        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
-        #coord_fixed() +
-        ggtitle(paste0("PCA of ",TISSUE," Gene Expression:\ny ~ sex + cohort")) +
-        guides(color=guide_legend(title="animal.key.anirandgroup")) +
-        scale_color_manual(values=ec_colors) +
-        theme(legend.title=element_blank())
-dev.off()
+p <- pcaData %>%
+  ggplot(aes_string("PC1", "PC2", color=pri_var)) +
+  geom_point(size=3) +
+  #geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  #coord_fixed() +
+  ggtitle(paste0("PCA of ",TISSUE," Gene Expression:\nNaive Model (~ 1)")) +
+  guides(color=guide_legend(title=pri_var)) +
+  theme(legend.title=element_blank()) +
+  #scale_color_manual(values=ec_colors) +
+  scale_shape_manual(values=c(3, 19))
+plot(p)
+
+# (iii) standardization of the data so that the expression measures for each array have mean 0 and variance 1 across genes.
+edata <- t(assay(rld))
+rv <- rowVars(assay(rld))
+top_genes <- order(rv, decreasing = TRUE)[seq_len(min(100, length(rv)))]
+edata <- scale(t(assay(rld)[top_genes, ]))
+dim(edata)
+
+# check that we get mean of 0 and sd of 1
+apply(edata , 2, mean)
+apply(edata , 2, sd)
+edata.mad=apply(edata,2,mad)
+
+# Sometimes genes will demonstrate Median Absolute Deviation (mad) == 0, this causes pcout() to stop. We have manually examined these genes, remove them.
+remove_genes <- names(edata.mad[edata.mad == 0])
+edata <- edata[,colnames(edata)[colnames(edata) %!in% remove_genes]]
+
+# identify multivariate outliers
+x.out <- pcout(edata, makeplot = T)
+
+# Create a dataframe with 3 columns: gene, weight_combined, gene_index
+df_out <- data.frame(names(x.out$wfinal), x.out$wfinal) %>% as_tibble()
+names(df_out) <- c("sample_key", 'weight_combined')
+df_out$index <- row.names(df_out)
+# Add all other annotations
+df_out <- left_join(df_out, as_tibble(colData(rld)), by = c("sample_key"))
+
+# Arrange the dataframe by weight
+df_out <- df_out %>%
+  arrange(weight_combined)
+
+# Plot the Outliers by combined weight (annotation 1)
+df_out %>%
+  mutate(plot_label = ifelse(sample_key %in% 
+                               c('90009017003_SF1','90039017003_SF1',
+                                 '90027017003_SF1','90047017003_SF1'),
+                             sample_key, '')) %>%
+  ggplot(aes(index, weight_combined, color = animal.key.anirandgroup)) +
+  geom_point(alpha = 0.7, size = 3) +
+  geom_label_repel(aes(label=plot_label),hjust=0, vjust=0) +
+  geom_hline(yintercept = 0.05, linetype="dashed") +
+  guides(color=guide_legend(title="animal.key.anirandgroup")) +
+  scale_color_manual(values=ec_colors) +
+  theme(legend.title=element_blank())
+
+# Number of strong outlier samples
+samples_out <- df_out %>%
+  filter(weight_combined < 0.05) %>%
+  dplyr::select(sample_key) %>% unlist() %>% as.character()
+# Adjust the annotation of the rld object
+colData(rld)$sample_outlier <- factor(ifelse(colData(rld)$sample_key %in% samples_out, 
+                                             'Outlier', 'Normal'),
+                                      levels = c("Normal", 'Outlier'))
+
+# Determine what is correlated with outliers
+# Function to grab topp 500 variance genes and find correlated variables
+###########
+cor_outlier <- function(rld = rld, ntop = 500, intgroups = names(colData(rld))){
+  # Create out dataframe
+  out_df <- data.frame(matrix(ncol = 2, nrow = 0))
+  names(out_df) <- c("Adjusted_R_Sq","Condition")
+  for(intgroup in intgroups) {
+    #intgroup <- "animal.key.anirandgroup"
+    group <- colData(rld)[[intgroup]]
+    d <- colData(rld) %>% as_tibble()
+    d <- d %>% mutate(sample_outlier = ifelse(sample_outlier == 'Outlier', 1, 0))
+    # Perform linear model on PC vs
+    if(length(unique(group[!is.na(group)])) >=2){
+      int_r2 <- (lm(d[["sample_outlier"]] ~ d[[intgroup]]) %>% summary())$adj.r.squared
+      int_df <- data.frame(Adjusted_R_Sq = int_r2,
+                           Condition = intgroup) %>% as_tibble()
+      out_df <- rbind(out_df, int_df)
+    }else{
+      NA
+    }
+  }
+  out_df %>%
+    arrange(desc(Adjusted_R_Sq)) %>%
+    filter(Adjusted_R_Sq >= 0.1) %>%
+    filter(Condition  != "sample_outlier")
+}
+###########
+# Examine metadata varibales most correlated with outlier samples to determine if outliers are genuine
+cor_out_df <- cor_outlier(rld = rld, ntop = 500, intgroups = names(colData(rld)))
+cor_out_df <- cor_out_df %>% 
+  filter(Condition != "outlier")
+
+# PCA that examines all variables associated with outlier status
+voi <- c(as.character(cor_out_df$Condition), "animal.key.anirandgroup")
+for( v in voi){
+  mypar()
+  pcaData <- DESeq2::plotPCA(rld, 
+                             intgroup=c(pri_var, "sample_key",
+                                        "animal.key.anirandgroup","sample_outlier",v), 
+                             returnData=TRUE, ntop = 500)
+  percentVar <- round(100 * attr(pcaData, "percentVar"))
+  p <- pcaData %>%
+    ggplot(aes_string("PC1", "PC2", color=v, shape = "sample_outlier")) +
+    geom_point(size=3) +
+    geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
+    xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+    ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+    #coord_fixed() +
+    ggtitle(paste0("PCA of ",TISSUE," Gene Expression:\nNaive Model (~ 1)")) +
+    guides(color=guide_legend(title=pri_var)) +
+    theme(legend.title=element_blank()) +
+    #scale_color_manual(values=ec_colors) +
+    scale_shape_manual(values=c(3, 19))
+  plot(p)
+}
+
+################################################################################
+###### Manual Annotation Opportunity: Fill in OUTLIER variable #################
+################################################################################
+# Note: If Samples Labled as Outliers are in Acute exercise groups, then they likely do not meet our criteria for outliers.
+
+
