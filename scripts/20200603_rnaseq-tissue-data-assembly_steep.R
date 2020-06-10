@@ -172,8 +172,8 @@ lmp <- function (modelobject) {
 # OVR: Ovaries
 # SPL: Spleen
 # TES: Testes
-TISSUE <- "White Adipose"
-TIS <- "WAT"
+TISSUE <- "Adrenal"
+TIS <- "ADG"
 OUTLIERS <- c('None')
 MIS_ID <- c('None')
 MIS_ID_Fw2Mc <- c('None')
@@ -496,7 +496,8 @@ tod_counts <- count_data[,nona_sams]
 all(rownames(tod_cols) == colnames(tod_counts))
 
 # Create a design formula and load counts and supporting annotation into an S4 object (DESeq infrastructure)
-design = ~1 # Primary variable needs to be last.
+
+design = ~ animal.registration.sex + animal.key.anirandgroup # Primary variable needs to be last.
 title = paste0('Design: ',as.character(design))
 dds1 <- DESeqDataSetFromMatrix(countData = tod_counts,
                                colData = tod_cols,
