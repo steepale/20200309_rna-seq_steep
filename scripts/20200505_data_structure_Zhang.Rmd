@@ -1,0 +1,235 @@
+---
+title: "Untitled"
+author: "Jiayu Zhang"
+date: "5/11/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(cache = FALSE)
+```
+
+# Data Structure Visualization
+> 
+
+
+### set up the environment
+```{r}
+################################################################################
+##### Resources and Dependencies ###############################################
+################################################################################
+
+# Set the working directory
+WD <- '/Volumes/SanDisk64GB/MoTrPAC/'
+setwd(WD)
+
+# Load dependencies
+pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2",
+               "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr",
+               "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt","feather",
+               "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel",
+               "AnnotationDbi")
+
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("PROPER")
+BiocManager::install("org.Rn.eg.db")
+BiocManager::install("pcaExplorer")
+BiocManager::install("GenomicFeatures")
+BiocManager::install("S4Vector")
+BiocManager::install("qvalue")
+BiocManager::install("org.Mm.eg.db")
+mypackages = c("tidyverse","GenomicRanges", "DESeq2","devtools","ggplot2","dplyr","PROPER", "lubridate", "hms",
+               "org.Rn.eg.db", "AnnotationDbi", "pcaExplorer", "pheatmap","GenomicFeatures", "genefilter", "qvalue",  "org.Mm.eg.db", "enrichR")
+lapply(mypackages, FUN = function(X) {
+  do.call("library", list(X)) })
+
+
+############################################################
+##### Functions ############################################
+############################################################
+
+# Set select
+select <- dplyr::select
+
+# Import ortholog function
+source('20200429_rat2mouse_ortho.R')
+
+# Capture the Date and Author
+################################################################################
+date <- format.Date( Sys.Date(), '%Y%m%d' )
+auth <- "Jiayu"
+################################################################################
+```
+
+
+## Data structure  
+### Load and clean data
+
+* Data file to load:
+  + large count matrix with all tissues included and corresponding meta  
+```{r}
+# count matrix in combined
+count_dat = read.csv(file = paste0(WD,'Data/rna-seq/20200309_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv'), 
+                          header = T, na.strings = "NA", check.names = F) %>% as.matrix()
+
+# meta data is also combined by phenotype and meta
+meta_dat = read.table(file = paste0(WD,'Data/rna-seq/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt'), sep = '\t', header = T, na.strings = "NA", check.names = F)
+
+mode(count_dat) = "integer"
+
+meta_dat %>% na.omit()
+row.names(meta_dat) = meta_dat$sample_key
+meta_dat$count_amount = colSums(count_dat)
+```
+
+### pre-alignment
+
+```{r}
+
+xlabel = levels(meta_dat$Tissue)
+# RNA extarction concentration
+ggplot(meta_dat, aes(x = Tissue, y = RNA_extr_conc, color = Seq_batch)) + 
+  geom_boxplot() + 
+  labs(title = "RNA extraction concentration over Tissue types", y = "RNA conc") +
+  theme(axis.text.x = element_text(angle = 45))
+# boxplot(RNA_extr_conc ~ Tissue,
+#         data = meta_dat,
+#         main = "RNA extraction concentration over Tissue types",
+#         ylab = "RNA concentration",
+#         xlab = NULL,
+#         col = "orange",
+#         border = "brown",
+#         las = 2)
+#text(seq_len(length(xlabel)),par("usr")[1], labels=xlabel, srt=45, pos=1, xpd=TRUE)
+
+# Library RNA concentration
+ggplot(meta_dat, aes(x = Tissue, y = Lib_RNA_conc, color = Seq_batch)) + 
+  geom_boxplot() + 
+  labs(title = "Library RNA concentration over Tissue types", y = "RNA conc") +
+  theme(axis.text.x = element_text(angle = 45))
+
+
+# boxplot(Lib_RNA_conc ~ Tissue,
+#         data = meta_dat,
+#         main = "Library RNA concentration over Tissue types",
+#         ylab = "RNA concentration",
+#         xlab = NULL,
+#         col = "orange",
+#         border = "brown",
+#         las = 2)
+
+# library RNA volume
+
+ggplot(meta_dat, aes(x = Tissue, y = Lib_RNA_vol, color = Seq_batch)) + 
+  geom_boxplot() + 
+  labs(title = "Library RNA volume over Tissue types", y = "RNA vol") +
+  theme(axis.text.x = element_text(angle = 45))
+
+# boxplot(Lib_RNA_vol ~ Tissue,
+#         data = meta_dat,
+#         main = "Library RNA volume over Tissue types",
+#         ylab = "RNA vol",
+#         xlab = NULL,
+#         col = "orange",
+#         border = "brown",
+#         las = 2)
+
+ggplot(meta_dat, aes(x = Tissue, y = Lib_RNA_vol*Lib_RNA_conc, color = Seq_batch)) + 
+  geom_boxplot() + 
+  labs(title = "Library RNA moles over Tissue types", y = "RNA moles") +
+  theme(axis.text.x = element_text(angle = 45))
+
+# library fragment size
+
+ggplot(meta_dat, aes(x = Tissue, y = Lib_frag_size, color = Seq_batch)) + 
+  geom_boxplot() + 
+  labs(title = "Library fragment size over Tissue types", y = "size/bp") +
+  theme(axis.text.x = element_text(angle = 45))
+
+# boxplot(Lib_frag_size ~ Tissue,
+#         data = meta_dat,
+#         main = "Library fragment size over Tissue types",
+#         ylab = "size/bp",
+#         xlab = NULL,
+#         col = "orange",
+#         border = "brown",
+#         las = 2)
+
+# library DNA concentration
+ggplot(meta_dat, aes(x = Tissue, y = Lib_DNA_conc, color = Seq_batch)) + 
+  geom_boxplot() + 
+  labs(title = "Library DNA concentration over Tissue types", y = "DNA conc") +
+  theme(axis.text.x = element_text(angle = 45))
+
+# boxplot(Lib_DNA_conc ~ Tissue,
+#         data = meta_dat,
+#         main = "Library DNA concentration over Tissue types",
+#         ylab = "DNA conc",
+#         xlab = NULL,
+#         col = "orange",
+#         border = "brown",
+#         las = 2)
+
+# library molarity
+ggplot(meta_dat, aes(x = Tissue, y = Lib_molarity, color = Seq_batch)) + 
+  geom_boxplot() + 
+  labs(title = "Library molarity over Tissue types") +
+  theme(axis.text.x = element_text(angle = 45))
+
+
+# boxplot(Lib_molarity ~ Tissue,
+#         data = meta_dat,
+#         main = "Library molarity over Tissue types",
+#         xlab = NULL,
+#         col = "orange",
+#         border = "brown",
+#         las = 2)
+```
+Mt. Sinai didn't report their RNA-extr info and lib info (may cause some variance)
+```{r}
+ggplot(meta_dat, aes(x = Tissue, y = count_amount, color = Seq_batch)) + 
+   geom_boxplot() + 
+labs(title = "Count amount sum over Tissue types", y = "count amount") +
+    theme(axis.text.x = element_text(angle = 45))
+```
+
+
+### LEVEL OF animal and samples 
+```{r}
+n_animal =meta_dat %>% 
+  filter(!is.na(animal.familiarization.participantguid))%>%
+  group_by(animal.familiarization.participantguid) %>% 
+  summarize(n())
+
+plot(n_animal,
+     main = "# of Samples per Animal")
+
+
+
+sum_animal = meta_dat %>% 
+  filter(!is.na(animal.familiarization.participantguid))%>%
+  group_by(animal.familiarization.participantguid) %>% 
+  summarize(mean_size = mean(count_amount)) 
+
+ggplot(sum_animal, aes()
+     main = "Mean Total Count Per Animal")
+
+
+sum_tissue = meta_dat %>% 
+  filter(!is.na(Tissue))%>%
+  group_by(Tissue) %>% 
+  summarize(mean_size = mean(count_amount)) 
+
+
+plot(sum_tissue, 
+     main = "Mean Total Count Per Tissue",
+     xlab = NULL,
+     ylab = NULL,
+     las = 2)
+```
+

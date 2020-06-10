@@ -45,10 +45,12 @@ BiocManager::install("pcaExplorer")
 BiocManager::install("GenomicFeatures")
 BiocManager::install("S4Vector")
 BiocManager::install("qvalue")
+BiocManager::install("org.Mm.eg.db")
 mypackages = c("tidyverse","GenomicRanges", "DESeq2","devtools","ggplot2","dplyr","PROPER", "lubridate", "hms",
-               "org.Rn.eg.db", "AnnotationDbi", "pcaExplorer", "pheatmap","GenomicFeatures", "genefilter", "qvalue")
+               "org.Rn.eg.db", "AnnotationDbi", "pcaExplorer", "pheatmap","GenomicFeatures", "genefilter", "qvalue",  "org.Mm.eg.db", "enrichR")
 lapply(mypackages, FUN = function(X) {
   do.call("library", list(X)) })
+
 
 ############################################################
 ##### Functions ############################################
@@ -56,6 +58,9 @@ lapply(mypackages, FUN = function(X) {
 
 # Set select
 select <- dplyr::select
+
+# Import ortholog function
+source('20200429_rat2mouse_ortho.R')
 
 # Capture the Date and Author
 ################################################################################
@@ -345,16 +350,17 @@ summary(sizeFactors(hypo_dds))
 log2_norm_counts = log2(normalized_counts + 1)
 vst_norm_counts = vst(hypo_dds)
 rlog_norm_counts = rlog(hypo_dds)
-par(mfrow=c(1,2))
+par(mfrow=c(1,3))
 boxplot(log2_norm_counts, ylim = c(0,20), cex = 0.2, main = "log2 transformation")
 boxplot(assay(vst_norm_counts), ylim = c(0,20), cex = 0.2, main = "vst transformation")
-boxplot(log2_norm_counts, ylim = c(0,20), cex = 0.2, main = "log2 transformation")
+#boxplot(log2_norm_counts, ylim = c(0,20), cex = 0.2, main = "log2 transformation")
 boxplot(assay(rlog_norm_counts), ylim = c(0,20), cex = 0.2, main = "rlog transformation")
 ```
 * VST uses a subset of genes and divides each column of the counts matrix by size factors. It shrinked  
 the counts matrix range (to about 6 to 20) more than the other 2 methods.
 * Log2 and rlog are pretty much similar to each other.
 ```{r}
+par(mfrow=c(2,2))
 plot(assay(vst_norm_counts)[,3:4],
      xlab = "sample 1 VST gene counts",
      ylab = "sample 2 VST gene counts",
@@ -382,6 +388,7 @@ counts$genename <- mapIds(org.Rn.eg.db, counts$ensembl, "GENENAME", "ENSEMBL")
 counts$go <- mapIds(org.Rn.eg.db, counts$ensembl, "GO", "ENSEMBL")
 counts$path <- mapIds(org.Rn.eg.db, counts$ensembl, "PATH", "ENSEMBL")
 
+
 # Here we examine all samples by batch and tissue
 # 
 # first PCA with intGroup of tissue
@@ -391,7 +398,7 @@ DESeq2::plotPCA(rlog_norm_counts, intgroup ="animal.registration.sex") +
 
 pcaData <- DESeq2::plotPCA(rlog_norm_counts, intgroup=c("animal.key.anirandgroup","animal.registration.sex"), returnData=TRUE)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
-ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup, shape = animal.registration.sex)) +
+ggplot(pcaData, aes(PC1, PC2, color= animal.registration.sex)) +
   geom_point(size=3) +
   #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
   xlab(paste0("PC1: ",percentVar[1],"% variance")) +
@@ -400,6 +407,174 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup, shape = animal.regi
   ggtitle("Hypothalamus Samples Across Groups")
 
 
+```
+### Comparison of 3 batch correction methods
+#### Median Centering
+```{r}
+# Here I median-centered each group
+# C0
+m_c0_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Male') %>% 
+  filter(animal.key.anirandgroup == 'Control - IPE') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+f_c0_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Female') %>% 
+  filter(animal.key.anirandgroup == 'Control - IPE') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+m_c0_counts = assay(rlog_norm_hypo_dds_medcen[, m_c0_id])
+f_c0_counts = assay(rlog_norm_hypo_dds_medcen[, f_c0_id])
+m_c0_centered = m_c0_counts - rowMedians(m_c0_counts)
+f_c0_centered = f_c0_counts - rowMedians(f_c0_counts)
+
+# C7
+m_c7_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Male') %>% 
+  filter(animal.key.anirandgroup == 'Control - 7 hr') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+f_c7_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Female') %>% 
+  filter(animal.key.anirandgroup == 'Control - 7 hr') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+m_c7_counts = assay(rlog_norm_hypo_dds_medcen[, m_c7_id])
+f_c7_counts = assay(rlog_norm_hypo_dds_medcen[, f_c7_id])
+m_c7_centered = m_c7_counts - rowMedians(m_c7_counts)
+f_c7_centered = f_c7_counts - rowMedians(f_c7_counts)
+
+# E0 
+m_e0_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Male') %>% 
+  filter(animal.key.anirandgroup == 'Exercise - IPE') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+f_e0_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Female') %>% 
+  filter(animal.key.anirandgroup == 'Exercise - IPE') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+m_e0_counts = assay(rlog_norm_hypo_dds_medcen[, m_e0_id])
+f_e0_counts = assay(rlog_norm_hypo_dds_medcen[, f_e0_id])
+m_e0_centered = m_e0_counts - rowMedians(m_e0_counts)
+f_e0_centered = f_e0_counts - rowMedians(f_e0_counts)
+
+# E05
+m_e05_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Male') %>% 
+  filter(animal.key.anirandgroup == 'Exercise - 0.5 hr') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+f_e05_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Female') %>% 
+  filter(animal.key.anirandgroup == 'Exercise - 0.5 hr') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+m_e05_counts = assay(rlog_norm_hypo_dds_medcen[, m_e05_id])
+f_e05_counts = assay(rlog_norm_hypo_dds_medcen[, f_e05_id])
+m_e05_centered = m_e05_counts - rowMedians(m_e05_counts)
+f_e05_centered = f_e05_counts - rowMedians(f_e05_counts)
+
+# E1
+m_e1_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Male') %>% 
+  filter(animal.key.anirandgroup == 'Exercise - 1 hr') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+f_e1_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Female') %>% 
+  filter(animal.key.anirandgroup == 'Exercise - 1 hr') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+m_e1_counts = assay(rlog_norm_hypo_dds_medcen[, m_e1_id])
+f_e1_counts = assay(rlog_norm_hypo_dds_medcen[, f_e1_id])
+m_e1_centered = m_e1_counts - rowMedians(m_e1_counts)
+f_e1_centered = f_e1_counts - rowMedians(f_e1_counts)
+
+
+# E4
+m_e4_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Male') %>% 
+  filter(animal.key.anirandgroup == 'Exercise - 4 hr') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+f_e4_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Female') %>% 
+  filter(animal.key.anirandgroup == 'Exercise - 4 hr') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+m_e4_counts = assay(rlog_norm_hypo_dds_medcen[, m_e4_id])
+f_e4_counts = assay(rlog_norm_hypo_dds_medcen[, f_e4_id])
+m_e4_centered = m_e4_counts - rowMedians(m_e4_counts)
+f_e4_centered = f_e4_counts - rowMedians(f_e4_counts)
+
+# E7
+m_e7_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Male') %>% 
+  filter(animal.key.anirandgroup == 'Exercise - 7 hr') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+f_e7_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Female') %>% 
+  filter(animal.key.anirandgroup == 'Exercise - 7 hr') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+m_e7_counts = assay(rlog_norm_hypo_dds_medcen[, m_e7_id])
+f_e7_counts = assay(rlog_norm_hypo_dds_medcen[, f_e7_id])
+m_e7_centered = m_e7_counts - rowMedians(m_e7_counts)
+f_e7_centered = f_e7_counts - rowMedians(f_e7_counts)
+
+
+# E24
+m_e24_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Male') %>% 
+  filter(animal.key.anirandgroup == 'Exercise - 24 hr') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+f_e24_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Female') %>% 
+  filter(animal.key.anirandgroup == 'Exercise - 24 hr') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+m_e24_counts = assay(rlog_norm_hypo_dds_medcen[, m_e24_id])
+f_e24_counts = assay(rlog_norm_hypo_dds_medcen[, f_e24_id])
+m_e24_centered = m_e24_counts - rowMedians(m_e24_counts)
+f_e24_centered = f_e24_counts - rowMedians(f_e24_counts)
+
+
+# E48
+m_e48_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Male') %>% 
+  filter(animal.key.anirandgroup == 'Exercise - 48 hr') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+f_e48_id = hypothalamus_cols %>% filter(!is.na(animal.registration.sex)) %>%
+  filter(animal.registration.sex == 'Female') %>% 
+  filter(animal.key.anirandgroup == 'Exercise - 48 hr') %>% select(vial_label) %>%
+  unlist() %>% as.character()
+m_e48_counts = assay(rlog_norm_hypo_dds_medcen[, m_e48_id])
+f_e48_counts = assay(rlog_norm_hypo_dds_medcen[, f_e48_id])
+m_e48_centered = m_e48_counts - rowMedians(m_e48_counts)
+f_e48_centered = f_e48_counts - rowMedians(f_e48_counts)
+
+
+# combine all median center data
+counts_centered = cbind(m_c0_centered, m_c7_centered, m_e0_centered, m_e05_centered, m_e1_centered, m_e4_centered, m_e7_centered, m_e24_centered, m_e48_centered, f_c0_centered, f_c7_centered, f_e0_centered, f_e05_centered, f_e1_centered, f_e4_centered, f_e7_centered, f_e24_centered, f_e48_centered)
+
+
+
+hypo_dds_medcen <- DESeqDataSetFromMatrix(countData = hypothalamus_counts[, colnames(counts_centered)],
+                              colData = hypothalamus_cols[colnames(counts_centered),],
+                              design = ~ acute_ex)
+
+# remove genes that have avg counts less than 1 (reduced to maintain more sex-relate genes)
+keep <- rowMeans(assay(hypo_dds_medcen)) >= 1
+hypo_dds_medcen <- hypo_dds_medcen[keep,]
+hypo_dds_medcen = estimateSizeFactors(hypo_dds_medcen)
+rlog_norm_hypo_dds_medcen = rlog(hypo_dds_medcen)
+
+
+counts_centered = counts_centered[, colnames(assay(rlog_norm_hypo_dds_medcen))]
+rld_medcen = rlog_norm_hypo_dds_medcen
+assay(rld_medcen) = counts_centered
+
+DESeq2::plotPCA(rld_medcen, intgroup ="animal.registration.sex") +
+  guides(color=guide_legend(title="sex"))
+
+
+pcaData <- DESeq2::plotPCA(rld_medcen, intgroup=c("animal.key.anirandgroup","animal.registration.sex", "acute_ex"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup, shape = acute_ex)) +
+  geom_point(size=3) +
+  #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  #coord_fixed() +
+  ggtitle("Hypothalamus Samples with median centered")
 ```
 
 ```{r}
@@ -476,7 +651,7 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup, shape = animal.regi
 ```{r}
 hypo_dds_rm_sex <- DESeqDataSetFromMatrix(countData = hypothalamus_counts_rm_sex,
                               colData = hypothalamus_cols,
-                              design = design)
+                              design = ~acute_ex)
 
 # remove genes that have avg counts less than 1 (reduced to maintain more sex-relate genes)
 keep <- rowSums(counts(hypo_dds_rm_sex))/ncol(hypo_dds_rm_sex) > 1
@@ -491,7 +666,7 @@ DESeq2::plotPCA(rlog_norm_hypo_dds_rm_sex, intgroup ="animal.registration.sex") 
 
 pcaData <- DESeq2::plotPCA(rlog_norm_hypo_dds_rm_sex, intgroup=c("animal.key.anirandgroup","animal.registration.sex"), returnData=TRUE)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
-ggplot(pcaData, aes(PC1, PC2, color=animal.registration.sex)) +
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup, shape = animal.registration.sex)) +
   geom_point(size=3) +
   #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
   xlab(paste0("PC1: ",percentVar[1],"% variance")) +
@@ -500,6 +675,42 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.registration.sex)) +
   ggtitle("Hypothalamus Samples with 16 Genes Removed")
 ```
 
+
+
+```{r}
+hypothalamus_cols_c = hypothalamus_cols[hypothalamus_cols$animal.key.anirandgroup %in% c("Control - IPE", "Control - 7 hr"), ]
+hypothalamus_counts_rm_sex_c = hypothalamus_counts_rm_sex[, rownames(hypothalamus_cols_c)]
+hypo_dds_rm_sex_c <- DESeqDataSetFromMatrix(countData = hypothalamus_counts_rm_sex_c,
+                              colData =  hypothalamus_cols_c,
+                              design = ~animal.key.anirandgroup)
+
+# remove genes that have avg counts less than 1 (reduced to maintain more sex-relate genes)
+keep <- rowSums(counts(hypo_dds_rm_sex_c))/ncol(hypo_dds_rm_sex_c) > 1
+hypo_dds_rm_sex_c <- hypo_dds_rm_sex_c[keep,]
+hypo_dds_rm_sex_c = estimateSizeFactors(hypo_dds_rm_sex_c)
+hypo_dds_rm_sex_c = vst(hypo_dds_rm_sex_c)
+
+
+#DESeq2::plotPCA(rlog_norm_hypo_dds_rm_sex_c, intgroup ="animal.registration.sex") +
+#  guides(color=guide_legend(title="sex"))
+
+
+pcaData <- DESeq2::plotPCA(hypo_dds_rm_sex_c, intgroup=c("animal.key.anirandgroup","animal.registration.sex"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup, shape = animal.registration.sex)) +
+  geom_point(size=3) +
+  #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  #coord_fixed() +
+  ggtitle("Hypothalamus Controls with 16 Genes Removed")
+```
+```{r}
+hypo_dds_rm_sex_c_de <- DESeq2::DESeq(hypo_dds_rm_sex_c)
+res = results(hypo_dds_rm_sex_c_de,alpha = 0.05)
+#head(res)
+table(res$padj<0.05)
+```
 ## Defferential gene expression
 ### Modeling raw counts with normalization
 
@@ -629,8 +840,8 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup, shape = acute_ex)) 
 
 Then run the DESeq2 model:
 ```{r}
-dds <- DESeq2::DESeq(dds)
-res = results(dds)
+hypo_dds_rm_sex <- DESeq2::DESeq(hypo_dds_rm_sex)
+res = results(hypo_dds_rm_sex)
 head(res)
 
 ```
@@ -653,12 +864,203 @@ gene_ls = counts[rownames(res2[which(res2$padj <= 0.05),]),]$symbol
 gene_ls = gene_ls[!is.na(gene_ls)]
 write.table(gene_ls, file = paste0(WD, "/Data/intermediate/20200423-hypothalamus-DE-gene-list_Zhang.txt"), sep = "\t", col.names = F, row.names = F, quote = FALSE)
 
+
+gene_ls_comb = gene_ls %in% gene_ls2
+write.table(gene_ls, file = paste0(WD, "/Data/intermediate/20200423-hypothalamus-DE-gene-list-comb_Zhang.txt"), sep = "\t", col.names = F, row.names = F, quote = FALSE)
 ```
+
+### Extract the DE genes
+```{r}
+res_df <- as.data.frame(res)
+res_df$ENSEMBL_RAT <- row.names(res_df)
+de_df <- res_df %>%
+        filter(padj <= 0.05)
+de_df$SYMBOL_RAT <- mapIds(org.Rn.eg.db, de_df$ENSEMBL_RAT, "SYMBOL", "ENSEMBL")
+de_df$ENTREZ_RAT <- mapIds(org.Rn.eg.db, de_df$ENSEMBL_RAT, "ENTREZID", "ENSEMBL")
+
+# Convert gene symbols to mouse orthologs
+de_df <- rat2mouse_ortho(de_df, column = 'ENSEMBL_RAT')
+
+output_n <- de_df$ENSEMBL_RAT %>% unique() %>% length() %>% as.character()
+
+# COllect the gene symbols
+de_df$SYMBOL_MOUSE <- mapIds(org.Mm.eg.db, de_df$ENSEMBL_MOUSE, "SYMBOL", "ENSEMBL")
+symbol_out <- de_df %>%
+        filter(!is.na(SYMBOL_MOUSE)) %>%
+        select(SYMBOL_MOUSE) %>% unlist() %>% as.character()
+
+#out_file <- paste0(WD,'/Data/intermediate/20200429-hypothalamus-DE-gene-list_Zhang.txt')
+#write.table(symbol_out, file = out_file, sep = '\n', 
+#            quote = FALSE, row.names = FALSE, col.names = FALSE)
+```
+### Use enrichR to do pathway analysis
+```{r}
+symbol_up <- de_df %>%
+        filter(!is.na(SYMBOL_MOUSE)) %>%
+        filter(log2FoldChange > 0) %>%
+        select(SYMBOL_MOUSE) %>% unlist() %>% unique() %>% as.character()
+symbol_down <- de_df %>%
+        filter(!is.na(SYMBOL_MOUSE)) %>%
+        filter(log2FoldChange < 0) %>%
+        select(SYMBOL_MOUSE) %>% unlist() %>% unique() %>% as.character()
+
+
+# Collect the desired pathways to query for enrichment
+# #desired <- c("KEGG_2019_Mouse",
+#              "GO_Biological_Process_2018",
+#              "GO_Molecular_Function_2018")
+desired = "KEGG_2019_Mouse"
+enriched_up <- enrichr(symbol_up, desired)
+enriched_down <- enrichr(symbol_down, desired)
+n<-1
+enrichr_df <- data.frame()
+for(db in desired){
+        # Collapse the data into flat format
+        enriched_up[[n]]$Data.Base <- db
+        enriched_up[[n]]$UPDOWN <- 'Up'
+        enriched_down[[n]]$Data.Base <- db
+        enriched_down[[n]]$UPDOWN <- 'Down'
+        enrichr_df <- rbind(enrichr_df,enriched_up[[n]],enriched_down[[n]])
+        n <- n + 1
+}
+
+# Generate a new column for the number of genes per enriched term
+enrichr_df  <- enrichr_df %>% separate(Overlap, sep = "/", into = c("Overlap.N","Total.N"))
+enrichr_df$FDR_nlog <- -log(enrichr_df$Adjusted.P.value)
+
+# Filter the results
+enrichr_plot <- enrichr_df %>%
+        #filter(Total.N <= 500) %>%
+        #filter(Total.N >= 10) %>%
+        filter(Adjusted.P.value <= 0.05) %>%
+        #arrange(desc(FDR_nlog)) %>%
+        #dplyr::slice(1:40) %>%
+        group_by(Term, UPDOWN) %>%
+        arrange(desc(FDR_nlog)) %>%
+        ungroup()
+
+# Adjust levels
+enrichr_plot$UPDOWN <- factor(enrichr_plot$UPDOWN, levels = c('Up','Down'))
+
+# Create a special column that will allow for proper ordering of Pathways in Plot:
+# Ordering will have 2 priorities in this order: Up/Down regulation & -Log(FDR)
+enrichr_plot <- enrichr_plot %>%
+        mutate(FDR_ord = ifelse(UPDOWN == 'Down', -FDR_nlog, FDR_nlog))
+
+enrichr_plot_kegg = enrichr_plot %>% filter(Data.Base == 'KEGG_2019_Mouse')
+enrichr_plot_gobp = enrichr_plot %>% filter(Data.Base == 'GO_Biological_Process_2018')
+enrichr_plot_gomf = enrichr_plot %>% filter(Data.Base == 'GO_Molecular_Function_2018')
+
+
+# Visualize results with barplot
+ggplot(enrichr_plot_kegg, aes(x=reorder(Term, FDR_ord), y=FDR_nlog, fill = UPDOWN)) +
+        geom_bar(stat='identity') +
+        coord_flip() +
+        ylab("-Log(FDR)") +
+        xlab("") +
+        theme_linedraw() +
+        ggtitle("Significant KEGG Pathways") +
+        guides(fill=guide_legend(title="Up/Down")) +
+        scale_fill_manual(values = c('Down' = "#00BFC4",'Up' = "#F8766D")) +
+        theme(panel.background = element_blank(),
+              plot.background = element_blank(),
+              strip.background = element_blank(),
+              axis.text = element_text(size=12, colour = "black"),
+              axis.ticks = element_line(colour = "black"),
+              axis.title=element_text(size=12,face="bold"),
+              strip.text = element_blank()) +
+        theme(panel.grid.major = element_blank()) 
+  
+ggplot(enrichr_plot_gobp[1:30,], aes(x=reorder(Term, FDR_ord), y=FDR_nlog, fill = UPDOWN)) +
+        geom_bar(stat='identity') +
+        coord_flip() +
+        ylab("-Log(FDR)") +
+        xlab("") +
+        theme_linedraw() +
+        ggtitle("Significant GO Biological Process") +
+        guides(fill=guide_legend(title="Up/Down")) +
+        scale_fill_manual(values = c('Down' = "#00BFC4",'Up' = "#F8766D")) +
+        theme(panel.background = element_blank(),
+              plot.background = element_blank(),
+              strip.background = element_blank(),
+              axis.text = element_text(size=12, colour = "black"),
+              axis.ticks = element_line(colour = "black"),
+              axis.title=element_text(size=12,face="bold"),
+              strip.text = element_blank()) +
+        theme(panel.grid.major = element_blank()) 
+
+
+
+ggplot(enrichr_plot_gomf[1:30,], aes(x=reorder(Term, FDR_ord), y=FDR_nlog, fill = UPDOWN)) +
+        geom_bar(stat='identity') +
+        coord_flip() +
+        ylab("-Log(FDR)") +
+        xlab("") +
+        theme_linedraw() +
+        ggtitle("Significant GO Biological Process") +
+        guides(fill=guide_legend(title="Up/Down")) +
+        scale_fill_manual(values = c('Down' = "#00BFC4",'Up' = "#F8766D")) +
+        theme(panel.background = element_blank(),
+              plot.background = element_blank(),
+              strip.background = element_blank(),
+              axis.text = element_text(size=12, colour = "black"),
+              axis.ticks = element_line(colour = "black"),
+              axis.title=element_text(size=12,face="bold"),
+              strip.text = element_blank()) +
+        theme(panel.grid.major = element_blank()) 
+```
+
+
+
+
+```{r}
+# CR genes to look at:
+CRgenes = enrichr_plot[enrichr_plot$Term == 'Circadian rhythm',]$Genes
+CRgenes = unlist(strsplit(CRgenes, split = ';'))
+rat_df = de_df[toupper(de_df$SYMBOL_RAT) %in% CRgenes,]
+for (i in 1:nrow(rat_df)) {
+  data <- plotCounts(hypo_dds_rm_sex, gene=rat_df[i,]$ENSEMBL_RAT, intgroup=c("hour_death","animal.key.anirandgroup", "animal.registration.sex"), returnData=TRUE)
+print(ggplot(data, aes(x=hour_death, y=count, col = animal.key.anirandgroup, shape = animal.registration.sex)) +
+  geom_point(position=position_jitter(width=.1,height=0)) +
+  scale_y_continuous(trans='log2') +
+  theme(axis.text.x = element_text(angle = 45)) +
+    ggtitle(rat_df[i,]$SYMBOL_RAT))
+}
+```
+```{r}
+for (i in 1:nrow(rat_df)) {
+  data <- plotCounts(hypo_dds_rm_sex, gene=rat_df[i,]$ENSEMBL_RAT, intgroup=c("hour_death","animal.key.anirandgroup", "animal.registration.sex"), returnData=TRUE)
+print(ggplot(data, aes(x=hour_death, y=count, col = animal.key.anirandgroup, shape = animal.registration.sex)) +
+  geom_point(position=position_jitter(width=.1,height=0)) +
+  theme(axis.text.x = element_text(angle = 45)) +
+    ggtitle(rat_df[i,]$SYMBOL_RAT))
+}
+```
+
+
+
+
+My try of enrichR:
+```{r}
+dbs = c("KEGG_2019_Mouse", "GO_Biological_Process_2018", "GO_Cellular_Component_2018", "GO_Molecular_Function_2018", "Mouse_Gene_Atlas")
+if (is.null(dbs)) websiteLive <- FALSE
+
+enriched = enrichr(symbol_out, dbs)
+
+# View the results table
+enriched[["KEGG_2019_Mouse"]]
+enriched[["Mouse_Gene_Atlas"]]
+enriched[["GO_Biological_Process_2018"]]
+
+
+```
+
+
 ### Visualizing results
 ```{r}
-plotMA(res2, ylim=c(-4,4), alpha = 0.05)
+plotMA(res2, ylim=c(-4,4), alpha = 0.05, main="16 genes removed")
 hist(res2$pvalue[res2$baseMean > 1], 
-     col="grey", border="white", xlab="pvalue", ylab="frequency", main="")
+     col="grey", border="white", xlab="pvalue", ylab="frequency", main="16 genes removed")
 ```
 Examine the counts for the top gene, sorting by FDR:
 ```{r}
@@ -717,4 +1119,6 @@ mat <- assay(rld)[topgenes_7,]
 mat <- mat - rowMeans(mat)
 pheatmap(mat, annotation_col=df)
 ```
+
+
 

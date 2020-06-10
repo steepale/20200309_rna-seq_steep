@@ -1,0 +1,596 @@
+---
+title: "hypothalamus modeling"
+author: "Jiayu Zhang"
+date: "5/16/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(cache = FALSE)
+```
+
+# Hypothalamus Gene Modeling
+
+> Models: Sine Wave model and polynomial model
+> Comparing PVE
+> Subset data
+
+
+```{r}
+################################################################################
+##### Resources and Dependencies ###############################################
+################################################################################
+
+# Set the working directory
+WD <- '/Volumes/SanDisk64GB/MoTrPAC/'
+setwd(WD)
+
+# Load dependencies
+pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2",
+               "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr",
+               "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt","feather",
+               "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel",
+               "AnnotationDbi")
+
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("PROPER")
+BiocManager::install("org.Rn.eg.db")
+BiocManager::install("pcaExplorer")
+BiocManager::install("GenomicFeatures")
+BiocManager::install("S4Vector")
+BiocManager::install("qvalue")
+BiocManager::install("org.Mm.eg.db")
+mypackages = c("tidyverse","GenomicRanges", "DESeq2","devtools","ggplot2","dplyr","PROPER", "lubridate", "hms",
+               "org.Rn.eg.db", "AnnotationDbi", "pcaExplorer", "pheatmap","GenomicFeatures", "genefilter", "qvalue",  "org.Mm.eg.db", "enrichR")
+lapply(mypackages, FUN = function(X) {
+  do.call("library", list(X)) })
+
+
+############################################################
+##### Functions ############################################
+############################################################
+
+# Set select
+select <- dplyr::select
+
+# Import ortholog function
+source('20200429_rat2mouse_ortho.R')
+
+# Capture the Date and Author
+################################################################################
+date <- format.Date( Sys.Date(), '%Y%m%d' )
+auth <- "Jiayu"
+################################################################################
+```
+
+
+## Data structure  
+### Load and clean data
+
+* Data file to load:
+  + large count matrix with all tissues included and corresponding meta  
+```{r}
+# count matrix in combined
+count_dat = read.csv(file = paste0(WD,'Data/rna-seq/20200309_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv'), 
+                          header = T, na.strings = "NA", check.names = F) %>% as.matrix()
+
+# meta data is also combined by phenotype and meta
+meta_dat = read.table(file = paste0(WD,'Data/rna-seq/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt'), sep = '\t', header = T, na.strings = "NA", check.names = F)
+
+# SCN CR genes
+circ_hyp = read.table(file = paste0(WD,'Data/library/20200503_rnaseq-circadian-SCN-mouse-rat-ortho_steep-yan.txt'), sep = '\t', header = TRUE)
+                      
+mode(count_dat) = "integer"
+
+meta_dat %>% na.omit()
+
+################################################################################
+#####     Collect Samples of Interest and Normalize      #######################
+################################################################################
+
+# Filter hypothalamus Samples (meta)
+
+tod_cols <- meta_dat %>%
+        filter(!is.na(specimen.collection.t_death_hour)) %>%
+        filter(! animal.key.anirandgroup %in% c('Control - IPE', 'Control - 7 hr')) %>%
+        filter(Tissue == 'Hypothalamus')
+  
+rownames(tod_cols) <- tod_cols$sample_key
+
+# Collect samples without NA values in TOD
+nona_sams <- tod_cols %>%
+        select(sample_key) %>% unlist() %>% as.character()
+
+# Collect tissue specific counts
+tod_counts <- count_dat[,nona_sams]
+```
+
+Build a dds S4 object
+```{r}
+design = ~1
+hypo_dds <- DESeqDataSetFromMatrix(countData = tod_counts,
+                              colData = tod_cols,
+                              design = design)
+
+# remove genes that have avg counts less than 1 (reduced to maintain more sex-relate genes)
+keep <- rowSums(counts(hypo_dds))/ncol(hypo_dds) > 1
+hypo_dds <- hypo_dds[keep,]
+
+hypo_dds = estimateSizeFactors(hypo_dds)
+rld = rlog(hypo_dds)
+
+# Select the normailzed counts
+tod_counts <- assay(rld) 
+```
+
+Model CR geness by Time of Death (TOD)
+```{r}
+################################################################################
+#####     Model Circadian Rhythms by Time of Death (TOD)      ##################
+################################################################################
+
+# Sine and cosine functions
+################################################################################
+SIN <- function(t) sin(2*pi*t/24)
+COS <- function(t) cos(2*pi*t/24)
+
+# Time of death
+TOD <- tod_cols %>%
+        filter(sample_key %in% nona_sams) %>%
+        select(specimen.collection.t_death_hour) %>% 
+        unlist() %>% as.numeric()
+
+# solve for the three B’s (beta values) by matrix algebra
+
+fit.FR <- function(expr,TOD) { #I’m writing a custom function, it returns PVE (explained below).  We need to tweak the codes to return the beta’s. 
+
+  expr <- as.vector(expr)
+
+  M <- as.matrix(cbind(rep(1,length(TOD)),SIN(TOD),COS(TOD)))
+
+  beta <- solve(t(M)%*%M)%*%(t(M)%*%expr) #this is the code for the formula above, where “solve” is the matrix inversion operation - a nice trick to have.
+
+  SSz <- t(beta) %*% t(M) %*% expr - (sum(expr)^2) / length(expr)
+
+  SSy <- sum(expr^2)-(sum(expr)^2)/ length(expr)
+
+  PVE <- SSz / SSy #The SSz is the variance explained by the fitted function, SSy is the total variance in the data (in this case, the variance of the 55 values for this gene). PVE is Percent Variance Explained.  It measures the goodness of fit.
+
+  return(PVE)
+
+}
+
+#To get pve’s for all genes without looping p times:
+
+tmp <- apply(tod_counts,1,function(x) fit.FR(x,TOD))
+
+ 
+
+#If you want to verify it by looping
+
+# for (i in 1:11979) {
+# 
+# pve2 [i]<- fit.FR(data[i,],TOD)
+# 
+# }
+# 
+# It only takes about 1ms per iteration.
+
+ ################################################################################
+# Function to calculate the proportion of variance explained
+################################################################################
+pve.FR<-function(data,TOD) {
+        tmp<- apply(data,1,function(x) fit.FR(x,TOD))
+        return(tmp)
+}
+################################################################################
+
+#Some codes for producing an empirical p value for the PVE by permuting TOD many times, say 100 or 1000 times, and compare the observed PVE with the null distribution of simulated PVE’s
+
+p.test.cos<- function(data,TOD,iter,every=10) {
+
+pval <- rep(0,dim(data)[1])
+
+ cat(iter, "permutations in progress\n")
+
+PVE<-pve.FR(data,TOD)
+
+  for(i in 1:iter) {
+
+    new.data<- data[,sample(1:dim(data)[2])]
+
+    tmp.PVE <- pve.FR(new.data,TOD)
+
+    pval <- pval + as.numeric(tmp.PVE >= PVE)
+
+    if(i %% every == 0) cat(every)
+
+    if(i %% (10*every) == 0) cat("\n")
+
+  }
+
+  pval <- pval / iter
+
+}
+
+ 
+
+#example of using this function
+set.seed(1234)
+cos_pval<-p.test.cos(tod_counts,TOD,iter=100,every=10)
+
+# Get the phase
+t<-c(1:24)
+sin_phase<- matrix(NA,length(TOD),24)
+for (i in 1:24) {
+        sin_phase[,i]<- sin(2*pi*(TOD+t[i])/24)
+}
+
+# Collect the maximum phase
+phase_tod_counts <- matrix(NA,nrow(tod_counts),24)
+for (i in 1:nrow(tod_counts)) {
+        for (j in 1:24) {
+                phase_tod_counts[i,j]<-cor(tod_counts[i,],sin_phase[,j])
+        }
+}
+phase_tod_counts_max <-rep(NA,nrow(tod_counts))
+for (i in 1:nrow(tod_counts)) {
+        phase_tod_counts_max[i] <- c(1:24)[rank(phase_tod_counts[i,])==24]
+}
+
+# Store results in a dataframe
+sinmod_df <- data.frame("ENSEMBL_RAT" = row.names(tod_counts),
+                        "PVAL_SIN" = cos_pval,
+                        "PVE_SIN" = tmp,
+                        "PHASE_SIN" = phase_tod_counts_max)
+sinmod_df$SYMBOL_RAT = mapIds(org.Rn.eg.db, as.character(sinmod_df$ENSEMBL_RAT), "SYMBOL", "ENSEMBL")
+# Filter data frame and arrange
+sinmod_df <- sinmod_df %>%
+        filter(PVAL_SIN <= 0.05) %>%
+        arrange(desc(PVE_SIN))
+dim(sinmod_df)
+
+# plot the phase distribution
+# d = density(sinmod_df$PHASE_SIN)
+# plot(d, main = "Trigonometric Model -- Phase", xlab = "Phase")
+
+sinmod_df$CIRC = ifelse(sinmod_df$ENSEMBL_RAT %in% circ_hyp$ENSEMBL_RAT, "CIRC", "NON_CIRC") %>% as.factor()
+ggplot(sinmod_df, aes(x = PHASE_SIN, color = CIRC)) +
+  geom_density() +
+  ggtitle("CIRC/NON_CIRC Comparison in Phase") 
+```
+
+Model Exercise Response by time post exercise
+```{r}
+################################################################################
+#####     Model Exercise Response by Time Post Exercsie      ###################
+################################################################################
+
+# Time post exercise
+TPE <- tod_cols %>%
+        filter(sample_key %in% nona_sams) %>%
+        mutate(specimen.collection.t_exercise_hour = case_when(
+                animal.key.anirandgroup == 'Exercise - IPE' ~ 0,
+                animal.key.anirandgroup == 'Exercise - 0.5 hr' ~ 0.5,
+                animal.key.anirandgroup == 'Exercise - 1 hr' ~ 1,
+                animal.key.anirandgroup == 'Exercise - 4 hr' ~ 4,
+                animal.key.anirandgroup == 'Exercise - 7 hr' ~ 7,
+                animal.key.anirandgroup == 'Exercise - 24 hr' ~ 24,
+                animal.key.anirandgroup == 'Exercise - 48 hr' ~ 0)) %>%
+        select(specimen.collection.t_exercise_hour) %>% 
+        unlist() %>% as.numeric()
+
+
+
+
+
+# for here I'll use traditional polynomial methods to see if the 4th order term is necessary
+# noticed that lots of genes got NAs in their 4th poly coefficient
+fit.POLY = function(expr, TPE){
+  mod = lm(TPE ~ poly(expr, degree = 4, raw = T))
+  return(summary(mod)$aliased[5])
+}
+
+tmp2 <- apply(tod_counts,1,function(x) fit.POLY(x,TPE))
+
+table(tmp2)
+
+# solve for the B’s (beta values) by matrix algebra
+
+# Keep the 4th order for here
+fit.POLY.return <- function(expr,TPE) {
+        expr <- as.vector(expr) %>% as.numeric()
+        M <- as.matrix(cbind(rep(1,length(TPE)),TPE,TPE^2,TPE^3,TPE^4)) 
+        #this is the code for the formula above, where “solve” is the matrix 
+        #inversion operation - a nice trick to have.
+        beta <- solve(t(M)%*%M)%*%(t(M)%*%expr) 
+        SSz <- t(beta) %*% t(M) %*% expr - (sum(expr)^2) / length(expr)
+        SSy <- sum(expr^2)-(sum(expr)^2)/ length(expr)
+        #The SSz is the variance explained by the fitted function, SSy is the total variance in the data (in this case, the variance of the 55 values for this gene). PVE is Percent Variance Explained.  It measures the goodness of fit.
+        PVE <- SSz / SSy
+        BV <- list("beta" = beta, "PVE" = PVE)
+        return(PVE)
+}
+
+pve4 <- apply(tod_counts,1,function(x) fit.POLY.return(x,TPE))
+
+pve.4<-function(data,TPE) {
+        tmp<- apply(data,1,function(x) fit.POLY.return(x,TPE))
+        return(tmp)
+}
+################################################################################
+################################################################################
+p.test.4 <- function(data,TPE,iter,every=10) {
+        pval <- rep(0,dim(data)[1])
+        cat(iter, "permutations in progress\n")
+        PVE<-pve.4(data,TPE)
+        for(i in 1:iter) {
+                # Shuffles the samples
+                new.data<-data[,sample(1:dim(data)[2])]
+                # Calculate the proportion of variance explained
+                tmp.PVE <- pve.4(new.data,TPE)
+                # Generates a running count of simulated PVE 
+                # that are larger or equal to the actual PVE
+                pval <- pval + as.numeric(tmp.PVE >= PVE)
+                if(i %% every == 0) cat(every)
+                if(i %% (10*every) == 0) cat("\n")
+        }
+        # Calculate the p value by dividing the running count by the number of iterations
+        pval <- pval / iter
+}
+################################################################################
+
+# Calculate the p value empirically with permutation tests: shuffle time points randomly
+set.seed(1234)
+tpe_counts_pval<-p.test.4(tod_counts,TPE,iter=100,every=10)
+
+# Store results in a dataframe
+p4mod_df <- data.frame("ENSEMBL_RAT" = row.names(tod_counts),
+                       "PVAL_P4" = tpe_counts_pval,
+                       "PVE_P4" = pve4)
+p4mod_df$SYMBOL_RAT = mapIds(org.Rn.eg.db, as.character(p4mod_df$ENSEMBL_RAT), "SYMBOL", "ENSEMBL")
+# Filter data frame and arrange
+p4mod_df <- p4mod_df %>%
+        filter(PVAL_P4 <= 0.05) %>%
+        arrange(desc(PVE_P4))
+dim(p4mod_df)
+```
+
+Model Exercise Response by time post exercise (use sqrt of the time)
+```{r}
+
+################################################################################
+#####     Model Exercise Response by Time Post Exercsie      ###################
+################################################################################
+
+# Time post exercise (sqrt)
+TPE_sqrt <- tod_cols %>%
+        filter(sample_key %in% nona_sams) %>%
+        mutate(specimen.collection.t_exercise_hour_sqrt = case_when(
+                animal.key.anirandgroup == 'Exercise - IPE' ~ 0,
+                animal.key.anirandgroup == 'Exercise - 0.5 hr' ~ 0.5,
+                animal.key.anirandgroup == 'Exercise - 1 hr' ~ 1,
+                animal.key.anirandgroup == 'Exercise - 4 hr' ~ 2,
+                animal.key.anirandgroup == 'Exercise - 7 hr' ~ sqrt(7),
+                animal.key.anirandgroup == 'Exercise - 24 hr' ~ sqrt(24),
+                animal.key.anirandgroup == 'Exercise - 48 hr' ~ -1)) %>%
+        select(specimen.collection.t_exercise_hour_sqrt) %>% 
+        unlist() %>% as.numeric()
+
+
+
+
+
+# for here I'll use traditional polynomial methods to see if the 4th order term is necessary
+# noticed that lots of genes got NAs in their 4th poly coefficient
+fit.POLY = function(expr, TPE_sqrt){
+  mod = lm(TPE_sqrt ~ poly(expr, degree = 4, raw = T))
+  return(summary(mod)$aliased[5])
+}
+
+tmp2 <- apply(tod_counts,1,function(x) fit.POLY(x,TPE_sqrt))
+
+table(tmp2)
+
+# solve for the B’s (beta values) by matrix algebra
+
+# Keep the 4th order for here
+fit.POLY.return <- function(expr,TPE) {
+        expr <- as.vector(expr) %>% as.numeric()
+        M <- as.matrix(cbind(rep(1,length(TPE)),TPE,TPE^2,TPE^3)) 
+        #this is the code for the formula above, where “solve” is the matrix 
+        #inversion operation - a nice trick to have.
+        beta <- solve(t(M)%*%M)%*%(t(M)%*%expr) 
+        SSz <- t(beta) %*% t(M) %*% expr - (sum(expr)^2) / length(expr)
+        SSy <- sum(expr^2)-(sum(expr)^2)/ length(expr)
+        #The SSz is the variance explained by the fitted function, SSy is the total variance in the data (in this case, the variance of the 55 values for this gene). PVE is Percent Variance Explained.  It measures the goodness of fit.
+        PVE <- SSz / SSy
+        BV <- list("beta" = beta, "PVE" = PVE)
+        return(PVE)
+}
+
+pve4 <- apply(tod_counts,1,function(x) fit.POLY.return(x,TPE_sqrt))
+
+pve.4<-function(data,TPE) {
+        tmp<- apply(data,1,function(x) fit.POLY.return(x,TPE_sqrt))
+        return(tmp)
+}
+################################################################################
+################################################################################
+p.test.4 <- function(data,TPE,iter,every=10) {
+        pval <- rep(0,dim(data)[1])
+        cat(iter, "permutations in progress\n")
+        PVE<-pve.4(data,TPE)
+        for(i in 1:iter) {
+                # Shuffles the samples
+                new.data<-data[,sample(1:dim(data)[2])]
+                # Calculate the proportion of variance explained
+                tmp.PVE <- pve.4(new.data,TPE)
+                # Generates a running count of simulated PVE 
+                # that are larger or equal to the actual PVE
+                pval <- pval + as.numeric(tmp.PVE >= PVE)
+                if(i %% every == 0) cat(every)
+                if(i %% (10*every) == 0) cat("\n")
+        }
+        # Calculate the p value by dividing the running count by the number of iterations
+        pval <- pval / iter
+}
+################################################################################
+
+# Calculate the p value empirically with permutation tests: shuffle time points randomly
+set.seed(1234)
+tpe_counts_pval<-p.test.4(tod_counts,TPE_sqrt,iter=100,every=10)
+
+# Store results in a dataframe
+p4mod_df <- data.frame("ENSEMBL_RAT" = row.names(tod_counts),
+                       "PVAL_P4" = tpe_counts_pval,
+                       "PVE_P4" = pve4,
+                       "CIRC" = ifelse(row.names(tod_counts) %in% circ_hyp$ENSEMBL_RAT, "CIRC", "NON_CIRC"))
+p4mod_df$SYMBOL_RAT = mapIds(org.Rn.eg.db, as.character(p4mod_df$ENSEMBL_RAT), "SYMBOL", "ENSEMBL")
+# Filter data frame and arrange
+p4mod_df <- p4mod_df %>%
+        filter(PVAL_P4 <= 0.05) %>%
+        arrange(desc(PVE_P4))
+dim(p4mod_df)
+
+
+
+# gene by gene visualization
+
+data <- plotCounts(hypo_dds, gene=rownames(p4mod_df[1,]), intgroup=c("specimen.collection.t_death_hour","animal.key.anirandgroup", "animal.registration.sex"), returnData=TRUE)
+ggplot(data, aes(x=specimen.collection.t_death_hour, y=count, col = animal.key.anirandgroup, shape = animal.registration.sex)) +
+  geom_point(position=position_jitter(width=.1,height=0)) +
+  scale_y_continuous(trans='log2') +
+  theme(axis.text.x = element_text(angle = 45)) +
+    ggtitle(rat_df[i,]$SYMBOL_RAT)
+```
+
+
+
+
+Compare Models
+
+```{r}
+# Compare best polynomial model to SIN model
+######################################
+# Select the shared genes between models
+shared_mod_df <- sinmod_df %>%
+        inner_join(p4mod_df, by = "ENSEMBL_RAT")
+
+# Generate a venn diagram of the models
+# Venn DIagram
+venn.plot <- venn.diagram(
+        x = list(
+                SIN = sinmod_df$ENSEMBL_RAT,
+                POLY4 = p4mod_df$ENSEMBL_RAT,
+                CIRC = circ_hyp$ENSEMBL_RAT),
+        filename = paste0(WD,"DataAnalysis/20200309_rna-seq_steep/plots/20200515_hypothalamus-p4vssin-venn_zhang.tiff"),
+        height = 900,
+        width = 900,
+        resolution = 300,
+        col = "black",
+        fill = c("dodgerblue", "goldenrod1", "seagreen3"),
+        alpha = 0.50,
+        #cex = c(1.5, 1.5, 1.5, 1.5, 1.5, 1, 0.8, 1, 0.8, 1, 0.8, 1, 0.8,
+        #        1, 0.8, 1, 0.55, 1, 0.55, 1, 0.55, 1, 0.55, 1, 0.55, 1, 1, 1, 1, 1, 1.5),
+        #cex = c(rep(0.8, 4), rep(0.4,120)),
+        #cat.col = c("dodgerblue", "goldenrod1", "darkorange1", "seagreen3", "orchid3"),
+        cat.cex = 0.8,
+        cat.fontface = "bold",
+        margin = 0.05
+)
+# Display the Venn
+# dev.off()
+# tiff_file <- paste0(WD,"/plots/20200515_hypothalamus-p4vssin-venn_zhang.tiff")
+# img <- readTIFF(tiff_file)
+# grid::grid.raster(img)
+
+
+
+
+# Generate a scatterplot of the models' PVE's
+shared_mod_df %>%
+        ggplot(aes(x = PVE_P4, y= PVE_SIN)) +
+        geom_point(alpha = 0.3) +
+        xlim(0,1) + ylim(0,1) +
+        geom_abline(intercept = 0, slope = 1) +
+        ggtitle("All Genes PVE Comparison") +
+        xlab("PVE: Polynomial (Degree 4)") +
+        ylab("PVE: SIN")
+# Supporting violin plot
+shared_mod_df %>%
+        select(ENSEMBL_RAT, PVE_SIN, PVE_P4) %>%
+        gather(MODEL, PVE, -ENSEMBL_RAT) %>%
+        ggplot(aes(MODEL,PVE)) +
+        geom_violin() +
+        geom_boxplot(alpha = 0.1) +
+        ggtitle("All Genes PVE Comparison") +
+        scale_x_discrete(labels=c("PVE_SIN" = "SIN", 
+                                  "PVE_P4" = "Polynomial (Degree 4)")) +
+        scale_y_continuous(breaks=seq(0,1,0.2))
+
+```
+Draw for CR genes
+```{r}
+# Visualize the models on CIRC Genes
+##############################
+shared_mod_circ <- shared_mod_df %>%
+        filter(ENSEMBL_RAT %in% circ_hyp$ENSEMBL_RAT) %>%
+        mutate(SYMBOL_RAT = SYMBOL_RAT.x) %>%
+        select(-SYMBOL_RAT.y, -SYMBOL_RAT.x) %>%
+        arrange(desc(PVE_P4))
+# Scatterplot
+shared_mod_circ %>%
+        ggplot(aes(x = PVE_P4, y= PVE_SIN)) +
+        geom_point(alpha = 0.3) +
+        xlim(0,1) + ylim(0,1) +
+        geom_abline(intercept = 0, slope = 1) +
+  ggtitle("CR Genes PVE Comparison") +
+        xlab("PVE: Polynomial (Degree 4)") +
+        ylab("PVE: SIN")
+# Supporting violin plot
+shared_mod_circ %>%
+        select(ENSEMBL_RAT, PVE_SIN, PVE_P4) %>%
+        gather(MODEL, PVE, -ENSEMBL_RAT) %>%
+        ggplot(aes(MODEL,PVE)) +
+        geom_violin() +
+        geom_boxplot(alpha = 0.1) +
+  ggtitle("CR Genes PVE Comparison") +
+        scale_x_discrete(labels=c("PVE_SIN" = "SIN", 
+                                  "PVE_P4" = "Polynomial (Degree 4)")) +
+        scale_y_continuous(breaks=seq(0,1,0.2))
+```
+Draw for DE (C0 vs C7) genes
+```{r}
+shared_mod_de <- shared_mod_df %>%
+        filter(ENSEMBL_RAT %in% de_df$ENSEMBL_RAT) %>%
+        mutate(SYMBOL_RAT = SYMBOL_RAT.x) %>%
+        select(-SYMBOL_RAT.y, -SYMBOL_RAT.x) %>%
+        arrange(desc(PVE_P4))
+# Scatterplot
+shared_mod_de %>%
+        ggplot(aes(x = PVE_P4, y= PVE_SIN)) +
+        geom_point(alpha = 0.3) +
+        xlim(0,1) + ylim(0,1) +
+        geom_abline(intercept = 0, slope = 1) +
+  ggtitle("DE Genes PVE Comparison") +
+        xlab("PVE: Polynomial (Degree 4)") +
+        ylab("PVE: SIN")
+# Supporting violin plot
+shared_mod_de %>%
+        select(ENSEMBL_RAT, PVE_SIN, PVE_P4) %>%
+        gather(MODEL, PVE, -ENSEMBL_RAT) %>%
+        ggplot(aes(MODEL,PVE)) +
+        geom_violin() +
+        geom_boxplot(alpha = 0.1) +
+  ggtitle("DE Genes PVE Comparison") +
+        scale_x_discrete(labels=c("PVE_SIN" = "SIN", 
+                                  "PVE_P4" = "Polynomial (Degree 4)")) +
+        scale_y_continuous(breaks=seq(0,1,0.2))
+```
+

@@ -1,0 +1,57 @@
+---
+title: "Untitled"
+author: "Jiayu Zhang"
+date: "4/29/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r cars}
+summary(cars)
+```
+
+## Including Plots
+
+You can also embed plots, for example:
+
+```{r pressure, echo=FALSE}
+plot(pressure)
+```
+
+Note that the `echo = FALSE` parameter was added to the code chunk to prevent printing of the R code that generated the plot.
+```{r}
+hypo_dds_medcen_de <- DESeq2::DESeq(hypo_dds_medcen)
+res = results(hypo_dds_medcen_de)
+head(res)
+
+
+res22 <- results(hypo_dds_medcen_de, alpha=0.05)
+table(res22$padj < 0.05)
+
+
+plotMA(res22, ylim=c(-4,4), alpha = 0.05, main = "median centered")
+hist(res2$pvalue[res2$baseMean > 1], 
+     col="grey", border="white", xlab="pvalue", ylab="frequency", main="")
+```
+
+```{r}
+rld_medcen_1_de = DESeq2::DESeq(rld_medcen_1)
+res23 <- results(rld_medcen_1_de, alpha=0.05)
+table(res23$padj < 0.05)
+```
+
+```{r}
+gene_ls2 = counts[rownames(res2[which(res2$padj <= 0.05),]),]$symbol
+gene_ls2= gene_ls[!is.na(gene_ls2)]
+write.table(gene_ls2, file = paste0(WD, "/Data/intermediate/20200423-hypothalamus-DE-gene-list2_Zhang.txt"), sep = "\t", col.names = F, row.names = F, quote = FALSE)
+```
+
