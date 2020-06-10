@@ -830,6 +830,15 @@ dds_vp <- DESeqDataSetFromMatrix(countData = tod_counts,
                                design = design)
 dds_vp <- dds_vp[rowSums(counts(dds_vp))/ncol(dds_vp) >= 1,]
 dds_vp <- estimateSizeFactors(dds_vp)
+
+
+
+
+
+#dds_vp_bk<- dds_vp
+#assay(dds_vp) <- MC_DEg_counts
+#?DESeq
+
 res_vp <- DESeq(dds_vp) %>%
   results(alpha = 0.05,lfcThreshold=0.5)
 # Adjust the result dataframe
