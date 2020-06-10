@@ -1,0 +1,89 @@
+---
+title: "20200607_gene-comparison-all-tissue_zhang"
+author: "Jiayu Zhang"
+date: "6/8/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(cache = FALSE)
+```
+
+# Bin genes by Circ/Exercise Status 
+
+> general data structure  
+> differential expressed genes (C0vsC7, C0vsE7, C7vsE7) t-test?
+
+
+### set up the environment
+```{r}
+################################################################################
+##### Resources and Dependencies ###############################################
+################################################################################
+
+# Set the working directory
+WD <- '/Volumes/SanDisk64GB/MoTrPAC/'
+setwd(WD)
+
+# Load dependencies
+pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2",
+               "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr",
+               "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt","feather",
+               "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel",
+               "AnnotationDbi")
+
+if (!requireNamespace("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+
+BiocManager::install("PROPER")
+BiocManager::install("org.Rn.eg.db")
+BiocManager::install("pcaExplorer")
+BiocManager::install("GenomicFeatures")
+BiocManager::install("S4Vector")
+BiocManager::install("qvalue")
+BiocManager::install("org.Mm.eg.db")
+mypackages = c("tidyverse","GenomicRanges", "DESeq2","devtools","ggplot2","dplyr","PROPER", "lubridate", "hms",
+               "org.Rn.eg.db", "AnnotationDbi", "pcaExplorer", "pheatmap","GenomicFeatures", "genefilter", "qvalue",  "org.Mm.eg.db", "enrichR")
+lapply(mypackages, FUN = function(X) {
+  do.call("library", list(X)) })
+
+
+############################################################
+##### Functions ############################################
+############################################################
+
+# Set select
+select <- dplyr::select
+
+# Import ortholog function
+source('20200429_rat2mouse_ortho.R')
+
+# Capture the Date and Author
+################################################################################
+date <- format.Date( Sys.Date(), '%Y%m%d' )
+auth <- "Jiayu"
+################################################################################
+```
+
+## Data structure  
+### Load and clean data
+
+* Data file to load:
+  + large count matrix with all tissues included and corresponding meta  
+```{r}
+# count matrix in combined
+count_dat = read.csv(file = paste0(WD,'Data/rna-seq/20200309_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv'), 
+                          header = T, na.strings = "NA", check.names = F) %>% as.matrix()
+
+# meta data is also combined by phenotype and meta
+meta_dat = read.table(file = paste0(WD,'Data/rna-seq/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt'), sep = '\t', header = T, na.strings = "NA", check.names = F)
+
+# SCN CR genes
+# circ_hyp = read.table(file = paste0(WD,'Data/library/20200503_rnaseq-circadian-SCN-mouse-rat-ortho_steep-yan.txt'), sep = '\t', header = TRUE)
+                      
+mode(count_dat) = "integer"
+
+meta_dat %>% na.omit()
