@@ -73,6 +73,7 @@ auth <- "Jiayu"
 
 * Data file to load:
   + large count matrix with all tissues included and corresponding meta  
+* Removal of duplicates and outliers
 ```{r}
 # count matrix in combined
 count_dat = read.csv(file = paste0(WD,'Data/rna-seq/20200309_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv'), 
@@ -84,6 +85,169 @@ meta_dat = read.table(file = paste0(WD,'Data/rna-seq/20200309_rnaseq-meta-pass1a
 # SCN CR genes
 # circ_hyp = read.table(file = paste0(WD,'Data/library/20200503_rnaseq-circadian-SCN-mouse-rat-ortho_steep-yan.txt'), sep = '\t', header = TRUE)
                       
-mode(count_dat) = "integer"
+# mode(count_dat) = "integer"
+# 
+# meta_dat %>% na.omit()
 
-meta_dat %>% na.omit()
+# Set a vector for Exercise/Control Levels and Colors
+ec_levels <- c("Exercise - IPE",
+               "Exercise - 0.5 hr",
+               "Exercise - 1 hr",
+               "Exercise - 4 hr",
+               "Exercise - 7 hr",
+               "Exercise - 24 hr",
+               "Exercise - 48 hr",
+               "Control - IPE",
+               "Control - 7 hr")
+ec_colors <- c("gold",
+               "darkgoldenrod1",
+               "orange",
+               "darkorange",
+               "darkorange2",
+               "darkorange3",
+               "darkorange4",
+               "steelblue1",
+               "steelblue4")
+# Releveling factors
+meta_dat$animal.key.anirandgroup <- as.character(meta_dat$animal.key.anirandgroup)
+meta_dat$animal.key.anirandgroup <- factor(meta_dat$animal.key.anirandgroup, 
+                                           levels = ec_levels)
+```
+
+separate dataset by tissue types
+```{r}
+# Adrenal
+
+adrenal_cols <- meta_dat %>% filter(Tissue == 'Adrenal') %>%
+        filter(! is.na(animal.key.anirandgroup)) 
+        
+  
+rownames(adrenal_cols) <- adrenal_cols$sample_key
+
+# Collect samples without NA values in TOD
+nona_sams <- adrenal_cols %>%
+        select(sample_key) %>% unlist() %>% as.character()
+
+# Collect tissue specific counts
+adrenal_counts <- count_dat[ ,adrenal_cols$sample_key]
+
+
+design = ~ 1
+title = paste0('Design: ',as.character(design))
+# Create a DESeqDataSet Object
+adr_dds <- DESeqDataSetFromMatrix(countData = adrenal_counts,
+                              colData = adrenal_cols,
+                              design = design)
+
+
+# Filter genes with average count of 10 or less. (this time I won't perform this)
+# Reasoning from:
+#citation("PROPER")
+#dds
+keep <- rowMeans(counts(adr_dds)) >= 1
+adr_dds <- adr_dds[keep,]
+
+adr_dds <- estimateSizeFactors(adr_dds)
+# Normalize the counts
+rld <- DESeq2::vst(adr_dds) #vst and rlog comparable with all samples
+#rld <- rlog(dds, blind=FALSE)
+
+# Extract matrix of normalized counts
+# norm_counts <- assay(rld)
+# counts <- as.data.frame(norm_counts)
+# 
+# # Annotate normalized counts
+# counts$ensembl <- rownames(counts)
+# counts$symbol <- mapIds(org.Rn.eg.db, counts$ensembl, "SYMBOL", "ENSEMBL")
+# counts$entrez <- mapIds(org.Rn.eg.db, counts$ensembl, "ENTREZID", "ENSEMBL")
+# counts$genename <- mapIds(org.Rn.eg.db, counts$ensembl, "GENENAME", "ENSEMBL")
+# counts$go <- mapIds(org.Rn.eg.db, counts$ensembl, "GO", "ENSEMBL")
+# counts$path <- mapIds(org.Rn.eg.db, counts$ensembl, "PATH", "ENSEMBL")
+
+
+# Here we examine all samples by batch and tissue
+# 
+# first PCA with intGroup of tissue
+pcaData <- DESeq2::plotPCA(rld[,rld$animal.key.anirandgroup %in% c("Control - IPE", "Control - 7 hr", "Exercise - 7 hr")], intgroup=c("animal.key.anirandgroup","animal.registration.sex"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color= animal.registration.sex)) +
+  geom_point(size=3) +
+  #geom_text_repel(aes(label = colnames(rld))) +
+  #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  #coord_fixed() +
+  ggtitle("Hypothalamus Samples Across Groups")
+
+# removal of outliers (6 out of 26 were removed)
+outliers = c("90123016002_SN2", "90128016002_SN2", "90110016002_SN2", "90126016002_SN2", "90127016002_SN2", "90124016002_SN2") # those are continuous vial_labels
+
+rld = rld[,! colnames(rld) %in% outliers]
+adr_dds = adr_dds[,! colnames(rld) %in% outliers]
+#visualize again
+
+pcaData <- DESeq2::plotPCA(rld[ ,rld$animal.key.anirandgroup %in% c("Control - IPE", "Control - 7 hr")], intgroup=c("animal.key.anirandgroup","animal.registration.sex"), returnData=TRUE)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+ggplot(pcaData, aes(PC1, PC2, color= animal.key.anirandgroup)) +
+  geom_point(size=3) +
+  #geom_text_repel(aes(label = colnames(rld))) +
+  #geom_text(aes(label=Tissue),hjust=0, vjust=0) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  #coord_fixed() +
+  ggtitle("Adrenal Samples Across Groups")
+
+adr_dds = DESeq2::DESeq(adr_dds)
+adr_c0c7 = results(adr_dds, alpha=0.05, contrast = c("animal.key.anirandgroup", "Control - IPE", "Control - 7 hr"))
+table(adr_c0c7$padj < 0.05)
+hist(adr_c0c7$pvalue[adr_c0c7$baseMean > 1], 
+     col="grey", border="white", xlab="pvalue", ylab="frequency", main="")
+# data <- plotCounts(dds, gene=which.min(res3$padj), intgroup="animal.key.anirandgroup", returnData=TRUE)
+# ggplot(data, aes(x=animal.key.anirandgroup, y=count, col = col_data$hour_death)) +
+#   geom_point(position=position_jitter(width=.1,height=0)) +
+#   #scale_y_log10() +
+#   theme(axis.text.x = element_text(angle = 45))
+
+
+adr_c0c7_df <- as.data.frame(adr_c0c7)
+adr_c0c7_df$ENSEMBL_RAT <- row.names(adr_c0c7_df)
+adr_c0c7_de_df <- adr_c0c7_df %>%
+        filter(padj <= 0.05) %>%
+        filter(baseMean > 1)
+
+# doesn't match any in the database
+adr_c0c7_df$SYMBOL_RAT <- mapIds(org.Rn.eg.db, adr_c0c7_de_df$ENSEMBL_RAT, "SYMBOL", "ENSEMBL")
+adr_c0c7_df$ENTREZ_RAT <- mapIds(org.Rn.eg.db, adr_c0c7_de_df$ENSEMBL_RAT, "ENTREZID", "ENSEMBL")
+
+# # Convert gene symbols to mouse orthologs
+# # de_df <- rat2mouse_ortho(de_df, column = 'ENSEMBL_RAT')
+# 
+# #output_n <- de_df$ENSEMBL_RAT %>% unique() %>% length() %>% as.character()
+# 
+# # COllect the gene symbols
+# de_df$SYMBOL_MOUSE <- mapIds(org.Mm.eg.db, de_df$ENSEMBL_MOUSE, "SYMBOL", "ENSEMBL")
+# symbol_out <- de_df %>%
+#         filter(!is.na(SYMBOL_MOUSE)) %>%
+#         select(SYMBOL_MOUSE) %>% unlist() %>% as.character()
+```
+
+```{r}
+# Aorta
+
+aorta_cols <- meta_dat %>% filter(Tissue == 'Aorta')
+        #filter(! animal.key.anirandgroup %in% c('Control - IPE', 'Control - 7 hr')) %>%
+        
+  
+rownames(aorta_cols) <- aorta_cols$sample_key
+
+# Collect samples without NA values in TOD
+nona_sams <- aorta_cols %>%
+        select(sample_key) %>% unlist() %>% as.character()
+
+# Collect tissue specific counts
+aorta_counts <- count_dat[ ,aorta_cols$sample_key]
+
+# duplicates check
+duplicated(aorta_cols$vial_label)
+```
+
