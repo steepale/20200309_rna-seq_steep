@@ -17,7 +17,8 @@ knitr::opts_chunk$set(message = FALSE)
 knitr::opts_chunk$set(cache = FALSE)
 
 #' ## Goals of Analysis:
-#' * Perform a differential gene expression analysis between Control 0 and Control 7 to determine DE genes
+#' * Perform a differential gene expression analysis between:
+#'     * Control 0 and Control 7
 #' * Generate list of de genes
 #' * Generate an MA plot
 #' * Determine if DE gene list is enriched for circadian rhythm pathways
@@ -695,8 +696,8 @@ enrichr_plot <- enrichr_plot %>%
         mutate(FDR_ord = ifelse(UPDOWN == 'Down', -FDR_nlog, FDR_nlog))
 
 # Visualize results with barplot
-pdf(paste0(WD,"/plots/20200426_rnaseq-",TIS,"-pathways-sexmod-C0vsC7_steep.pdf"),
-    width = 12, height = 6)
+#pdf(paste0(WD,"/plots/20200426_rnaseq-",TIS,"-pathways-sexmod-C0vsC7_steep.pdf"),
+#    width = 12, height = 6)
 ggplot(enrichr_plot, aes(x=reorder(Term, FDR_ord), y=FDR_nlog, fill = UPDOWN)) +
         geom_bar(stat='identity') +
         coord_flip() +
@@ -714,5 +715,5 @@ ggplot(enrichr_plot, aes(x=reorder(Term, FDR_ord), y=FDR_nlog, fill = UPDOWN)) +
               strip.text = element_blank()) +
         theme(panel.grid.major = element_blank()) +
         ggtitle("Pathway Enrichment (KEGG Mouse 2019)")
-dev.off()
+#dev.off()
 
