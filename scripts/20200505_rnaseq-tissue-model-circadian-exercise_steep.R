@@ -55,101 +55,13 @@ select <- dplyr::select
 counts <- DESeq2::counts
 map <- purrr::map
 
-# Make the 'not in' operator
-################################################################################
-'%!in%' <- function(x,y) {
-        !('%in%'(x,y))
-}
-################################################################################
-
-# Capture the Date and Author
-################################################################################
-date <- format.Date( Sys.Date(), '%Y%m%d' )
-auth <- "steep"
-################################################################################
-
-## explicit gc, then execute `expr` `n` times w/o explicit gc, return timings
-################################################################################
-benchmark <- function(n = 1, expr, envir = parent.frame()) {
-        expr <- substitute(expr)
-        gc()
-        map(seq_len(n), ~ system.time(eval(expr, envir), gcFirst = FALSE))
-}
-################################################################################
-
-# Function to speed up making rows into lists for interation with lapply
-################################################################################
-f_pmap_aslist <- function(df) {
-        purrr::pmap(as.list(df), list)
-}
-################################################################################
-
-# Function to relabel RNASeq read names to orthologs
-###############################################################################################
-# mmusculus_gene_ensembl: Mouse genes (GRCm38.p6)
-# rnorvegicus_gene_ensembl: Rat genes (Rnor_6.0)
-mouse2rat_ortho <- function(x) {
-        # Ensure 'x' is a data.frame
-        if ( class(x) != "data.frame" ) {
-                stop("'x' must be a data frame", class.= FALSE)
-        }
-        
-        # Load requirements
-        library(biomaRt)
-        library(purrr)
-        library(dplyr)
-        # Load in annotations
-        mart_mm_ens = useMart("ensembl", dataset="mmusculus_gene_ensembl")
-        mart_rn_ens = useMart("ensembl", dataset="rnorvegicus_gene_ensembl")
-        # Create ortholog table
-        ortho_df <- getLDS(attributes=c("ensembl_gene_id","rnorvegicus_homolog_orthology_confidence"),
-                           filters="ensembl_gene_id", 
-                           values = x$ENSEMBL_MOUSE, 
-                           mart=mart_mm_ens,
-                           attributesL=c("ensembl_gene_id"), 
-                           martL=mart_rn_ens) # Use biomart to get orthologs
-        # Filter out any low confidence orthologs and any genes that are not one-to-one orthologs in both directions
-        ortho_df <- ortho_df[ortho_df$Rat.orthology.confidence..0.low..1.high. == '1',]
-        ortho_df <- ortho_df[!duplicated(ortho_df[,1]),]
-        ortho_df <- ortho_df[!duplicated(ortho_df[,3]),]
-        names(ortho_df) <- c('ENSEMBL_MOUSE','CONFIDENCE','ENSEMBL_RAT') 
-        ortho_df <- ortho_df %>%
-                select(-CONFIDENCE)
-        
-        # Assumes that 'x' has ensembl chicken gene ID's as rownames
-        # Ensure that only chicken genes appear in the matrix
-        #x <- x[startsWith(rownames(x), "ENSGALG"),]
-        # Assign the HUGO symbols to a new column
-        x <- left_join(x, ortho_df, by = "ENSEMBL_MOUSE") %>%
-                filter(!is.na(ENSEMBL_RAT)) %>%
-                mutate(SYMBOL_RAT = mapIds(org.Rn.eg.db, ENSEMBL_RAT, "SYMBOL", "ENSEMBL"))
-        x
-}
-#########################################################################################
-
-# Function to take lowercase strings and convert the first letter to uppercase
-################################################################################
-firstup <- function(x) {
-        substr(x, 1, 1) <- toupper(substr(x, 1, 1))
-        x
-}
-################################################################################
-
-# Sine and cosine functions
-################################################################################
-SIN <- function(t) sin(2*pi*t/24)
-COS <- function(t) cos(2*pi*t/24)
-################################################################################
-# Extract p-value from linear model TODO: Adjust this code to generate permutation based p-value
-################################################################################
-lmp <- function (modelobject) {
-        if ("lm" %!in% class(modelobject)) stop("Not an object of class 'lm' ")
-        f <- summary(modelobject)$fstatistic
-        p <- pf(f[1],f[2],f[3],lower.tail=F)
-        attributes(p) <- NULL
-        return(p)
-}
-################################################################################
+# Source the functions
+source(paste0(WD,'/functions/not_in.R'))
+source(paste0(WD,'/functions/rat_mouse_ortho.R'))
+source(paste0(WD,'/functions/mouse2rat_ortho.R'))
+source(paste0(WD,'/functions/lmp.R'))
+source(paste0(WD,'/functions/sin.R'))
+source(paste0(WD,'/functions/cos.R'))
 
 #' ## Declare Variables
 
@@ -176,47 +88,48 @@ lmp <- function (modelobject) {
 # OVR: Ovaries
 # SPL: Spleen
 # TES: Testes
-TISSUE <- "Hypothalamus"
-TIS <- "SCN"
-# Declare Outliers
-if(TISSUE == "Kidney"){
-        #OUTLIERS <- c('90042016803_SF1','90109015902_SN1')
-        #OUTLIERS <- c('90109015902_SN1')
-        OUTLIERS <- c('')
-}else if(TISSUE == "Liver"){
-        OUTLIERS <- c('90042016803_SF1')
-}else if(TISSUE == "Hypothalamus"){
-        OUTLIERS <- c('')
-}else if(TISSUE == "Aorta"){
-        OUTLIERS <- c('')
-}else if(TISSUE == "Gastrocnemius"){
-        OUTLIERS <- c('ABC')
-}else if(TISSUE == "Heart"){
-        OUTLIERS <- c('90052015802_SN1')
-}else if(TISSUE == "Adrenal"){
-        OUTLIERS <- c('ABC')
-}else if(TISSUE == "Brown Adipose"){
-        OUTLIERS <- c('')
-}else if(TISSUE == "White Adipose"){
-        OUTLIERS <- c('90127017003_SF1','90033017003_SF1')
-}else if(TISSUE == "Cortex"){
-        OUTLIERS <- c('ABC')
-}else if(TISSUE == "Hippocampus"){
-        OUTLIERS <- c('ABC')
-}else if(TISSUE == "Lung"){
-        OUTLIERS <- c('ABC')
-}else if(TISSUE == "Ovaries"){
-        OUTLIERS <- c('ABC')
-}else if(TISSUE == "Testes"){
-        OUTLIERS <- c('90127016302_SN2','90015016302_SN2')
-}else if(TISSUE == "Spleen"){
-        OUTLIERS <- c('ABC')
+
+# Load the decision table
+table_file <- paste0(WD,'/data/20200603_rnaseq-tissue-data-assambly-table_steep.txt')
+df_tbl <- read.table(file = table_file,sep = '\t', header = T, check.names = F)
+
+models_df <- data.frame()
+#TISSUE <- "Hypothalamus"
+for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Adrenal', 'Brown Adipose', 'Cortex','Gastrocnemius', 'Heart', 'Hippocampus','Ovaries','Spleen','Testes', 'White Adipose','Kidney')){
+    print(TISSUE)
+    #TISSUE <- 'Lung'
+    # # Collect the formula
+    # design <- df_tbl %>%
+    # filter(Tissue == TISSUE) %>%
+    # select(Formula) %>% unique() %>% 
+    # unlist() %>% as.character() %>% as.formula()
+    # Collect the Outliers
+    OUTLIERS <- df_tbl %>%
+        filter(Tissue == TISSUE) %>%
+        select(Outliers) %>% unique() %>% 
+        unlist() %>% as.character()
+    # Collect Adjusted_Variance
+    ADJ_VAR <- df_tbl %>%
+        filter(Tissue == TISSUE) %>%
+        select(Adjusted_Variance) %>% unique() %>% 
+        unlist() %>% as.character()
+    # Collect the TIS Symbol
+    TIS <- df_tbl %>%
+        filter(Tissue == TISSUE) %>%
+        select(Tis) %>% unique() %>% 
+        unlist() %>% as.character()
+    # Collect the Formula
+    FORMULA <- df_tbl %>%
+        filter(Tissue == TISSUE) %>%
+        select(Formula) %>% unique() %>% 
+        unlist() %>% as.character() %>% as.formula()
+    # Collect the adjusted variances 
+    ADJ_VAR <- df_tbl %>%
+        filter(Tissue == TISSUE) %>%
+        select(Adjusted_Variance) %>% unique() %>% 
+        unlist() %>% as.character()
 }
 
-#### Tissue:
-print(TISSUE)
-#### Outliers:
-print(OUTLIERS)
 
 #' ## Load & Clean Data
 #' ##### Data files to load:
@@ -233,139 +146,279 @@ print(OUTLIERS)
 
 # Files last saved in: 20200309_exploration-rna-seq-phase1_steep.R
 
-# Count matrix
-in_file <- paste0(WD,'/data/20200309_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv')
-count_data <- read.table(in_file,sep = ',', header = TRUE,row.names = 1,check.names = FALSE)
-
-# Meatdata table
-in_file <- paste0(WD,'/data/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt')
-col_data <- read.table(in_file, header = TRUE, check.names = FALSE, sep = '\t')
-row.names(col_data) <- col_data$sample_key
-
-#' #### Retrieve Circadian Genes Associated with Tissue
-#' Data from Supplementary Table 2 from 1. Yan, J., Wang, H., Liu, Y. & Shao, C. Analysis of gene regulatory networks in the mammalian circadian rhythm. PLoS Comput. Biol. 4, (2008).
-#' Downloaded 20200326 by Alec Steep
-#' Data previosuly saved in script:
-
-# Circadian Genes 
-in_file <- paste0(WD,'/data/20200503_rnaseq-circadian-',TIS,'-mouse-rat-ortho_steep-yan.txt')
-circ_df <- read.table(file=in_file, sep = '\t', header = TRUE)
-
-# Adjust column objects
-########################
-# To factors
-factor_cols <- c("labelid",
-                 "vial_label",
-                 "animal.registration.sex",
-                 "animal.key.exlt4",
-                 "X2D_barcode",
-                 "BID",
-                 "Seq_flowcell_lane",
-                 "Seq_flowcell_run",
-                 "Seq_end_type",
-                 "Lib_UMI_cycle_num",
-                 "pid",
-                 "acute.test.staffid",
-                 "acute.test.siteid",
-                 "acute.test.versionnbr",
-                 "acute.test.contactshock",
-                 "animal.familiarization.staffid",
-                 "animal.familiarization.siteid",
-                 "animal.familiarization.versionnbr",
-                 "animal.familiarization.compliant",
-                 "animal.key.protocol",
-                 "animal.key.agegroup",
-                 "animal.key.batch",
-                 "animal.key.intervention",
-                 "animal.key.sitename",
-                 "animal.registration.staffid",
-                 "animal.registration.siteid",
-                 "animal.registration.versionnbr",
-                 "animal.registration.ratid",
-                 "animal.registration.batchnumber",
-                 "specimen.collection.bloodcomplete",
-                 "specimen.collection.bloodtechid",
-                 "specimen.collection.uterustype",
-                 "specimen.collection.uterustechid",
-                 "specimen.collection.deathtype",
-                 "specimen.processing.versionnbr",
-                 "specimen.processing.siteid",
-                 "bid",
-                 "specimen.processing.samplenumber",
-                 "specimen.processing.techid",
-                 "barcode",
-                 "shiptositeid",
-                 "receivedcas",
-                 "receivestatuscas")
-for(fc in factor_cols){
+if(F) {
+    # Count matrix
+    in_file <- paste0(WD,'/data/20200309_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv')
+    count_data <- read.table(in_file,sep = ',', header = TRUE,row.names = 1,check.names = FALSE)
+    
+    # Meatdata table
+    in_file <- paste0(WD,'/data/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt')
+    col_data <- read.table(in_file, header = TRUE, check.names = FALSE, sep = '\t')
+    row.names(col_data) <- col_data$sample_key
+    
+    # Adjust column objects
+    ########################
+    # To factors
+    factor_cols <- c('labelid',
+                     'vial_label',
+                     'animal.registration.sex',
+                     'animal.key.exlt4',
+                     'X2D_barcode',
+                     'BID',
+                     'Seq_flowcell_lane',
+                     'Seq_flowcell_run',
+                     'Seq_end_type',
+                     'Lib_UMI_cycle_num',
+                     'pid',
+                     'acute.test.staffid',
+                     'acute.test.siteid',
+                     'acute.test.versionnbr',
+                     'acute.test.contactshock',
+                     'animal.familiarization.staffid',
+                     'animal.familiarization.siteid',
+                     'animal.familiarization.versionnbr',
+                     'animal.familiarization.compliant',
+                     'animal.key.protocol',
+                     'animal.key.agegroup',
+                     'animal.key.batch',
+                     'animal.key.intervention',
+                     'animal.key.sitename',
+                     'animal.registration.staffid',
+                     'animal.registration.siteid',
+                     'animal.registration.versionnbr',
+                     'animal.registration.ratid',
+                     'animal.registration.batchnumber',
+                     'specimen.collection.bloodcomplete',
+                     'specimen.collection.bloodtechid',
+                     'specimen.collection.uterustype',
+                     'specimen.collection.uterustechid',
+                     'specimen.collection.deathtype',
+                     'specimen.processing.versionnbr',
+                     'specimen.processing.siteid',
+                     'bid',
+                     'specimen.processing.samplenumber',
+                     'specimen.processing.techid',
+                     'barcode',
+                     'shiptositeid',
+                     'receivedcas',
+                     'receivestatuscas')
+    for(fc in factor_cols){
         col_data[[fc]] <- as.factor(col_data[[fc]])
-}
-
-# To Dates: 03JUL2018
-date_cols <- c("acute.test.d_visit",
-               "acute.test.d_start",
-               "animal.familiarization.d_visit",
-               "animal.familiarization.d_treadmillbegin",
-               "animal.familiarization.d_treadmillcomplete",
-               "animal.registration.d_visit",
-               "animal.registration.d_arrive",
-               "animal.registration.d_reverselight",
-               "specimen.collection.d_visit",
-               "animal.registration.d_birth",
-               "Seq_date")
-for(dc in date_cols){
+    }
+    
+    # To Dates: 03JUL2018
+    date_cols <- c('acute.test.d_visit',
+                   'acute.test.d_start',
+                   'animal.familiarization.d_visit',
+                   'animal.familiarization.d_treadmillbegin',
+                   'animal.familiarization.d_treadmillcomplete',
+                   'animal.registration.d_visit',
+                   'animal.registration.d_arrive',
+                   'animal.registration.d_reverselight',
+                   'specimen.collection.d_visit',
+                   'animal.registration.d_birth',
+                   'Seq_date')
+    for(dc in date_cols){
         col_data[[dc]] <- ymd(col_data[[dc]])
-}
-
-# From Dates: 2/14/2019
-date_cols <- c("RNA_extr_date",
-               "Lib_prep_date")
-for(dc in date_cols){
+    }
+    
+    # From Dates: 2/14/2019
+    date_cols <- c('RNA_extr_date',
+                   'Lib_prep_date')
+    for(dc in date_cols){
         col_data[[dc]] <- mdy(col_data[[dc]])
+    }
+    
+    # To Times: 10:30:00
+    time_cols <- c('acute.test.t_complete',
+                   'specimen.collection.t_anesthesia',
+                   'specimen.collection.t_bloodstart',
+                   'specimen.collection.t_bloodstop',
+                   'specimen.collection.t_edtafill',
+                   'specimen.collection.uteruscomplete',
+                   'specimen.collection.t_uterusstart',
+                   'specimen.collection.t_uterusstop',
+                   'specimen.collection.t_death',
+                   'specimen.processing.t_collection',
+                   'specimen.processing.t_edtaspin',
+                   'specimen.processing.t_freeze',
+                   'acute.test.howlongshock',
+                   'acute.test.t_start')
+    for(tc in time_cols){
+        col_data[[tc]] <- col_data[[tc]] %>% as.character() %>% parse_time() %>% as.numeric()
+    }
+    
+    # Releveling factors
+    col_data$animal.key.anirandgroup <- as.character(col_data$animal.key.anirandgroup)
+    col_data$animal.key.anirandgroup <- factor(col_data$animal.key.anirandgroup,
+                                               levels = ec_levels)
+    
+    # Create a variable for time post exercise
+    col_data <- col_data %>%
+        mutate(specimen.collection.t_exercise_hour = case_when(
+            animal.key.anirandgroup == 'Control - IPE' ~ -1,
+            animal.key.anirandgroup == 'Control - 7 hr' ~ 7,
+            animal.key.anirandgroup == 'Exercise - IPE' ~ 0,
+            animal.key.anirandgroup == 'Exercise - 0.5 hr' ~ 0.5,
+            animal.key.anirandgroup == 'Exercise - 1 hr' ~ 1,
+            animal.key.anirandgroup == 'Exercise - 4 hr' ~ 4,
+            animal.key.anirandgroup == 'Exercise - 7 hr' ~ 7,
+            animal.key.anirandgroup == 'Exercise - 24 hr' ~ 24,
+            animal.key.anirandgroup == 'Exercise - 48 hr' ~ 48))
+    
+    # Take the absolute value of the square root of seconds post exercise (consider negative numbers)
+    # Make sure to Subtract 1 hour (3600s) from 'Control - IPE' groups to account for exercise effect
+    col_data <- col_data %>%
+        mutate(calculated.variables.deathtime_after_acute =
+                   ifelse(animal.key.anirandgroup == 'Control - IPE',
+                          calculated.variables.deathtime_after_acute - 3600,
+                          calculated.variables.deathtime_after_acute))
+    col_data <- col_data %>%
+        mutate(specimen.collection.t_exercise_hour_sqrt = ifelse(
+            calculated.variables.deathtime_after_acute < 0,
+            (sqrt(abs(calculated.variables.deathtime_after_acute))/60/60)*(-1),
+            (sqrt(abs(calculated.variables.deathtime_after_acute))/60/60)))
+    row.names(col_data) <- col_data$sample_key
+    
+    # Examine histograms
+    col_data %>%
+        filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
+        ggplot(aes(x=calculated.variables.deathtime_after_acute)) +
+        geom_histogram(bins = 68)
+    col_data %>%
+        filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
+        ggplot(aes(x=specimen.collection.t_exercise_hour_sqrt)) +
+        geom_histogram(bins = 68)
+    
+    # Generate a time-last-fed variable
+    col_data <- col_data %>%
+        mutate(animal_time_last_fed = case_when(
+            animal.key.anirandgroup %!in% c('Control - 7 hr', 'Exercise - 7 hr') ~ parse_time('8:00'),
+            (animal.key.anirandgroup %in% c('Control - 7 hr') & 
+                 animal.registration.sex == 'Male') ~ parse_time('11:50'),
+            (animal.key.anirandgroup %in% c('Control - 7 hr') & 
+                 animal.registration.sex == 'Female') ~ parse_time('12:30'),
+            (animal.key.anirandgroup %in% c('Exercise - 7 hr') & 
+                 animal.registration.sex == 'Male') ~ parse_time('12:30'),
+            (animal.key.anirandgroup %in% c('Exercise - 7 hr') & 
+                 animal.registration.sex == 'Female') ~ parse_time('12:50')) %>% as.numeric())
+    
+    # Generate a time-fasted variable
+    col_data$calculated.variables.deathtime_after_fed <- (col_data$specimen.collection.t_death - col_data$animal_time_last_fed) %>% as.numeric()
+    
+    # Save data as an R objects
+    # ################################################################################
+    # To determine object size
+    sl <- object.size(count_data)
+    print(sl, units = 'auto')
+    # Meta Data
+    meta_file <- paste0(WD,'/data/20200603_rnaseq-meta-pass1a-stanford-sinai-proc_steep.rds')
+    saveRDS(col_data, file = meta_file)
+    
+    # Count Data
+    count_file <- paste0(WD, '/data/20200603_rnaseq-counts-pass1a-stanford-sinai-processed_steep.rds')
+    saveRDS(count_data, file = count_file)
 }
 
-# To Times: 10:30:00
-time_cols <- c("acute.test.t_complete",
-               "specimen.collection.t_anesthesia",
-               "specimen.collection.t_bloodstart",
-               "specimen.collection.t_bloodstop",
-               "specimen.collection.t_edtafill",
-               "specimen.collection.uteruscomplete",
-               "specimen.collection.t_uterusstart",
-               "specimen.collection.t_uterusstop",
-               "specimen.collection.t_death",
-               "specimen.processing.t_collection",
-               "specimen.processing.t_edtaspin",
-               "specimen.processing.t_freeze",
-               "acute.test.howlongshock",
-               "acute.test.t_start")
-for(tc in time_cols){
-        col_data[[tc]] <- col_data[[tc]] %>% as.character() %>% parse_time()
-}
+meta_file <- paste0(WD,'/data/20200603_rnaseq-meta-pass1a-stanford-sinai-proc_steep.rds')
+#' #### Polished metadata saved as:  
+#' `r meta_file`  
+#'  
+count_file <- paste0(WD, '/data/20200603_rnaseq-counts-pass1a-stanford-sinai-processed_steep.rds')
+#' #### Polished read counts saved as:  
+#' `r count_file`  
 
 # Set a vector for Exercise/Control Levels and Colors
-ec_levels <- c("Exercise - IPE",
-               "Exercise - 0.5 hr",
-               "Exercise - 1 hr",
-               "Exercise - 4 hr",
-               "Exercise - 7 hr",
-               "Exercise - 24 hr",
-               "Exercise - 48 hr",
-               "Control - IPE",
-               "Control - 7 hr")
-ec_colors <- c("gold",
-               "darkgoldenrod1",
-               "orange",
-               "darkorange",
-               "darkorange2",
-               "darkorange3",
-               "darkorange4",
-               "steelblue1",
-               "steelblue4")
-# Releveling factors
-col_data$animal.key.anirandgroup <- as.character(col_data$animal.key.anirandgroup)
-col_data$animal.key.anirandgroup <- factor(col_data$animal.key.anirandgroup, 
-                                           levels = ec_levels)
+ec_levels <- c('Exercise - IPE',
+               'Exercise - 0.5 hr',
+               'Exercise - 1 hr',
+               'Exercise - 4 hr',
+               'Exercise - 7 hr',
+               'Exercise - 24 hr',
+               'Exercise - 48 hr',
+               'Control - IPE',
+               'Control - 7 hr')
+ec_colors <- c('gold',
+               'darkgoldenrod1',
+               'orange',
+               'darkorange',
+               'darkorange2',
+               'darkorange3',
+               'darkorange4',
+               'steelblue1',
+               'steelblue4')
+
+# Load Metadata and count data as R objects
+################################################################################
+# Restore the metadata object
+meta_file <- paste0(WD,'/data/20200603_rnaseq-meta-pass1a-stanford-sinai-proc_steep.rds')
+col_data <- readRDS(file = meta_file)
+# Restore the count object
+count_file <- paste0(WD, '/data/20200603_rnaseq-counts-pass1a-stanford-sinai-processed_steep.rds')
+count_data <- readRDS(file = count_file)
+
+#' #### Retrieve Circadian Genes Associated with Tissue
+#' Data from Supplementary Table 2 from:  
+#' Yan, J., Wang, H., Liu, Y. & Shao, C. Analysis of gene regulatory networks in the mammalian circadian rhythm. PLoS Comput. Biol. 4, (2008).  
+#' Downloaded 20200326 by Alec Steep  
+#' 
+#' ## Place Genes in Genomic Ranges  
+#' 
+#' #### Reference Genome and Annotation:  
+#' Rnor_6.0 (GCA_000001895.4) assembly from Ensembl database (Release 96)  
+#' Found at: http://uswest.ensembl.org/Rattus_norvegicus/Info/Index.  
+#' 
+#' FASTA: Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz  
+#' ftp://ftp.ensembl.org/pub/release-96/fasta/rattus_norvegicus/dna/Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz  
+#' 
+#' GTF: Rattus_norvegicus.Rnor_6.0.96.gtf.gz  
+#' ftp://ftp.ensembl.org/pub/release-96/gtf/rattus_norvegicus/Rattus_norvegicus.Rnor_6.0.96.gtf.gz  
+#' 
+#' ## Annotate Genes by Chromosome
+
+#+ Annotate Genes by Chromosome
+################################################################################
+#####     Annotate Genes by Chromosome       ###################################
+################################################################################
+
+### Determine which control samples are male and female
+# Get the list of genes on the W chromosome
+
+# Construct your own personal galgal5 reference genome annotation
+# Construct from gtf file from Ensembl (same file used in mapping)
+#ens_gtf <- paste0(WD,'/data/Rattus_norvegicus.Rnor_6.0.96.gtf')
+#Rn_TxDb <- makeTxDbFromGFF(ens_gtf,
+# format=c('gtf'),
+# dataSource='Ensembl_Rattus6_gtf',
+# organism='Rattus norvegicus',
+# taxonomyId=NA,
+# circ_seqs=DEFAULT_CIRC_SEQS,
+# chrominfo=NULL,
+# miRBaseBuild=NA,
+# metadata=NULL)
+# Save the Rat Genomic Ranges Object
+#gf_file <- paste0(WD,'/data/20200603_Rnor-6.0.96-GRanges_steep.sqlite')
+#saveDb(Rn_TxDb, file=gf_file)
+
+# To load the annotation
+gf_file <- paste0(WD,'/data/20200603_Rnor-6.0.96-GRanges_steep.sqlite')
+Rn_TxDb <- loadDb(gf_file)
+# Define Female specific sex genes (X chromosome)
+# To examine chromosome names
+#seqlevels(Rn_TxDb)[1:23]
+# Extract genes as GRanges object, then names
+X_genes_gr <- genes(Rn_TxDb, columns = 'TXCHROM', filter = list(tx_chrom=c('X')))
+# Collect ensembl gene ids for female specific genes
+X_ens_id <- names(X_genes_gr)
+# Examine the gene symbols
+X_sym <- mapIds(org.Rn.eg.db, names(X_genes_gr), 'SYMBOL', 'ENSEMBL')
+# Extract genes as GRanges object, then names
+Y_genes_gr <- genes(Rn_TxDb, columns = 'TXCHROM', filter = list(tx_chrom=c('Y')))
+# Collect ensembl gene ids for female specific genes
+Y_ens_id <- names(Y_genes_gr)
+sex_ens_id <- c(X_ens_id,Y_ens_id)
+# Examine the gene symbols
+Y_sym <- mapIds(org.Rn.eg.db, names(Y_genes_gr), 'SYMBOL', 'ENSEMBL')
 
 #' ## Collect Samples of Interest and Normalize
 
@@ -375,10 +428,22 @@ col_data$animal.key.anirandgroup <- factor(col_data$animal.key.anirandgroup,
 ################################################################################
 
 # Filter Samples (meta)
-tod_cols <- col_data %>%
-        filter(Tissue == TISSUE) %>%
-        filter(sample_key != OUTLIERS) %>%
+if(TISSUE == c('Gastrocnemius_MSSM_1')){
+    tod_cols <- col_data %>%
+        filter(Tissue == 'Gastrocnemius') %>%
+        filter(Seq_batch == 'MSSM_1') %>%
         filter(!is.na(animal.registration.sex))
+}else if(TISSUE == c('Gastrocnemius_Stanford_1')){
+    tod_cols <- col_data %>%
+        filter(Tissue == 'Gastrocnemius') %>%
+        filter(Seq_batch == 'Stanford_1') %>%
+        filter(!is.na(animal.registration.sex))
+}else{
+    # Filter Samples (meta)
+    tod_cols <- col_data %>%
+        filter(Tissue == TISSUE) %>%
+        filter(!is.na(animal.registration.sex))
+}
 rownames(tod_cols) <- tod_cols$sample_key
 
 # Time post exercise
@@ -405,8 +470,8 @@ tod_cols <- tod_cols %>%
 tod_cols$specimen.collection.t_exercise_hour_sqrt_jit <- 
         jitter(tod_cols$specimen.collection.t_exercise_hour_sqrt, 
                factor = 0.1)
-
 row.names(tod_cols) <- tod_cols$sample_key
+
 # Examine histograms
 tod_cols %>%
         filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
@@ -438,8 +503,9 @@ tod_counts <- count_data[,nona_sams]
 all(rownames(tod_cols) == colnames(tod_counts))
 
 # Create a design formula and load counts and supporting annotation into an S4 object (DESeq infrastructure)
-design = ~1 # Primary variable needs to be last.
-title = paste0('Design: ',as.character(design))
+#design = ~1 # Primary variable needs to be last.
+design <- FORMULA
+(title = paste0('Design: ',as.character(design)) )
 dds1 <- DESeqDataSetFromMatrix(countData = tod_counts,
                                colData = tod_cols,
                                design = design)
@@ -471,11 +537,11 @@ dds <- estimateSizeFactors(dds)
 #' Size facotrs are generally around 1 (scaled) and calculated using the median and are robust to genes with large read counts
 summary(sizeFactors(dds))
 
-rld <- DESeq2::vst(dds)
+rld <- DESeq2::vst(dds, blind = F)
 #' Regularized Log (rlog) Transform
 for(n in 1){
         start_time <- Sys.time()
-        #rld <- DESeq2::rlog(dds)
+        #rld <- DESeq2::rlog(dds, blind = F)
         end_time <- Sys.time()
         print(end_time - start_time)
 }
@@ -491,8 +557,8 @@ pcaData <- DESeq2::plotPCA(rld,
                                       "sample_key"), 
                            returnData=TRUE, ntop = 500)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
-pdf(paste0(WD,"/plots/20200505_rnaseq-",TIS,"-PCA-naive-modeling_steep.pdf"),
-    width = 6, height = 4)
+#pdf(paste0(WD,"/plots/20200505_rnaseq-",TIS,"-PCA-naive-modeling_steep.pdf"),
+#    width = 6, height = 4)
 ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registration.sex)) +
         geom_point(size=3) +
         #geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
@@ -503,69 +569,57 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registr
         guides(color=guide_legend(title="animal.key.anirandgroup")) +
         scale_color_manual(values=ec_colors) +
         theme(legend.title=element_blank())
-dev.off()
+#dev.off()
 
-#' ### Adjust for Between Sex Variance
+#' ### Adjust Variance
 
-#+ Adjust for Between Sex Variance
+#+ Adjust Variance
 ################################################################################
-########### Adjust for Between Sex Variance  ###################################
+########### Adjust Variance  #######################################
 ################################################################################
+if(ADJ_VAR != 'None'){
+    for(adj_var in ADJ_VAR){
+        # Duplicate the rld object
+        rld_final <- rld
+        # The batch effect can only be removed with limma
+        # https://support.bioconductor.org/p/76099/ (See Michael Love's Comment)
+        assay(rld_final) <- limma::removeBatchEffect(assay(rld), rld[[adj_var]])
+    
+        # Examine the primary variable of interest to see if we've solved our issue
+        # Before:
+        p <- DESeq2::plotPCA(rld, intgroup =adj_var) +
+            guides(color=guide_legend(title=adj_var))
+        plot(p)
+        # After
+        p <- DESeq2::plotPCA(rld_final, intgroup = adj_var, ntop = 500) +
+            guides(color=guide_legend(title=adj_var))
+        plot(p)
+        rld <- rld_final
+    }
+}
 
-# "To adjust for batch effects, we median- centered the expression levels of each transcript within each batch and confirmed, using the correlation matrices, that the batch effects were removed after the adjustment." 
-#~ Li, J. Z. et al. Circadian patterns of gene expression in the human brain and disruption in major depressive disorder. Proc. Natl. Acad. Sci. U. S. A. 110, 9950–9955 (2013).
-
-# Here we have 2 Groups: Control - IPE and Control 7 hr; we'll median center these groups to combine the sexes.
-
-M_samples <- col_data %>%
-        filter(Tissue == TISSUE) %>%
-        filter(!is.na(animal.registration.sex)) %>%
-        filter(animal.registration.sex == 'Male') %>%
-        filter(sample_key != OUTLIERS) %>%
-        #filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
-        select(sample_key) %>% unlist() %>% as.character()
-F_samples <- col_data %>%
-        filter(Tissue == TISSUE) %>%
-        filter(!is.na(animal.registration.sex)) %>%
-        filter(sample_key != OUTLIERS) %>%
-        filter(animal.registration.sex == 'Female') %>%
-        #filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
-        select(sample_key) %>% unlist() %>% as.character()
-# Select the counts
-M_counts <- assay(rld[, M_samples])
-F_counts <- assay(rld[, F_samples])
-
-# Median Center data
-# Collects median of each row, then subtracts by row medians
-M_medians <- apply(M_counts,1,median)
-M_centered <- M_counts - M_medians
-F_medians <- apply(F_counts,1,median)
-F_centered <- F_counts - F_medians
-counts_centered <- cbind(M_centered, F_centered)
-counts_centered <- counts_centered[, colnames(assay(rld))]
-assay(rld) <- counts_centered
-
-#' #### We see just how well duplicate samples correlate regardless of sequencing batch
+#### We see just how well duplicate samples correlate regardless of sequencing batch
 mypar()
 pcaData <- DESeq2::plotPCA(rld, 
-                           intgroup=c("animal.key.anirandgroup",
-                                      "animal.registration.sex",
-                                      "sample_key"), 
-                           returnData=TRUE, ntop = 500)
+                        intgroup=c("animal.key.anirandgroup",
+                                   "animal.registration.sex",
+                                   "sample_key"), 
+                        returnData=TRUE, ntop = 20000)
 percentVar <- round(100 * attr(pcaData, "percentVar"))
-pdf(paste0(WD,"/plots/20200426_rnaseq-",TIS,"-PCA-sexmod-modeling_steep.pdf"),
-    width = 6, height = 4)
+#pdf(paste0(WD,"/plots/20200426_rnaseq-",TIS,"-PCA-sexmod-modeling_steep.pdf"),
+# width = 6, height = 4)
 ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registration.sex)) +
-        geom_point(size=3) +
-        #geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
-        xlab(paste0("PC1: ",percentVar[1],"% variance")) +
-        ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
-        #coord_fixed() +
-        ggtitle(paste0("PCA of ",TISSUE," Gene Expression:\ny ~ sex + cohort")) +
-        guides(color=guide_legend(title="animal.key.anirandgroup")) +
-        scale_color_manual(values=ec_colors) +
-        theme(legend.title=element_blank())
-dev.off()
+     geom_point(size=3) +
+     #geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
+     xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+     ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+     #coord_fixed() +
+     ggtitle(paste0("PCA of ",TISSUE)) +
+     guides(color=guide_legend(title="animal.key.anirandgroup")) +
+     scale_color_manual(values=ec_colors) +
+     theme(legend.title=element_blank())
+#dev.off()
+
 
 #' #### Annotate Data for Modeling By Cluster
 
@@ -605,9 +659,9 @@ by_gene_df <- tod_cols %>%
         arrange(sample_key) %>%
         nest()
 
-# Add Cluster and Circ Status
-by_gene_df <- by_gene_df %>%
-        mutate(CIRC = ifelse(ENSEMBL_RAT %in% circ_df$ENSEMBL_RAT, 'CIRC', 'NON-CIRC'))
+# # Add Cluster and Circ Status
+# by_gene_df <- by_gene_df %>%
+#         mutate(CIRC = ifelse(ENSEMBL_RAT %in% circ_df$ENSEMBL_RAT, 'CIRC', 'NON-CIRC'))
 
 # Add the gene symbol
 by_gene_df$SYMBOL_RAT = mapIds(org.Rn.eg.db, as.character(by_gene_df$ENSEMBL_RAT), "SYMBOL", "ENSEMBL")
@@ -620,9 +674,9 @@ by_gene_df7 <- tod_cols %>%
         arrange(sample_key) %>%
         nest()
 # Add Cluster and Circ Status
-by_gene_df7 <- by_gene_df7 %>%
-        left_join(mosaic_df, by = "ENSEMBL_RAT") %>%
-        filter(!is.na(CIRC)) # This filter removes genes that did not pass variance filter (MANOVA)
+# by_gene_df7 <- by_gene_df7 %>%
+#         left_join(mosaic_df, by = "ENSEMBL_RAT") %>%
+#         filter(!is.na(CIRC)) # This filter removes genes that did not pass variance filter (MANOVA)
 # Add the gene symbol
 by_gene_df7$SYMBOL_RAT = mapIds(org.Rn.eg.db, as.character(by_gene_df7$ENSEMBL_RAT), "SYMBOL", "ENSEMBL")
 
@@ -665,17 +719,22 @@ by_gene_df7 <- by_gene_df7 %>% filter(ENSEMBL_RAT %in% de_all)
 all(by_gene_df$ENSEMBL_RAT == by_gene_df7$ENSEMBL_RAT)
 
 # Generate model functions for the dataframes
+################################################################################
 gam_mod <- function(df) {
         lm(count ~ ns(specimen.collection.t_exercise_hour_sqrt_jit, df = 4), data = df)
 }
+################################################################################
+
 # Generate a model function for the dataframes
+################################################################################
 sin_mod <- function(df) {
         lm(count ~ SIN(specimen.collection.t_death_hour) + 
                    COS(specimen.collection.t_death_hour),
            data = df)
 }
+################################################################################
 
-# Generalized Additive Models
+# Generalized Additive Model (Exercise)
 ################################################################################
 # Run models and save as a column
 by_gene_df <- by_gene_df %>%
@@ -685,7 +744,7 @@ by_gene_df <- by_gene_df %>%
         mutate(gam_ANOVA = map(gam_model, anova))
 # Add the residuals
 by_gene_df <- by_gene_df %>%
-        mutate(gam_resid = map2(data, gam_model, add_residuals))
+        mutate(gam_resid = map2(data, gam_model, modelr::add_residuals))
 # Examine the model metrics
 by_gene_df <- by_gene_df %>%
     mutate(gam_metrics = map(gam_model, broom::glance))
@@ -708,7 +767,7 @@ by_gene_df <- by_gene_df %>%
         mutate(sin_ANOVA = map(sin_model, anova))
 # Add the residuals
 by_gene_df <- by_gene_df %>%
-        mutate(sin_resid = map2(data, sin_model, add_residuals))
+        mutate(sin_resid = map2(data, sin_model, modelr::add_residuals))
 # Examine the model metrics
 sin_metrics <- by_gene_df %>%
         mutate(sin_metrics = map(sin_model, broom::glance)) %>%
@@ -744,14 +803,14 @@ for( g in genes){
                              select(data))[[1]] %>% as.data.frame()
         # Generate a grid
         grid <- data.frame(specimen.collection.t_exercise_hour_sqrt_jit = 
-                                   seq_range(
+                                   modelr::seq_range(
                                            sub_data$specimen.collection.t_exercise_hour_sqrt_jit, n = length(sub_data$specimen.collection.t_exercise_hour_sqrt_jit)))
         #grid$ENSEMBL_RAT <- g
         mod <- (by_gene_df %>% 
                         filter(ENSEMBL_RAT == g) %>% ungroup() %>% 
                         select(gam_model))[[1]][[1]]
         summary(mod)
-        grid <- add_predictions(grid, mod, "pred") %>% as_tibble()
+        grid <- modelr::add_predictions(grid, mod, "pred") %>% as_tibble()
         names(grid)[1] <- "grid_t_exercise_hour_sqrt_jit"
         grid$specimen.collection.t_exercise_hour_sqrt_jit <- 
                 sub_data$specimen.collection.t_exercise_hour_sqrt_jit
@@ -775,7 +834,7 @@ for( g in genes){
                              select(data))[[1]] %>% as.data.frame()
         # Generate a grid
         grid <- data.frame(specimen.collection.t_death_hour = 
-                                   seq_range(
+                                   modelr::seq_range(
                                            sub_data$specimen.collection.t_death_hour, 
                                            n = length(sub_data$specimen.collection.t_exercise_hour_sqrt_jit)))
         #grid$ENSEMBL_RAT <- g
@@ -783,7 +842,7 @@ for( g in genes){
                         filter(ENSEMBL_RAT == g) %>% ungroup() %>% 
                         select(sin_model))[[1]][[1]]
         summary(mod)
-        grid <- add_predictions(grid, mod, "pred") %>% as_tibble()
+        grid <- modelr::add_predictions(grid, mod, "pred") %>% as_tibble()
         names(grid)[1] <- "grid_t_death_hour"
         grid$grid_t_death_hour <- round(grid$grid_t_death_hour, digits = 1)
         grid$specimen.collection.t_death_hour <- 
@@ -1083,8 +1142,8 @@ top_metrics <- model_metrics %>%
         filter(ENSEMBL_RAT %in% de_top)
 top20_metrics <- model_metrics %>%
         filter(ENSEMBL_RAT %in% de_top20)
-circ_metrics <- model_metrics %>%
-        filter(CIRC == "CIRC")
+gene_metrics <- model_metrics %>%
+        filter(SYMBOL_RAT  %in% c("Arntl","Pdk4"))
 
 # Compare the R2 between plots
 # First show circadian genes
@@ -1094,17 +1153,25 @@ ggplot(model_metrics, aes(r.squared.gam, r.squared.sin)) +
         geom_abline(intercept = 0, slope = 1) +
         xlab("R^2 Natural Spline Model (Exercise)") +
         ylab("R^2 SIN/COS Model (Circadian)") +
-        ggtitle("R2 Comparisons Between Models:\nDifferentially Expressed Genes (C0 -> C7)")
-ggplot(model_metrics, aes(r.squared.gam, r.squared.sin)) +
-        geom_point(alpha = 0.1) +
+        ggtitle("R2 Comparisons Between Models:\nDifferentially Expressed Genes (C0 -> C7)") +
+    coord_equal()
+# Plot Genes of Interest
+d <- model_metrics %>%
+    mutate(gene_label = ifelse(SYMBOL_RAT %in% c("Arntl","Pdk4"), SYMBOL_RAT, ''))
+ggplot(d, aes(r.squared.gam, r.squared.sin)) +
+        geom_point(alpha = 0.2) +
         xlim(0,1) + ylim(0,1) +
         geom_abline(intercept = 0, slope = 1) +
         xlab("R^2 Natural Spline Model (Exercise)") +
         ylab("R^2 SIN/COS Model (Circadian)") +
         ggtitle("R2 Comparisons Between Models:\nDifferentially Expressed Genes (C0 -> C7)") +
-        geom_point(data = circ_metrics,
-                   mapping = aes(r.squared.gam, r.squared.sin), 
-                   alpha = 1)
+    geom_point(data = gene_metrics,
+               mapping = aes(r.squared.gam, r.squared.sin),
+               alpha = 1) +
+    geom_label_repel(data = d,
+                     mapping = aes(label=gene_label), alpha = 0.8,
+                     hjust=0, vjust=0) +
+    coord_equal()
 
 # Map the top DE genes
 ggplot(model_metrics, aes(r.squared.gam, r.squared.sin)) +
@@ -1125,7 +1192,7 @@ ggplot(model_metrics, aes(r.squared.gam, r.squared.sin)) +
         xlab("R^2 Natural Spline Model (Exercise)") +
         ylab("R^2 SIN/COS Model (Circadian)") +
         ggtitle("R2 Comparisons Between Models:\nDifferentially Expressed Genes (C0 -> C7)") +
-        geom_point(data = top_metrics,
+        geom_point(data = top20_metrics,
                    mapping = aes(r.squared.gam, r.squared.sin, color = Expression), 
                    alpha = 1)+
         geom_label_repel(data = top20_metrics,
@@ -1141,6 +1208,68 @@ ggplot(model_metrics, aes(r.squared.gam, r.squared.sin)) +
 
 
 
+#' 
+#' #' ### Adjust for Between Sex Variance
+#' 
+#' #+ Adjust for Between Sex Variance
+#' ################################################################################
+#' ########### Adjust for Between Sex Variance  ###################################
+#' ################################################################################
+#' 
+#' # "To adjust for batch effects, we median- centered the expression levels of each transcript within each batch and confirmed, using the correlation matrices, that the batch effects were removed after the adjustment." 
+#' #~ Li, J. Z. et al. Circadian patterns of gene expression in the human brain and disruption in major depressive disorder. Proc. Natl. Acad. Sci. U. S. A. 110, 9950–9955 (2013).
+#' 
+#' # Here we have 2 Groups: Control - IPE and Control 7 hr; we'll median center these groups to combine the sexes.
+#' 
+#' M_samples <- col_data %>%
+#'         filter(Tissue == TISSUE) %>%
+#'         filter(!is.na(animal.registration.sex)) %>%
+#'         filter(animal.registration.sex == 'Male') %>%
+#'         filter(sample_key != OUTLIERS) %>%
+#'         #filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
+#'         select(sample_key) %>% unlist() %>% as.character()
+#' F_samples <- col_data %>%
+#'         filter(Tissue == TISSUE) %>%
+#'         filter(!is.na(animal.registration.sex)) %>%
+#'         filter(sample_key != OUTLIERS) %>%
+#'         filter(animal.registration.sex == 'Female') %>%
+#'         #filter(animal.key.anirandgroup %!in% c('Control - 7 hr')) %>%
+#'         select(sample_key) %>% unlist() %>% as.character()
+#' # Select the counts
+#' M_counts <- assay(rld[, M_samples])
+#' F_counts <- assay(rld[, F_samples])
+#' 
+#' # Median Center data
+#' # Collects median of each row, then subtracts by row medians
+#' M_medians <- apply(M_counts,1,median)
+#' M_centered <- M_counts - M_medians
+#' F_medians <- apply(F_counts,1,median)
+#' F_centered <- F_counts - F_medians
+#' counts_centered <- cbind(M_centered, F_centered)
+#' counts_centered <- counts_centered[, colnames(assay(rld))]
+#' assay(rld) <- counts_centered
+#' 
+#' #' #### We see just how well duplicate samples correlate regardless of sequencing batch
+#' mypar()
+#' pcaData <- DESeq2::plotPCA(rld, 
+#'                            intgroup=c("animal.key.anirandgroup",
+#'                                       "animal.registration.sex",
+#'                                       "sample_key"), 
+#'                            returnData=TRUE, ntop = 500)
+#' percentVar <- round(100 * attr(pcaData, "percentVar"))
+#' pdf(paste0(WD,"/plots/20200426_rnaseq-",TIS,"-PCA-sexmod-modeling_steep.pdf"),
+#'     width = 6, height = 4)
+#' ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registration.sex)) +
+#'         geom_point(size=3) +
+#'         #geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
+#'         xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+#'         ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+#'         #coord_fixed() +
+#'         ggtitle(paste0("PCA of ",TISSUE," Gene Expression:\ny ~ sex + cohort")) +
+#'         guides(color=guide_legend(title="animal.key.anirandgroup")) +
+#'         scale_color_manual(values=ec_colors) +
+#'         theme(legend.title=element_blank())
+#' dev.off()
 
 
 

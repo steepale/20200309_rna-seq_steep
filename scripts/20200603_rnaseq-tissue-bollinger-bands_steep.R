@@ -56,101 +56,19 @@ select <- dplyr::select
 counts <- DESeq2::counts
 map <- purrr::map
 
-# Make the 'not in' operator
-################################################################################
-'%!in%' <- function(x,y) {
-        !('%in%'(x,y))
-}
-################################################################################
+# Global options
+options(dplyr.print_max = 100)
 
-# Capture the Date and Author
-################################################################################
-date <- format.Date( Sys.Date(), '%Y%m%d' )
-auth <- "steep"
-################################################################################
-
-## explicit gc, then execute `expr` `n` times w/o explicit gc, return timings
-################################################################################
-benchmark <- function(n = 1, expr, envir = parent.frame()) {
-        expr <- substitute(expr)
-        gc()
-        map(seq_len(n), ~ system.time(eval(expr, envir), gcFirst = FALSE))
-}
-################################################################################
-
-# Function to speed up making rows into lists for interation with lapply
-################################################################################
-f_pmap_aslist <- function(df) {
-        purrr::pmap(as.list(df), list)
-}
-################################################################################
-
-# Function to relabel RNASeq read names to orthologs
-###############################################################################################
-# mmusculus_gene_ensembl: Mouse genes (GRCm38.p6)
-# rnorvegicus_gene_ensembl: Rat genes (Rnor_6.0)
-mouse2rat_ortho <- function(x) {
-        # Ensure 'x' is a data.frame
-        if ( class(x) != "data.frame" ) {
-                stop("'x' must be a data frame", class.= FALSE)
-        }
-        
-        # Load requirements
-        library(biomaRt)
-        library(purrr)
-        library(dplyr)
-        # Load in annotations
-        mart_mm_ens = useMart("ensembl", dataset="mmusculus_gene_ensembl")
-        mart_rn_ens = useMart("ensembl", dataset="rnorvegicus_gene_ensembl")
-        # Create ortholog table
-        ortho_df <- getLDS(attributes=c("ensembl_gene_id","rnorvegicus_homolog_orthology_confidence"),
-                           filters="ensembl_gene_id", 
-                           values = x$ENSEMBL_MOUSE, 
-                           mart=mart_mm_ens,
-                           attributesL=c("ensembl_gene_id"), 
-                           martL=mart_rn_ens) # Use biomart to get orthologs
-        # Filter out any low confidence orthologs and any genes that are not one-to-one orthologs in both directions
-        ortho_df <- ortho_df[ortho_df$Rat.orthology.confidence..0.low..1.high. == '1',]
-        ortho_df <- ortho_df[!duplicated(ortho_df[,1]),]
-        ortho_df <- ortho_df[!duplicated(ortho_df[,3]),]
-        names(ortho_df) <- c('ENSEMBL_MOUSE','CONFIDENCE','ENSEMBL_RAT') 
-        ortho_df <- ortho_df %>%
-                select(-CONFIDENCE)
-        
-        # Assumes that 'x' has ensembl chicken gene ID's as rownames
-        # Ensure that only chicken genes appear in the matrix
-        #x <- x[startsWith(rownames(x), "ENSGALG"),]
-        # Assign the HUGO symbols to a new column
-        x <- left_join(x, ortho_df, by = "ENSEMBL_MOUSE") %>%
-                filter(!is.na(ENSEMBL_RAT)) %>%
-                mutate(SYMBOL_RAT = mapIds(org.Rn.eg.db, ENSEMBL_RAT, "SYMBOL", "ENSEMBL"))
-        x
-}
-#########################################################################################
-
-# Function to take lowercase strings and convert the first letter to uppercase
-################################################################################
-firstup <- function(x) {
-        substr(x, 1, 1) <- toupper(substr(x, 1, 1))
-        x
-}
-################################################################################
-
-# Sine and cosine functions
-################################################################################
-SIN <- function(t) sin(2*pi*t/24)
-COS <- function(t) cos(2*pi*t/24)
-################################################################################
-# Extract p-value from linear model TODO: Adjust this code to generate permutation based p-value
-################################################################################
-lmp <- function (modelobject) {
-        if ("lm" %!in% class(modelobject)) stop("Not an object of class 'lm' ")
-        f <- summary(modelobject)$fstatistic
-        p <- pf(f[1],f[2],f[3],lower.tail=F)
-        attributes(p) <- NULL
-        return(p)
-}
-################################################################################
+# Source the functions
+source(paste0(WD,'/functions/not_in.R'))
+source(paste0(WD,'/functions/rat_mouse_ortho.R'))
+source(paste0(WD,'/functions/mouse2rat_ortho.R'))
+source(paste0(WD,'/functions/lmp.R'))
+source(paste0(WD,'/functions/cor_PC_1_6.R'))
+source(paste0(WD,'/functions/elbow_finder.R'))
+source(paste0(WD,'/functions/cor_outlier2.R'))
+source(paste0(WD,'/functions/sin.R'))
+source(paste0(WD,'/functions/cos.R'))
 
 #' ## Declare Variables
 
@@ -182,7 +100,7 @@ df_tbl <- read.table(file = table_file,sep = '\t', header = T, check.names = F)
 
 models_df <- data.frame()
 
-#TISSUE <- "Hypothalamus"
+#TISSUE <- "Kidney"
 for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Brown Adipose', 'Cortex','Gastrocnemius', 'Heart', 'Hippocampus','Ovaries','Spleen','Testes', 'White Adipose')){
   print(TISSUE)
   #TISSUE <- 'Lung'
@@ -206,6 +124,11 @@ for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Bro
     filter(Tissue == TISSUE) %>%
     select(Tis) %>% unique() %>% 
     unlist() %>% as.character()
+  # Collect the Formula
+  FORMULA <- df_tbl %>%
+    filter(Tissue == TISSUE) %>%
+    select(Formula) %>% unique() %>% 
+    unlist() %>% as.character() %>% as.formula()
 
 
 #' ## Load & Clean Data
@@ -551,8 +474,9 @@ tod_counts <- count_data[,nona_sams]
 all(rownames(tod_cols) == colnames(tod_counts))
 
 # Create a design formula and load counts and supporting annotation into an S4 object (DESeq infrastructure)
-design = ~1 # Primary variable needs to be last.
-title = paste0('Design: ',as.character(design))
+#design = ~1 # Primary variable needs to be last.
+design = FORMULA
+( title = paste0('Design: ',as.character(design)) )
 dds1 <- DESeqDataSetFromMatrix(countData = tod_counts,
                                colData = tod_cols,
                                design = design)
@@ -590,20 +514,54 @@ rs <- rowSums(counts(dds))
 
 #' #### TODO: Adjust Variance
 
+#' ### Adjust Variance
+
 #+ Adjust Variance
 ################################################################################
-################ Adjust Variance ###############################################
+########### Adjust Variance  #######################################
 ################################################################################
-
-# Create a design formula and load counts and supporting annotation into an S4 object (DESeq infrastructure)
-if(length(ADJ_VAR) == 2){
-  assay(rld) <- limma::removeBatchEffect(assay(rld), rld[[ADJ_VAR[1]]])
-  assay(rld) <- limma::removeBatchEffect(assay(rld), rld[[ADJ_VAR[2]]])
-}else if(ADJ_VAR == 'None'){
-  assay(rld) <- assay(rld)
-}else{
-  assay(rld) <- limma::removeBatchEffect(assay(rld), rld[[ADJ_VAR[1]]])
+if(ADJ_VAR != 'None'){
+  for(adj_var in ADJ_VAR){
+    # Duplicate the rld object
+    rld_final <- rld
+    # The batch effect can only be removed with limma
+    # https://support.bioconductor.org/p/76099/ (See Michael Love's Comment)
+    assay(rld_final) <- limma::removeBatchEffect(assay(rld), rld[[adj_var]])
+    
+    # Examine the primary variable of interest to see if we've solved our issue
+    # Before:
+    p <- DESeq2::plotPCA(rld, intgroup =adj_var) +
+      guides(color=guide_legend(title=adj_var))
+    plot(p)
+    # After
+    p <- DESeq2::plotPCA(rld_final, intgroup = adj_var, ntop = 500) +
+      guides(color=guide_legend(title=adj_var))
+    plot(p)
+    rld <- rld_final
+  }
 }
+
+#### We see just how well duplicate samples correlate regardless of sequencing batch
+mypar()
+pcaData <- DESeq2::plotPCA(rld, 
+                           intgroup=c("animal.key.anirandgroup",
+                                      "animal.registration.sex",
+                                      "sample_key"), 
+                           returnData=TRUE, ntop = 20000)
+percentVar <- round(100 * attr(pcaData, "percentVar"))
+#pdf(paste0(WD,"/plots/20200426_rnaseq-",TIS,"-PCA-sexmod-modeling_steep.pdf"),
+# width = 6, height = 4)
+ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registration.sex)) +
+  geom_point(size=3) +
+  #geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
+  xlab(paste0("PC1: ",percentVar[1],"% variance")) +
+  ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
+  #coord_fixed() +
+  ggtitle(paste0("PCA of ",TISSUE)) +
+  guides(color=guide_legend(title="animal.key.anirandgroup")) +
+  scale_color_manual(values=ec_colors) +
+  theme(legend.title=element_blank())
+#dev.off()
 
 #' #### Annotate Data for Modeling By Cluster
 
@@ -614,7 +572,7 @@ if(length(ADJ_VAR) == 2){
 time_cols <- tod_cols %>%
         filter(sample_key %in% nona_sams)
 
-# Select the normailzed counts
+# Select the normalized counts
 tod_counts <- assay(rld) 
 t_counts <- setNames(melt(tod_counts), 
                      c('ENSEMBL_RAT', 'sample_key', 'count'))
@@ -631,7 +589,7 @@ by_gene_df <- tod_cols %>%
 # by_gene_df <- by_gene_df %>%
 #         mutate(CIRC = ifelse(ENSEMBL_RAT %in% circ_df$ENSEMBL_RAT, 'CIRC', 'NON-CIRC'))
 # Add the gene symbol
-#by_gene_df$SYMBOL_RAT = mapIds(org.Rn.eg.db, as.character(by_gene_df$ENSEMBL_RAT), "SYMBOL", "ENSEMBL")
+by_gene_df$SYMBOL_RAT = mapIds(org.Rn.eg.db, as.character(by_gene_df$ENSEMBL_RAT), "SYMBOL", "ENSEMBL")
 
 # Join the dataframes and nest
 by_gene_df7 <- tod_cols %>%
@@ -679,6 +637,143 @@ sin_mod2 <- function(df) {
        COS(resid),
      data = df)
 }
+
+# Generate a model that combines circadian with exercise (circadian first)
+ce_mod <- function(df) {
+  lm(count ~ SIN(specimen.collection.t_death_hour) + 
+       COS(specimen.collection.t_death_hour) +
+       ns(specimen.collection.t_exercise_hour_sqrt, df = 4) + 1, data = df)
+}
+# Generate a model that combines circadian with exercise (exercise first)
+ec_mod <- function(df) {
+  lm(count ~ SIN(specimen.collection.t_death_hour) + 
+       COS(specimen.collection.t_death_hour) +
+       ns(specimen.collection.t_exercise_hour_sqrt, df = 4) + 1, data = df)
+}
+
+# Add the gene symbol
+by_gene_df$SYMBOL_RAT = mapIds(org.Rn.eg.db, as.character(by_gene_df7$ENSEMBL_RAT), "SYMBOL", "ENSEMBL")
+
+# In case you'd like to subset the data
+#by_gene_df_bk <- by_gene_df
+by_gene_df <- by_gene_df_bk
+
+by_gene_df <- by_gene_df %>%
+  filter(SYMBOL_RAT == 'Arntl')
+
+# Perform a series of analyses for each model
+for(mdl in c('gam', 'sin', 'ce', 'ec')){
+  # circadian with exercise Model (circadian first)
+  ################################################################################
+  # Collect variables
+  ( model_col <- as.symbol(paste0(mdl,'_model')) )
+  anova_col <- as.symbol(paste0(mdl,'_anova'))
+  resid_col <- as.symbol(paste0(mdl,'_resid'))
+  metrics_col <- as.symbol(paste0(mdl,'_metrics'))
+  summary_col <- as.symbol(paste0(mdl,'_summary'))
+  MODEL <- match.fun(paste0(mdl,'_mod'))
+  
+  # Run models and save as a column
+  by_gene_df <- by_gene_df %>%
+    mutate(!!model_col := map(data, MODEL))
+  # Examine the ANOVA report on models
+  by_gene_df <- by_gene_df %>%
+    mutate(!!anova_col := map(!!model_col, anova))
+  # Add the residuals
+  by_gene_df <- by_gene_df %>%
+    mutate(!!resid_col := map2(data, !!model_col, modelr::add_residuals))
+  # Examine the model metrics
+  by_gene_df <- by_gene_df %>%
+    mutate(!!metrics_col := map(!!model_col, broom::glance))
+  # Examine some model summaries
+  by_gene_df <- by_gene_df %>%
+    mutate(!!summary_col := map(!!model_col, summary))
+}
+
+by_gene_df %>%
+  ungroup() %>%
+  filter(SYMBOL_RAT == 'Arntl') %>%
+  select(ce_model) %>%
+  mutate(anova_rep = map(ce_model, .f = anova)) %>%
+  unnest(anova_rep)
+
+by_gene_df %>%
+  ungroup() %>%
+  filter(SYMBOL_RAT == 'Arntl') %>%
+  select(ec_model) %>%
+  mutate(anova_rep = map(ec_model, .f = anova)) %>%
+  unnest(anova_rep)
+
+by_gene_df %>%
+  ungroup() %>%
+  filter(SYMBOL_RAT == 'Arntl') %>%
+  select(gam_model) %>%
+  mutate(anova_rep = map(gam_model, .f = anova)) %>%
+  unnest(anova_rep)
+
+by_gene_df %>%
+  ungroup() %>%
+  filter(SYMBOL_RAT == 'Arntl') %>%
+  select(sin_model) %>%
+  mutate(anova_rep = map(sin_model, .f = anova)) %>%
+  unnest(anova_rep)
+
+models_df %>%
+  filter(TISSUE == 'Kidney') %>%
+  filter(ENSEMBL_RAT == 'ENSRNOG00000014448')
+
+models_df$TISSUE %>% table()
+
+
+
+
+# circadian with exercise Model (circadian first)
+################################################################################
+# Run models and save as a column
+by_gene_df <- by_gene_df %>%
+  mutate(ce_model = map(data, ce_mod))
+# Examine the ANOVA report on models
+by_gene_df <- by_gene_df %>%
+  mutate(ce_ANOVA = map(ce_model, anova))
+# Add the residuals
+by_gene_df <- by_gene_df %>%
+  mutate(ce_resid = map2(data, ce_model, modelr::add_residuals))
+# Examine the model metrics
+by_gene_df <- by_gene_df %>%
+  mutate(ce_metrics = map(ce_model, broom::glance))
+# Examine some model summaries
+by_gene_df <- by_gene_df %>%
+  mutate(ce_summary = map(ce_model, summary))
+# Save the model metrics
+ce_metrics <- by_gene_df %>%
+  unnest(ce_metrics)
+# Object with the anova metrics
+ce_anova <- by_gene_df %>%
+  unnest(ce_ANOVA)
+
+# exercise with circadian Model (exercise first)
+################################################################################
+# Run models and save as a column
+by_gene_df <- by_gene_df %>%
+  mutate(ec_model = map(data, ec_mod))
+# Examine the ANOVA report on models
+by_gene_df <- by_gene_df %>%
+  mutate(ec_ANOVA = map(ec_model, anova))
+# Add the residuals
+by_gene_df <- by_gene_df %>%
+  mutate(ec_resid = map2(data, ec_model, modelr::add_residuals))
+# Examine the model metrics
+by_gene_df <- by_gene_df %>%
+  mutate(ec_metrics = map(ec_model, broom::glance))
+# Examine some model summaries
+by_gene_df <- by_gene_df %>%
+  mutate(ec_summary = map(ec_model, summary))
+# Save the model metrics
+ec_metrics <- by_gene_df %>%
+  unnest(ec_metrics)
+# Object with the anova metrics
+ec_anova <- by_gene_df %>%
+  unnest(ec_ANOVA)
 
 # Generalized Additive Models (pass1)
 ################################################################################
@@ -789,9 +884,12 @@ models_df <- rbind(models_df, modelsr2_df)
 # Save the final output table
 models_file <- paste0(WD,'/data/20200603_rnaseq-tissue-models-residuals-r2-table_steep.txt')
 #write.table(models_df, file = models_file,sep = '\t',row.names = F,quote = F)
-}
+#}
 # Load the file
 models_df <- read.table(file = models_file ,sep = '\t', header = T, check.names = F) %>% as_tibble()
+
+
+
 
 # Join this table with DE table
 C0_C7_E7_file <- paste0(WD,'/data/20200624_rnaseq-tissue-C0-C7-E7-table_steep.txt')

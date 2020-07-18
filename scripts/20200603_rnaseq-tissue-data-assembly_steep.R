@@ -1,7 +1,7 @@
-'---
-#' title: 'PASS1A Rat Tissue: -- Data Assembly'
-#' author: 'Alec Steep & Jiayu Zhang' 
-#' date: '20200604'
+#'---
+#' title: "PASS1A Rat Tissue: -- Data Assembly"
+#' author: "Alec Steep"
+#' date: "20200604"
 #' output:
 #'     html_document:
 #'         code_folding: hide
@@ -16,12 +16,9 @@ knitr::opts_chunk$set(warning = FALSE)
 knitr::opts_chunk$set(message = FALSE)
 knitr::opts_chunk$set(cache = FALSE)
 
-#' ## Goals of Analysis:
-#' * Assembly Data
-#'
-#' 
-#' 
 #' ## Setup the Environment
+#' * Working directory
+#' * Load R packages
 
 #+ Setup Environment, message=FALSE, results='hide', warning = FALSE
 ################################################################################
@@ -34,14 +31,17 @@ WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
 
 # Load the dependencies
 #source('https://bioconductor.org/biocLite.R')
-#BiocManager::install('EnhancedVolcano')
+#BiocManager::install('ImpulseDE2')
 #install.packages('tidyverse')
 
 # Load dependencies
-pacs...man <- c('tidyverse','GenomicRanges', 'DESeq2','devtools','rafalib','GO.db','vsn','hexbin','ggplot2', 'GenomicFeatures','Biostrings','BSgenome','AnnotationHub','plyr','dplyr', 'org.Rn.eg.db','pheatmap','sva','formula.tools','pathview','biomaRt', 'PROPER','SeqGSEA','purrr','BioInstaller','RColorBrewer','lubridate', 'hms','ggpubr', 'ggrepel','genefilter','qvalue','ggfortify','som', 'vsn','org.Mm.eg.db','VennDiagram','EBImage','reshape2','xtable','kohonen','som','caret','enrichR','gplots','tiff','splines','gam','EnhancedVolcano','mvoutlier','multtest','bigutilsr','bigstatsr','magrittr')
+pacs...man <- c('tidyverse','GenomicRanges', 'DESeq2','devtools','rafalib','GO.db','vsn','hexbin','ggplot2', 'GenomicFeatures','Biostrings','BSgenome','AnnotationHub','plyr','dplyr', 'org.Rn.eg.db','pheatmap','sva','formula.tools','pathview','biomaRt', 'PROPER','SeqGSEA','purrr','BioInstaller','RColorBrewer','lubridate', 'hms','ggpubr', 'ggrepel','genefilter','qvalue','ggfortify','som', 'vsn','org.Mm.eg.db','VennDiagram','EBImage','reshape2','xtable','kohonen','som','caret','enrichR','gplots','tiff','splines','gam','EnhancedVolcano','mvoutlier','multtest','bigutilsr','bigstatsr','magrittr','ImpulseDE2')
 lapply(pacs...man, FUN = function(X) {
-        do.call('library', list(X)) })
+  do.call('library', list(X)) })
 
+#' ## Load Custom Functions
+
+#+ Functions, message=FALSE, results='hide', warning = FALSE
 ################################################################################
 ######################### Functions ############################################
 ################################################################################
@@ -54,266 +54,15 @@ map <- purrr::map
 # Global options
 options(dplyr.print_max = 100)
 
-# Make the 'not in' operator
-################################################################################
-'%!in%' <- function(x,y) {
-        !('%in%'(x,y))
-}
-################################################################################
+# Source the functions
+source(paste0(WD,'/functions/not_in.R'))
+source(paste0(WD,'/functions/rat_mouse_ortho.R'))
+source(paste0(WD,'/functions/mouse2rat_ortho.R'))
+source(paste0(WD,'/functions/lmp.R'))
+source(paste0(WD,'/functions/cor_PC_1_6.R'))
+source(paste0(WD,'/functions/elbow_finder.R'))
+source(paste0(WD,'/functions/cor_outlier2.R'))
 
-# Capture the Date and Author
-################################################################################
-date <- format.Date( Sys.Date(), '%Y%m%d' )
-auth <- 'steep'
-################################################################################
-
-## explicit gc, then execute `expr` `n` times w/o explicit gc, return timings
-################################################################################
-benchmark <- function(n = 1, expr, envir = parent.frame()) {
-        expr <- substitute(expr)
-        gc()
-        map(seq_len(n), ~ system.time(eval(expr, envir), gcFirst = FALSE))
-}
-################################################################################
-
-# Function to speed up making rows into lists for interation with lapply
-################################################################################
-f_pmap_aslist <- function(df) {
-        purrr::pmap(as.list(df), list)
-}
-################################################################################
-
-# Functions to relabel RNASeq read names to orthologs
-###############################################################################################
-# mmusculus_gene_ensembl: Mouse genes (GRCm38.p6)
-# rnorvegicus_gene_ensembl: Rat genes (Rnor_6.0)
-rat_mouse_ortho <- function(x, column = 'ENSEMBL_RAT', direction = 'rat2mouse') {
-  # Ensure 'x' is a data.frame
-  if ( class(x) != 'data.frame' ) {
-    stop('x must be a data frame', class.= FALSE)
-  }
-  if ( column %!in% c('ENSEMBL_RAT','ENSEMBL_MOUSE') ){
-    stop('column must be either ENSEMBL_RAT or ENSEMBL_MOUSE', class.= FALSE)
-  }
-  if ( direction %!in% c('rat2mouse', 'mouse2rat')){
-    stop('direction must be either rat2mouse or mouse2rat')
-  }
-  
-  # Load requirements
-  library(biomaRt)
-  library(purrr)
-  library(dplyr)
-  # Load in annotations
-  mart_mm_ens = useMart('ensembl', dataset='mmusculus_gene_ensembl')
-  mart_rn_ens = useMart('ensembl', dataset='rnorvegicus_gene_ensembl')
-  # Create ortholog table
-  if (direction == 'rat2mouse'){
-    ortho_df <- getLDS(attributes=c('ensembl_gene_id',
-                                    'mmusculus_homolog_orthology_confidence'),
-                       filters='ensembl_gene_id', 
-                       values = x[[column]], 
-                       mart=mart_rn_ens,
-                       attributesL=c('ensembl_gene_id'), 
-                       martL=mart_mm_ens) # Use biomart to get orthologs
-    # Filter out any low confidence orthologs and any genes 
-    #that are not one-to-one orthologs in both directions
-    #ortho_df <- ortho_df[ortho_df$Mouse.orthology.confidence..0.low..1.high. == '1',]
-    ortho_df <- ortho_df[!duplicated(ortho_df[,1]),]
-    ortho_df <- ortho_df[!duplicated(ortho_df[,3]),]
-    names(ortho_df) <- c('ENSEMBL_RAT','CONFIDENCE','ENSEMBL_MOUSE') 
-    ortho_df <- ortho_df %>%
-      select(-CONFIDENCE)
-    # Assign the symbols to a new column
-    x <- left_join(x, ortho_df, by = 'ENSEMBL_RAT') %>%
-      filter(!is.na(ENSEMBL_RAT)) %>%
-      mutate(SYMBOL_MOUSE = mapIds(org.Mm.eg.db, ENSEMBL_MOUSE, 'SYMBOL', 'ENSEMBL'))
-    
-  }else{
-    ortho_df <- getLDS(attributes=c('ensembl_gene_id',
-                                    'rnorvegicus_homolog_orthology_confidence'),
-                       filters='ensembl_gene_id', 
-                       values = x[[column]], 
-                       mart=mart_mm_ens,
-                       attributesL=c('ensembl_gene_id'), 
-                       martL=mart_rn_ens) # Use biomart to get orthologs
-    # Filter out any low confidence orthologs and any genes 
-    #that are not one-to-one orthologs in both directions
-    #ortho_df <- ortho_df[ortho_df$Rat.orthology.confidence..0.low..1.high. == '1',]
-    ortho_df <- ortho_df[!duplicated(ortho_df[,1]),]
-    ortho_df <- ortho_df[!duplicated(ortho_df[,3]),]
-    names(ortho_df) <- c('ENSEMBL_MOUSE','CONFIDENCE','ENSEMBL_RAT') 
-    ortho_df <- ortho_df %>%
-      select(-CONFIDENCE)
-    # Assign the HUGO symbols to a new column
-    x <- left_join(x, ortho_df, by = 'ENSEMBL_MOUSE') %>%
-      filter(!is.na(ENSEMBL_RAT)) %>%
-      mutate(SYMBOL_RAT = mapIds(org.Rn.eg.db, 
-                                 ENSEMBL_RAT, 
-                                 'SYMBOL', 'ENSEMBL'))
-  }
-  # Return the output
-  x
-}
-#########################################################################################
-
-
-# Function to relabel RNASeq read names to orthologs
-###############################################################################################
-# mmusculus_gene_ensembl: Mouse genes (GRCm38.p6)
-# rnorvegicus_gene_ensembl: Rat genes (Rnor_6.0)
-mouse2rat_ortho <- function(x) {
-        # Ensure 'x' is a data.frame
-        if ( class(x) != 'data.frame' ) {
-                stop('x must be a data frame', class.= FALSE)
-        }
-        
-        # Load requirements
-        library(biomaRt)
-        library(purrr)
-        library(dplyr)
-        # Load in annotations
-        mart_mm_ens = useMart('ensembl', dataset='mmusculus_gene_ensembl')
-        mart_rn_ens = useMart('ensembl', dataset='rnorvegicus_gene_ensembl')
-        # Create ortholog table
-        ortho_df <- getLDS(attributes=c('ensembl_gene_id','rnorvegicus_homolog_orthology_confidence'),
-                           filters='ensembl_gene_id', 
-                           values = x$ENSEMBL_MOUSE, 
-                           mart=mart_mm_ens,
-                           attributesL=c('ensembl_gene_id'), 
-                           martL=mart_rn_ens) # Use biomart to get orthologs
-        # Filter out any low confidence orthologs and any genes that are not one-to-one orthologs in both directions
-        ortho_df <- ortho_df[ortho_df$Rat.orthology.confidence..0.low..1.high. == '1',]
-        ortho_df <- ortho_df[!duplicated(ortho_df[,1]),]
-        ortho_df <- ortho_df[!duplicated(ortho_df[,3]),]
-        names(ortho_df) <- c('ENSEMBL_MOUSE','CONFIDENCE','ENSEMBL_RAT') 
-        ortho_df <- ortho_df %>%
-                select(-CONFIDENCE)
-        
-        # Assumes that 'x' has ensembl chicken gene ID's as rownames
-        # Ensure that only chicken genes appear in the matrix
-        #x <- x[startsWith(rownames(x), 'ENSGALG'),]
-        # Assign the HUGO symbols to a new column
-        x <- left_join(x, ortho_df, by = 'ENSEMBL_MOUSE') %>%
-                filter(!is.na(ENSEMBL_RAT)) %>%
-                mutate(SYMBOL_RAT = mapIds(org.Rn.eg.db, ENSEMBL_RAT, 'SYMBOL', 'ENSEMBL'))
-        x
-}
-#########################################################################################
-
-# Function to take lowercase strings and convert the first letter to uppercase
-################################################################################
-firstup <- function(x) {
-        substr(x, 1, 1) <- toupper(substr(x, 1, 1))
-        x
-}
-################################################################################
-
-# Sine and cosine functions
-################################################################################
-SIN <- function(t) sin(2*pi*t/24)
-COS <- function(t) cos(2*pi*t/24)
-################################################################################
-# Extract p-value from linear model TODO: Adjust this code to generate permutation based p-value
-################################################################################
-lmp <- function (modelobject) {
-        if ('lm' %!in% class(modelobject)) stop('Not an object of class lm ')
-        f <- summary(modelobject)$fstatistic
-        p <- pf(f[1],f[2],f[3],lower.tail=F)
-        attributes(p) <- NULL
-        return(p)
-}
-################################################################################
-# Function to grab topp 500 variance genes and find correlated variables
-################################################################################
-cor_PC_1_4 <- function(rld = rld, ntop = 20000, intgroups){
-  rv <- rowVars(assay(rld))
-  select <- order(rv, decreasing = TRUE)[seq_len(min(ntop, length(rv)))]
-  pca <- prcomp(t(assay(rld)[select, ]))
-  percentVar <- pca$sdev^2/sum(pca$sdev^2)
-  out_df <- data.frame(matrix(ncol = 3, nrow = 0))
-  names(out_df) <- c('PC','Adjusted_R_Sq','Condition')
-  for(intgroup in intgroups) {
-    intgroup.df <- as.data.frame(colData(rld)[, intgroup, drop = FALSE])
-    group <- colData(rld)[[intgroup]]
-    d <- data.frame(PC1 = pca$x[, 1], PC2 = pca$x[, 2], PC3 = pca$x[, 3], PC4 = pca$x[, 4],PC5 = pca$x[, 5],PC6 = pca$x[, 6],
-                    group = group, 
-                    intgroup.df, name = colnames(rld))
-    # Perform linear model on PC vs
-    if(length(unique(group[!is.na(group)])) >=2){
-      r2_pc1 <- (lm(PC1 ~ group, data = d) %>% summary())$adj.r.squared
-      r2_pc2 <- (lm(PC2 ~ group, data = d) %>% summary())$adj.r.squared
-      r2_pc3 <- (lm(PC3 ~ group, data = d) %>% summary())$adj.r.squared
-      r2_pc4 <- (lm(PC4 ~ group, data = d) %>% summary())$adj.r.squared
-      r2_pc5 <- (lm(PC5 ~ group, data = d) %>% summary())$adj.r.squared
-      r2_pc6 <- (lm(PC6 ~ group, data = d) %>% summary())$adj.r.squared
-      int_df <- data.frame(PC = 1:6, 
-                           Adjusted_R_Sq = c(r2_pc1, r2_pc2,r2_pc3, r2_pc4,r2_pc5,r2_pc6),
-                           Condition = intgroup) %>% as_tibble()
-      out_df <- rbind(out_df, int_df)
-    }else{
-      NA
-    }
-  }
-  out_df %>%
-    arrange(desc(Adjusted_R_Sq))
-  
-}
-################################################################################
-# Function to determine elbow
-# Source: https://stackoverflow.com/questions/2018178/finding-the-best-trade-off-point-on-a-curve
-################################################################################
-elbow_finder <- function(x_values, y_values) {
-  # Max values to create line
-  max_x_x <- max(x_values)
-  max_x_y <- y_values[which.max(x_values)]
-  max_y_y <- max(y_values)
-  max_y_x <- x_values[which.max(y_values)]
-  max_df <- data.frame(x = c(max_y_x, max_x_x), y = c(max_y_y, max_x_y))
-  
-  # Creating straight line between the max values
-  fit <- lm(max_df$y ~ max_df$x)
-  
-  # Distance from point to line
-  distances <- c()
-  for(i in 1:length(x_values)) {
-    distances <- c(distances, abs(coef(fit)[2]*x_values[i] - y_values[i] + coef(fit)[1]) / sqrt(coef(fit)[2]^2 + 1^2))
-  }
-  
-  # Max distance point
-  x_max_dist <- x_values[which.max(distances)]
-  y_max_dist <- y_values[which.max(distances)]
-  
-  c(x_max_dist, y_max_dist)
-}
-################################################################################
-
-# Variable correlate with 'suspected' outlier status
-################################################################################
-cor_outlier2 <- function(rld = rld, ntop = 20000, intgroups = names(colData(rld))){
-  # Create out dataframe
-  out_df <- data.frame(matrix(ncol = 2, nrow = 0))
-  names(out_df) <- c('Adjusted_R_Sq','Condition')
-  for(intgroup in intgroups) {
-    #intgroup <- 'animal.key.anirandgroup'
-    group <- colData(rld)[[intgroup]]
-    d <- colData(rld) %>% as_tibble()
-    d <- d %>% mutate(sample_outlier = ifelse(sample_key %in% MIS_SUS, 1, 0))
-    # Perform linear model on PC vs
-    if(length(unique(group[!is.na(group)])) >=2){
-      int_r2 <- (lm(d[['sample_outlier']] ~ d[[intgroup]]) %>% summary())$adj.r.squared
-      int_df <- data.frame(Adjusted_R_Sq = int_r2,
-                           Condition = intgroup) %>% as_tibble()
-      out_df <- rbind(out_df, int_df)
-    }else{
-      NA
-    }
-  }
-  out_df %>%
-    arrange(desc(Adjusted_R_Sq)) %>%
-    filter(Adjusted_R_Sq >= 0.1) %>%
-    filter(Condition  != 'sample_outlier')
-}
-################################################################################
 
 #' ## Declare Variables
 
@@ -321,7 +70,7 @@ cor_outlier2 <- function(rld = rld, ntop = 20000, intgroups = names(colData(rld)
 ################################################################################
 #####     Declare Variables     ################################################
 ################################################################################
-# Declare Tissue
+#' #### Section to generate a table of major decisions
 
 # TISSUE: Hypothalamus, Liver, Kidney, Aorta, Adrenal, Brown Adipose, Cortex, Gastrocnemius, Heart, Hippocampus,Lung,Ovaries,PaxGene,Spleen,Testes, White Adipose
 
@@ -345,7 +94,8 @@ cor_outlier2 <- function(rld = rld, ntop = 20000, intgroups = names(colData(rld)
 df_tbl <- data.frame(matrix(ncol = 8, nrow = 0))
 names(df_tbl) <- c('Tissue','Tis','Seq_Batch','Misidentified',
                    'Adjusted_Variables','Outliers','Formula')
-for(TISSUE in c('Hypothalamus', 'Liver', 'Kidney', 'Aorta', 'Adrenal', 'Brown Adipose', 'Cortex', 'Gastrocnemius', 'Heart', 'Hippocampus','Lung','Ovaries','Spleen','Testes', 'White Adipose')){
+for(TISSUE in c('Testes')){
+  # for(TISSUE in c('Hypothalamus', 'Kidney', 'Aorta', 'Adrenal', 'Brown Adipose', 'Cortex', 'Gastrocnemius', 'Heart', 'Hippocampus','Lung','Ovaries','Spleen', 'White Adipose','Liver','Testes')){
   # Declare Outliers
   if(TISSUE == 'Kidney'){
     TIS <- 'KID'
@@ -497,7 +247,30 @@ for(TISSUE in c('Hypothalamus', 'Liver', 'Kidney', 'Aorta', 'Adrenal', 'Brown Ad
 # Save the decision table
 table_file <- paste0(WD,'/data/20200603_rnaseq-tissue-data-assambly-table_steep.txt')
 #write.table(df_tbl, file = table_file,sep = '\t',row.names = F,quote = F)
-
+#' #### Final table saved as:  
+#' `r table_file`  
+#'  
+#'  
+#'  
+#' ## Take Homes  
+#' #### Tissue:  
+#' `r TISSUE`
+#' 
+#' #### Mis-identified Samples:  
+#' `r MIS_ID`
+#' 
+#' #### Covariables to Investigate:  
+#' `r PRI_VAR`
+#' 
+#' #### Final Modeling Formula:  
+#' `r FINAL_FORMULA`
+#' 
+#' #### Outlier Samples:  
+#' `r OUTLIERS`
+#' 
+#' 
+#' 
+#' 
 #' ## Load & Clean Data
 #' ##### Data files to load:
 #' * Count Matrix and Metadata Table from:
@@ -514,162 +287,186 @@ table_file <- paste0(WD,'/data/20200603_rnaseq-tissue-data-assambly-table_steep.
 # Files last saved in: 20200309_exploration-rna-seq-phase1_steep.R
 
 if(F) {
-# Count matrix
-in_file <- paste0(WD,'/data/20200309_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv')
-count_data <- read.table(in_file,sep = ',', header = TRUE,row.names = 1,check.names = FALSE)
-
-# Meatdata table
-in_file <- paste0(WD,'/data/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt')
-col_data <- read.table(in_file, header = TRUE, check.names = FALSE, sep = '\t')
-row.names(col_data) <- col_data$sample_key
-
-# Adjust column objects
-########################
-# To factors
-factor_cols <- c('labelid',
-                 'vial_label',
-                 'animal.registration.sex',
-                 'animal.key.exlt4',
-                 'X2D_barcode',
-                 'BID',
-                 'Seq_flowcell_lane',
-                 'Seq_flowcell_run',
-                 'Seq_end_type',
-                 'Lib_UMI_cycle_num',
-                 'pid',
-                 'acute.test.staffid',
-                 'acute.test.siteid',
-                 'acute.test.versionnbr',
-                 'acute.test.contactshock',
-                 'animal.familiarization.staffid',
-                 'animal.familiarization.siteid',
-                 'animal.familiarization.versionnbr',
-                 'animal.familiarization.compliant',
-                 'animal.key.protocol',
-                 'animal.key.agegroup',
-                 'animal.key.batch',
-                 'animal.key.intervention',
-                 'animal.key.sitename',
-                 'animal.registration.staffid',
-                 'animal.registration.siteid',
-                 'animal.registration.versionnbr',
-                 'animal.registration.ratid',
-                 'animal.registration.batchnumber',
-                 'specimen.collection.bloodcomplete',
-                 'specimen.collection.bloodtechid',
-                 'specimen.collection.uterustype',
-                 'specimen.collection.uterustechid',
-                 'specimen.collection.deathtype',
-                 'specimen.processing.versionnbr',
-                 'specimen.processing.siteid',
-                 'bid',
-                 'specimen.processing.samplenumber',
-                 'specimen.processing.techid',
-                 'barcode',
-                 'shiptositeid',
-                 'receivedcas',
-                 'receivestatuscas')
-for(fc in factor_cols){
-        col_data[[fc]] <- as.factor(col_data[[fc]])
+  # Count matrix
+  in_file <- paste0(WD,'/data/20200309_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv')
+  count_data <- read.table(in_file,sep = ',', header = TRUE,row.names = 1,check.names = FALSE)
+  
+  # Meatdata table
+  in_file <- paste0(WD,'/data/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt')
+  col_data <- read.table(in_file, header = TRUE, check.names = FALSE, sep = '\t')
+  row.names(col_data) <- col_data$sample_key
+  
+  # Adjust column objects
+  ########################
+  # To factors
+  factor_cols <- c('labelid',
+                   'vial_label',
+                   'animal.registration.sex',
+                   'animal.key.exlt4',
+                   'X2D_barcode',
+                   'BID',
+                   'Seq_flowcell_lane',
+                   'Seq_flowcell_run',
+                   'Seq_end_type',
+                   'Lib_UMI_cycle_num',
+                   'pid',
+                   'acute.test.staffid',
+                   'acute.test.siteid',
+                   'acute.test.versionnbr',
+                   'acute.test.contactshock',
+                   'animal.familiarization.staffid',
+                   'animal.familiarization.siteid',
+                   'animal.familiarization.versionnbr',
+                   'animal.familiarization.compliant',
+                   'animal.key.protocol',
+                   'animal.key.agegroup',
+                   'animal.key.batch',
+                   'animal.key.intervention',
+                   'animal.key.sitename',
+                   'animal.registration.staffid',
+                   'animal.registration.siteid',
+                   'animal.registration.versionnbr',
+                   'animal.registration.ratid',
+                   'animal.registration.batchnumber',
+                   'specimen.collection.bloodcomplete',
+                   'specimen.collection.bloodtechid',
+                   'specimen.collection.uterustype',
+                   'specimen.collection.uterustechid',
+                   'specimen.collection.deathtype',
+                   'specimen.processing.versionnbr',
+                   'specimen.processing.siteid',
+                   'bid',
+                   'specimen.processing.samplenumber',
+                   'specimen.processing.techid',
+                   'barcode',
+                   'shiptositeid',
+                   'receivedcas',
+                   'receivestatuscas')
+  for(fc in factor_cols){
+    col_data[[fc]] <- as.factor(col_data[[fc]])
+  }
+  
+  # To Dates: 03JUL2018
+  date_cols <- c('acute.test.d_visit',
+                 'acute.test.d_start',
+                 'animal.familiarization.d_visit',
+                 'animal.familiarization.d_treadmillbegin',
+                 'animal.familiarization.d_treadmillcomplete',
+                 'animal.registration.d_visit',
+                 'animal.registration.d_arrive',
+                 'animal.registration.d_reverselight',
+                 'specimen.collection.d_visit',
+                 'animal.registration.d_birth',
+                 'Seq_date')
+  for(dc in date_cols){
+    col_data[[dc]] <- ymd(col_data[[dc]])
+  }
+  
+  # From Dates: 2/14/2019
+  date_cols <- c('RNA_extr_date',
+                 'Lib_prep_date')
+  for(dc in date_cols){
+    col_data[[dc]] <- mdy(col_data[[dc]])
+  }
+  
+  # To Times: 10:30:00
+  time_cols <- c('acute.test.t_complete',
+                 'specimen.collection.t_anesthesia',
+                 'specimen.collection.t_bloodstart',
+                 'specimen.collection.t_bloodstop',
+                 'specimen.collection.t_edtafill',
+                 'specimen.collection.uteruscomplete',
+                 'specimen.collection.t_uterusstart',
+                 'specimen.collection.t_uterusstop',
+                 'specimen.collection.t_death',
+                 'specimen.processing.t_collection',
+                 'specimen.processing.t_edtaspin',
+                 'specimen.processing.t_freeze',
+                 'acute.test.howlongshock',
+                 'acute.test.t_start')
+  for(tc in time_cols){
+    col_data[[tc]] <- col_data[[tc]] %>% as.character() %>% parse_time() %>% as.numeric()
+  }
+  
+  # Releveling factors
+  col_data$animal.key.anirandgroup <- as.character(col_data$animal.key.anirandgroup)
+  col_data$animal.key.anirandgroup <- factor(col_data$animal.key.anirandgroup,
+                                             levels = ec_levels)
+  
+  # Create a variable for time post exercise
+  col_data <- col_data %>%
+    mutate(specimen.collection.t_exercise_hour = case_when(
+      animal.key.anirandgroup == 'Control - IPE' ~ -1,
+      animal.key.anirandgroup == 'Control - 7 hr' ~ 7,
+      animal.key.anirandgroup == 'Exercise - IPE' ~ 0,
+      animal.key.anirandgroup == 'Exercise - 0.5 hr' ~ 0.5,
+      animal.key.anirandgroup == 'Exercise - 1 hr' ~ 1,
+      animal.key.anirandgroup == 'Exercise - 4 hr' ~ 4,
+      animal.key.anirandgroup == 'Exercise - 7 hr' ~ 7,
+      animal.key.anirandgroup == 'Exercise - 24 hr' ~ 24,
+      animal.key.anirandgroup == 'Exercise - 48 hr' ~ 48))
+  
+  # Take the absolute value of the square root of seconds post exercise (consider negative numbers)
+  # Make sure to Subtract 1 hour (3600s) from 'Control - IPE' groups to account for exercise effect
+  col_data <- col_data %>%
+    mutate(calculated.variables.deathtime_after_acute =
+             ifelse(animal.key.anirandgroup == 'Control - IPE',
+                    calculated.variables.deathtime_after_acute - 3600,
+                    calculated.variables.deathtime_after_acute))
+  col_data <- col_data %>%
+    mutate(specimen.collection.t_exercise_hour_sqrt = ifelse(
+      calculated.variables.deathtime_after_acute < 0,
+      (sqrt(abs(calculated.variables.deathtime_after_acute))/60/60)*(-1),
+      (sqrt(abs(calculated.variables.deathtime_after_acute))/60/60)))
+  row.names(col_data) <- col_data$sample_key
+  
+  # Examine histograms
+  col_data %>%
+    filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
+    ggplot(aes(x=calculated.variables.deathtime_after_acute)) +
+    geom_histogram(bins = 68)
+  col_data %>%
+    filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
+    ggplot(aes(x=specimen.collection.t_exercise_hour_sqrt)) +
+    geom_histogram(bins = 68)
+  
+  # Generate a time-last-fed variable
+  col_data <- col_data %>%
+    mutate(animal_time_last_fed = case_when(
+      animal.key.anirandgroup %!in% c('Control - 7 hr', 'Exercise - 7 hr') ~ parse_time('8:00'),
+      (animal.key.anirandgroup %in% c('Control - 7 hr') & 
+         animal.registration.sex == 'Male') ~ parse_time('11:50'),
+      (animal.key.anirandgroup %in% c('Control - 7 hr') & 
+         animal.registration.sex == 'Female') ~ parse_time('12:30'),
+      (animal.key.anirandgroup %in% c('Exercise - 7 hr') & 
+         animal.registration.sex == 'Male') ~ parse_time('12:30'),
+      (animal.key.anirandgroup %in% c('Exercise - 7 hr') & 
+         animal.registration.sex == 'Female') ~ parse_time('12:50')) %>% as.numeric())
+  
+  # Generate a time-fasted variable
+  col_data$calculated.variables.deathtime_after_fed <- (col_data$specimen.collection.t_death - col_data$animal_time_last_fed) %>% as.numeric()
+  
+  # Save data as an R objects
+  # ################################################################################
+  # To determine object size
+  sl <- object.size(count_data)
+  print(sl, units = 'auto')
+  # Meta Data
+  meta_file <- paste0(WD,'/data/20200603_rnaseq-meta-pass1a-stanford-sinai-proc_steep.rds')
+  saveRDS(col_data, file = meta_file)
+  
+  # Count Data
+  count_file <- paste0(WD, '/data/20200603_rnaseq-counts-pass1a-stanford-sinai-processed_steep.rds')
+  saveRDS(count_data, file = count_file)
 }
 
-# To Dates: 03JUL2018
-date_cols <- c('acute.test.d_visit',
-               'acute.test.d_start',
-               'animal.familiarization.d_visit',
-               'animal.familiarization.d_treadmillbegin',
-               'animal.familiarization.d_treadmillcomplete',
-               'animal.registration.d_visit',
-               'animal.registration.d_arrive',
-               'animal.registration.d_reverselight',
-               'specimen.collection.d_visit',
-               'animal.registration.d_birth',
-               'Seq_date')
-for(dc in date_cols){
-        col_data[[dc]] <- ymd(col_data[[dc]])
-}
-
-# From Dates: 2/14/2019
-date_cols <- c('RNA_extr_date',
-               'Lib_prep_date')
-for(dc in date_cols){
-        col_data[[dc]] <- mdy(col_data[[dc]])
-}
-
-# To Times: 10:30:00
-time_cols <- c('acute.test.t_complete',
-               'specimen.collection.t_anesthesia',
-               'specimen.collection.t_bloodstart',
-               'specimen.collection.t_bloodstop',
-               'specimen.collection.t_edtafill',
-               'specimen.collection.uteruscomplete',
-               'specimen.collection.t_uterusstart',
-               'specimen.collection.t_uterusstop',
-               'specimen.collection.t_death',
-               'specimen.processing.t_collection',
-               'specimen.processing.t_edtaspin',
-               'specimen.processing.t_freeze',
-               'acute.test.howlongshock',
-               'acute.test.t_start')
-for(tc in time_cols){
-        col_data[[tc]] <- col_data[[tc]] %>% as.character() %>% parse_time()
-}
-
-# Releveling factors
-col_data$animal.key.anirandgroup <- as.character(col_data$animal.key.anirandgroup)
-col_data$animal.key.anirandgroup <- factor(col_data$animal.key.anirandgroup,
-                                           levels = ec_levels)
-
-# Create a variable for time post exercise
-col_data <- col_data %>%
-  mutate(specimen.collection.t_exercise_hour = case_when(
-    animal.key.anirandgroup == 'Control - IPE' ~ -1,
-    animal.key.anirandgroup == 'Control - 7 hr' ~ 7,
-    animal.key.anirandgroup == 'Exercise - IPE' ~ 0,
-    animal.key.anirandgroup == 'Exercise - 0.5 hr' ~ 0.5,
-    animal.key.anirandgroup == 'Exercise - 1 hr' ~ 1,
-    animal.key.anirandgroup == 'Exercise - 4 hr' ~ 4,
-    animal.key.anirandgroup == 'Exercise - 7 hr' ~ 7,
-    animal.key.anirandgroup == 'Exercise - 24 hr' ~ 24,
-    animal.key.anirandgroup == 'Exercise - 48 hr' ~ 48))
-
-# Take the absolute value of the square root of seconds post exercise (consider negative numbers)
-# Make sure to Subtract 1 hour (3600s) from 'Control - IPE' groups to account for exercise effect
-col_data <- col_data %>%
-  mutate(calculated.variables.deathtime_after_acute =
-           ifelse(animal.key.anirandgroup == 'Control - IPE',
-                  calculated.variables.deathtime_after_acute - 3600,
-                  calculated.variables.deathtime_after_acute))
-col_data <- col_data %>%
-  mutate(specimen.collection.t_exercise_hour_sqrt = ifelse(
-    calculated.variables.deathtime_after_acute < 0,
-    (sqrt(abs(calculated.variables.deathtime_after_acute))/60/60)*(-1),
-    (sqrt(abs(calculated.variables.deathtime_after_acute))/60/60)))
-row.names(col_data) <- col_data$sample_key
-
-# Examine histograms
-col_data %>%
-  filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
-  ggplot(aes(x=calculated.variables.deathtime_after_acute)) +
-  geom_histogram(bins = 68)
-col_data %>%
-  filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
-  ggplot(aes(x=specimen.collection.t_exercise_hour_sqrt)) +
-  geom_histogram(bins = 68)
-
-# Save data as an R objects
-# ################################################################################
-# To determine object size
-sl <- object.size(count_data)
-print(sl, units = 'auto')
-# Meta Data
 meta_file <- paste0(WD,'/data/20200603_rnaseq-meta-pass1a-stanford-sinai-proc_steep.rds')
-saveRDS(col_data, file = meta_file)
-
-# Count Data
+#' #### Polished metadata saved as:  
+#' `r meta_file`  
+#'  
 count_file <- paste0(WD, '/data/20200603_rnaseq-counts-pass1a-stanford-sinai-processed_steep.rds')
-saveRDS(count_data, file = count_file)
-}
+#' #### Polished read counts saved as:  
+#' `r count_file`  
 
 # Set a vector for Exercise/Control Levels and Colors
 ec_levels <- c('Exercise - IPE',
@@ -701,20 +498,25 @@ count_file <- paste0(WD, '/data/20200603_rnaseq-counts-pass1a-stanford-sinai-pro
 count_data <- readRDS(file = count_file)
 
 #' #### Retrieve Circadian Genes Associated with Tissue
-#' Data from Supplementary Table 2 from 1. Yan, J., Wang, H., Liu, Y. & Shao, C. Analysis of gene regulatory networks in the mammalian circadian rhythm. PLoS Comput. Biol. 4, (2008).
-#' Downloaded 20200326 by Alec Steep
-#' Data previosuly saved in script:
-
-#' ## Place Genes in Genomic Ranges
-#' #### Reference Genome and Annotation: Rnor_6.0 (GCA_000001895.4) assembly from Ensembl database (Release 96)
-#' Found at: http://uswest.ensembl.org/Rattus_norvegicus/Info/Index.
+#' Data from Supplementary Table 2 from:  
+#' Yan, J., Wang, H., Liu, Y. & Shao, C. Analysis of gene regulatory networks in the mammalian circadian rhythm. PLoS Comput. Biol. 4, (2008).  
+#' Downloaded 20200326 by Alec Steep  
 #' 
-#' FASTA: Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz ftp://ftp.ensembl.org/pub/release-96/fasta/rattus_norvegicus/dna/Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz
+#' ## Place Genes in Genomic Ranges  
 #' 
-#' GTF: Rattus_norvegicus.Rnor_6.0.96.gtf.gz ftp://ftp.ensembl.org/pub/release-96/gtf/rattus_norvegicus/Rattus_norvegicus.Rnor_6.0.96.gtf.gz
+#' #### Reference Genome and Annotation:  
+#' Rnor_6.0 (GCA_000001895.4) assembly from Ensembl database (Release 96)  
+#' Found at: http://uswest.ensembl.org/Rattus_norvegicus/Info/Index.  
+#' 
+#' FASTA: Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz  
+#' ftp://ftp.ensembl.org/pub/release-96/fasta/rattus_norvegicus/dna/Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz  
+#' 
+#' GTF: Rattus_norvegicus.Rnor_6.0.96.gtf.gz  
+#' ftp://ftp.ensembl.org/pub/release-96/gtf/rattus_norvegicus/Rattus_norvegicus.Rnor_6.0.96.gtf.gz  
+#' 
+#' ## Annotate Genes by Chromosome
 
 #+ Annotate Genes by Chromosome
-
 ################################################################################
 #####     Annotate Genes by Chromosome       ###################################
 ################################################################################
@@ -726,14 +528,14 @@ count_data <- readRDS(file = count_file)
 # Construct from gtf file from Ensembl (same file used in mapping)
 #ens_gtf <- paste0(WD,'/data/Rattus_norvegicus.Rnor_6.0.96.gtf')
 #Rn_TxDb <- makeTxDbFromGFF(ens_gtf,
-                           # format=c('gtf'),
-                           # dataSource='Ensembl_Rattus6_gtf',
-                           # organism='Rattus norvegicus',
-                           # taxonomyId=NA,
-                           # circ_seqs=DEFAULT_CIRC_SEQS,
-                           # chrominfo=NULL,
-                           # miRBaseBuild=NA,
-                           # metadata=NULL)
+# format=c('gtf'),
+# dataSource='Ensembl_Rattus6_gtf',
+# organism='Rattus norvegicus',
+# taxonomyId=NA,
+# circ_seqs=DEFAULT_CIRC_SEQS,
+# chrominfo=NULL,
+# miRBaseBuild=NA,
+# metadata=NULL)
 # Save the Rat Genomic Ranges Object
 #gf_file <- paste0(WD,'/data/20200603_Rnor-6.0.96-GRanges_steep.sqlite')
 #saveDb(Rn_TxDb, file=gf_file)
@@ -743,7 +545,7 @@ gf_file <- paste0(WD,'/data/20200603_Rnor-6.0.96-GRanges_steep.sqlite')
 Rn_TxDb <- loadDb(gf_file)
 # Define Female specific sex genes (X chromosome)
 # To examine chromosome names
-seqlevels(Rn_TxDb)[1:23]
+#seqlevels(Rn_TxDb)[1:23]
 # Extract genes as GRanges object, then names
 X_genes_gr <- genes(Rn_TxDb, columns = 'TXCHROM', filter = list(tx_chrom=c('X')))
 # Collect ensembl gene ids for female specific genes
@@ -757,48 +559,6 @@ Y_ens_id <- names(Y_genes_gr)
 sex_ens_id <- c(X_ens_id,Y_ens_id)
 # Examine the gene symbols
 Y_sym <- mapIds(org.Rn.eg.db, names(Y_genes_gr), 'SYMBOL', 'ENSEMBL')
-
-#' ## Identify Duplicate Samples
-
-#+ Duplicate Samples
-################################################################################
-######### Duplicate Samples ####################################################
-################################################################################
-
-if(TISSUE == 'Lung'){
-  # We have previously determined that we have duplicate lung samples from the analysis:
-  # 20200309_rnaseq-phase1a-duplicates_steep.html
-  
-  # Samples are duplicated by vial label
-  ##########################################################
-  # Collect vial_labels that are duplicated
-  dup_vials <- col_data$vial_label[duplicated(col_data$vial_label)] %>% 
-    unique() %>% as.character()
-  
-  # Collect dataframe of only duplicate samples
-  dup_data <- col_data %>%
-    filter(vial_label %in% dup_vials)
-  dup_data$vial_label <- factor(dup_data$vial_label)
-  
-  # Examine the duplicate samples by:
-  # Sequencing batch
-  table(dup_data$vial_label, dup_data$Seq_batch)
-  table(col_data$Tissue, col_data$animal.key.batch)
-  # Tissue
-  table(dup_data$vial_label, dup_data$Tissue)
-  
-  # Collect the duplicate samples (here 
-  dup_samples <- dup_data %>%
-    filter(Seq_batch == 'MSSM_2') %>%
-    select(sample_key) %>% unlist() %>% as.character()
-  
-  ################################################################################
-  ###### Manual Annotation Opportunity: Take Note of Duplicate Samples ###########
-  ################################################################################
-  # We remove samples from sequencing batch MSSM_3 (batch choice is arbitary as duplicate pairs are nealry identical)
-  col_data <- col_data %>%
-    filter(sample_key %!in% dup_samples)
-}
 
 #' ## Collect Samples of Interest and Normalize
 
@@ -826,17 +586,16 @@ rownames(tod_cols) <- tod_cols$sample_key
 
 # Collect samples without NA values in TOD
 nona_sams <- tod_cols %>%
-        filter(!is.na(specimen.collection.t_death_hour)) %>%
-        filter(!is.na(animal.registration.sex)) %>%
-        select(sample_key) %>% unlist() %>% as.character()
+  filter(!is.na(specimen.collection.t_death_hour)) %>%
+  filter(!is.na(animal.registration.sex)) %>%
+  select(sample_key) %>% unlist() %>% as.character()
 # Collect tissue specific counts
 tod_counts <- count_data[,nona_sams]
 
-#' #### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
+#' ##### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
 all(rownames(tod_cols) == colnames(tod_counts))
 
 # Create a design formula and load counts and supporting annotation into an S4 object (DESeq infrastructure)
-#design = ~ animal.registration.sex + animal.key.anirandgroup # Primary variable needs to be last.
 design = ~ 1 # Primary variable needs to be last.
 title = paste0('Design: ',as.character(design))
 dds1 <- DESeqDataSetFromMatrix(countData = tod_counts,
@@ -845,33 +604,40 @@ dds1 <- DESeqDataSetFromMatrix(countData = tod_counts,
 # Reasoning from:
 #citation('PROPER')
 #dds
-#' #### We remove genes with an average sequencing depth of 10 or less
-#' Before Filtering
-# dds1
+#' #### We remove genes with an average sequencing depth (across samples) of less than 1
+#' Summary of DESeqDataSet Before Filtering:
+dds1
 zero_n <- dds1[(rowSums(counts(dds1))/ncol(dds1) < 1), ] %>% 
-        nrow() %>% as.character()
+  nrow() %>% as.character()
 reads_n <- 1
 keep <- rowSums(counts(dds1))/ncol(dds1) >= reads_n
 dds2 <- dds1[keep,]
-#' #### Summary of counts and annotation data in a DESeqDataSet after filtering out genes with low sequencing depth
-#' TODO: Critic from Jun: Here we are removing features that have a low average expression. This may be removing important features that might have zero counts in some samples and higher counts in specific groups. Consider developing an algorithm that will account for features with expression in n or more samples.
+#' Summary of counts and annotation data in a DESeqDataSet after filtering   
+# TODO: Critic from Jun: Here we are removing features that have a low average expression. This may be removing important features that might have zero counts in some samples and higher counts in specific groups. Consider developing an algorithm that will account for features with expression in n or more samples.
 dds2
 filter_n <- nrow(dds1) - nrow(dds2) - as.numeric(zero_n)
 filter_p <- filter_n/(nrow(dds1) - as.numeric(zero_n))
 total_n <- nrow(dds1) - nrow(dds2)
 
-#' ##### Note: Number of genes with average counts between zero and 1 is `r zero_n` but removing reads with less than or equal to `r reads_n` removes an additional `r filter_n` features or removes `r filter_p*100`% of the non-zero reads (total of `r total_n` features removed).
+#' ##### Number of Genes Removed:  
+#' Number of genes with average counts (across samples) less than 1 is `r zero_n`  
+#' 
+#' ##### If more stringent filtering thresholds employed:  
+#' Removing reads with less than or equal to `r reads_n` removes an additional `r filter_n` features or removes `r filter_p*100`% of the non-zero reads (total of `r total_n` features removed).
 dds <- dds2
-#' To see the reads per million for each sample
+
+#' #### Reads per million for each sample  
 sort(colSums(assay(dds)))/1e6
 
-# estimateSizeFactors gives us a robust estimate in sequencing depth
-dds <- estimateSizeFactors(dds)
+#' #### Size Factor Estimates (summary across samples):  
 #' Size facotrs are generally around 1 (scaled) and calculated using the median and are robust to genes with large read counts
+# estimateSizeFactors() gives us a robust estimate in sequencing depth.  
+dds <- estimateSizeFactors(dds)
 summary(sizeFactors(dds))
 
+#' #### Transform:  
 rld <- DESeq2::vst(dds, blind = FALSE)
-#' Regularized Log (rlog) Transform
+#' Variance Stabalizing Transform (vst)
 # for(n in 1){
 #         start_time <- Sys.time()
 #         #rld <- DESeq2::rlog(dds)
@@ -881,7 +647,7 @@ rld <- DESeq2::vst(dds, blind = FALSE)
 # This command is redundent, but included for safety
 rs <- rowSums(counts(dds))
 
-#' ## Early Removal of Outliers (These Outliers Could not be Batch-Corrected)
+#' ## Early Identification/Removal of Outliers (These Outliers Could Not be Batch-Corrected)
 
 #+ Early Removal of Outliers
 ################################################################################
@@ -897,6 +663,7 @@ if(TISSUE %in% c('Hippocampus','Testes')){
     #pri_var <- 'Lib_molarity..nM.'
   }
   pca <- prcomp(t(assay(rld)), scale. = F)
+  percentVar <- pca$sdev^2/sum(pca$sdev^2)
   PC <- pca$x %>% as.data.frame()
   PC$sample_key <- row.names(pca$x)
   df_plot <- data.frame(PC = seq_along(pca$sdev^2/sum(pca$sdev^2)),
@@ -998,7 +765,7 @@ if(TISSUE %in% c('Hippocampus','Testes')){
 
 #' ## Qualitative Assessment of Variance in Tissue
 
-#+ Qualitative Assessment of Variance in Tissue
+# Qualitative Assessment of Variance in Tissue
 ################################################################################
 #####     Qualitative Assessment of Variance in Tissue      ####################
 ################################################################################
@@ -1014,7 +781,7 @@ pc_cor_df <- cor_PC_1_4(rld = rld, ntop = 20000, intgroups = names(tod_cols)) %>
 pc_cor_df %>%
   filter(PC %in% c(1:4))
 # # Quick Test
-# 'animal.key.batch' %in% (pc_cor_df %>% filter(PC %in% c(1,2)) %>% select(Condition) %>% unlist() %>% as.character() %>% unique())
+# animal.key.batch %in% (pc_cor_df %>% filter(PC %in% c(1,2)) %>% select(Condition) %>% unlist() %>% as.character() %>% unique())
 
 # Examine strength of PC
 pca <- prcomp(t(assay(rld)), scale. = F)
@@ -1026,6 +793,11 @@ p <- df_plot %>%
   geom_point() +
   geom_vline(xintercept = elbow_finder(df_plot$PC,df_plot$VAR)[1], linetype='dashed')
 plot(p)
+
+# colData(rld) %>% 
+#   as.data.frame() %>% select(animal.key.anirandgroup, 
+#                         animal.registration.sex,
+#                         animal_time_last_fed)
 
 if(T){
 # Visualize variables in PC's 1 - 2
@@ -1085,11 +857,11 @@ if(T){
 
 # Examine a labled PCA Plot
 ################################################################################
-if(TISSUE %!in% c('Ovaries','Testis')){
-for(mis_id_var in MIS_ID_VAR){
-  if(MIS_ID_VAR == 'None'){
-    mis_id_var <- 'animal.registration.sex'
-  }
+if(TISSUE %!in% c('Ovaries','Testes')){
+  for(mis_id_var in MIS_ID_VAR){
+    if(MIS_ID_VAR == 'None'){
+      mis_id_var <- 'animal.registration.sex'
+      }
   #mis_id_var <- MIS_ID_VAR[1]
   print(mis_id_var)
 # Examine metadata varibales most correlated with suspected misidentified samples to determine if there is an effect are genuine
@@ -1097,32 +869,6 @@ cor_out_df <- cor_outlier2(rld = rld, ntop = 20000, intgroups = names(colData(rl
 cor_out_df <- cor_out_df %>% 
   filter(Condition != 'outlier')
 cor_out_df
-
-# Examine counts of top gene
-# assay(rld)['ENSRNOG00000050000',MIS_SUS] %>% as.numeric()
-# t <- assay(rld)['ENSRNOG00000050000',] %>% as.data.frame()
-# t$sample <- row.names(t)
-# t %>%
-#   filter(sample %!in% MIS_SUS) %>% as.numeric()
-# 
-# t <- counts(dds, normalized = TRUE) %>% as.data.frame()
-# t$ENSEMBL_RAT <- row.names(t)
-# t <- t %>% 
-#   filter(ENSEMBL_RAT == 'ENSRNOG00000050000') %>%
-#   t() %>% as.data.frame()
-# t$SAMPLE <- row.names(t)
-# t <- t[-79,]
-# b1 <- (col_data %>% filter(animal.key.batch == '1'))$sample_key %>% as.character()
-# t <- t %>% 
-#   mutate(COHORT = ifelse(SAMPLE %in% MIS_SUS, 'SUS', 'NORM')) %>%
-#   mutate(BATCH = ifelse(SAMPLE %in% b1, '1', '2'))
-# t <- t %>% as_tibble()
-# t <- t %>% mutate(COUNT = ENSRNOG00000050000 %>% unlist() %>% as.character() %>% as.numeric())
-# 
-# t %>%
-#   ggplot(aes(x = BATCH, y = COUNT, color = COHORT)) +
-#   geom_point()
-#plotCounts(dds, gene='ENSRNOG00000050000', intgroup='animal.key.batch')
 
 # Show a PCA plot labeled with suspected misidentified samples
 mypar()
@@ -1178,7 +924,7 @@ X_genes <- X_ens_id[X_ens_id %in% row.names(assay(rld))]
 sex <- tod_cols$animal.registration.sex
 group <- tod_cols$animal.registration.sex
 
-#' #### Predict the sex of reference samples (all samples for that matter) by calculating the median expression of genes on the Y chromosome. We should expect a bimodal distribution with males demonstrating significantly higher median expression.
+#### Predict the sex of reference samples (all samples for that matter) by calculating the median expression of genes on the Y chromosome. We should expect a bimodal distribution with males demonstrating significantly higher median expression.
 chryexp <- colMeans(assay(rld)[Y_genes,])
 chryexp_df <- data.frame('counts' = chryexp)
 chryexp_df$sample <- row.names(chryexp_df) %>% as.factor()
@@ -1187,7 +933,7 @@ chryexp_df <- chryexp_df %>%
 
 # Visualize genes on the Y Chromosome
 ##############################################
-#' ##### If we create a histogram of the median gene expression values on chromosome Y, we should expect to see a bimodal distribution.
+##### If we create a histogram of the median gene expression values on chromosome Y, we should expect to see a bimodal distribution.
 mypar()
 p <- chryexp_df %>%
   mutate(plot_labs = ifelse(sample %in% MIS_ID, as.character(sample), '')) %>%
@@ -1205,9 +951,9 @@ plot(p)
 ###### Manual Annotation Opportunity: Fill in MIS_SUS variable #################
 ################################################################################
 
-#' ## Sample Classification: High Dimension (Gene) Outlier Prediction + Supervised
+# ## Sample Classification: High Dimension (Gene) Outlier Prediction + Supervised
 
-#+ Sample Classification: High Dimension Outlier Prediction + Supervised 
+# Sample Classification: High Dimension Outlier Prediction + Supervised 
 ################################################################################
 ##     Sample Classification: High Dimension Outlier Prediction + Supervised #
 ################################################################################
@@ -1219,9 +965,9 @@ edata <- scale(assay(rld))
 apply(edata , 2, mean)
 apply(edata , 2, sd)
 
-#' ## Reassign Annotation Groups to MisIdentified Samples: Outlier Detection (Per Gene)
+ ## Reassign Annotation Groups to MisIdentified Samples: Outlier Detection (Per Gene)
 
-#+ Reassign Annotation Groups to MisIdentified Samples
+# Reassign Annotation Groups to MisIdentified Samples
 ################################################################################
 #####     Reassign Annotation Groups to MisIdentified Samples      #############
 ################################################################################
@@ -1285,6 +1031,8 @@ rld_mis <- rld_out[,rld_out$sample_key %in% MIS_SUS]
 rld_out <- rld_out[,rld_out$sample_key %!in% MIS_SUS]
 
 # Create a train and test set
+rld_out[[mis_id_var]] <- as.character(rld_out[[mis_id_var]])
+rld_out[[mis_id_var]] <- as.factor(rld_out[[mis_id_var]])
 index = createDataPartition(y=rld_out[[mis_id_var]], p=0.7, list=FALSE)
 sample_train <- as.character(rld_out$sample_key[index])
 sample_test <- as.character(rld_out$sample_key[-index])
@@ -1433,6 +1181,7 @@ if(nrow(true_df %>%
 }
 }
 }
+
 ################################################################################
 #########     Manual Annotation Opportunity: Assign PRI_VAR      ###############
 ################################################################################
@@ -1542,7 +1291,7 @@ for(pri_var in PRI_VAR){
   }
   
   # DE Test for Variable (Ensure factors are properly ordered)
-  ( design = formula(paste0('~ ',pri_var)) ) # Primary variable needs to be last.
+  ( design = formula(paste0('~ 1')) ) # Primary variable needs to be last.
   dds_vp <- DESeqDataSetFromMatrix(countData = tod_counts,
                                    colData = tod_cols,
                                    design = design)
@@ -1661,23 +1410,24 @@ Adjusted p-value <= 0.05; |Log2FC| >= 0.5')) +
     
     # Collect the desired pathways to query for enrichment
     desired <- c('KEGG_2019_Mouse')
+    # db <- c('KEGG_2019_Mouse')
     enriched_up <- enrichr(symbol_up, desired)
     enriched_down <- enrichr(symbol_down, desired)
     n<-1
     enrichr_df <- data.frame()
     for(db in desired){
       # Collapse the data into flat format
-      if(!is.null(nrow(enriched_up[[desired]]))){
+      if(nrow(enriched_up[[desired]]) > 0){
         enriched_up[[n]]$Data.Base <- db
         enriched_up[[n]]$UPDOWN <- 'Up'
       }
-      if(!is.null(nrow(enriched_down[[desired]]))){
+      if(nrow(enriched_down[[desired]]) > 0){
         enriched_down[[n]]$Data.Base <- db
         enriched_down[[n]]$UPDOWN <- 'Down'
       }
-      if(!is.null(nrow(enriched_down[[desired]]))){
+      if(nrow(enriched_down[[desired]]) > 0){
         enrichr_df <- rbind(enrichr_df,enriched_up[[n]])
-      }else if(!is.null(enriched_up[[desired]])){
+      }else if(nrow(enriched_up[[desired]]) > 0){
         enrichr_df <- rbind(enrichr_df,enriched_down[[n]])
       }else{
         enrichr_df <- rbind(enrichr_df,enriched_up[[n]],enriched_down[[n]])
@@ -1739,6 +1489,9 @@ Adjusted p-value <= 0.05; |Log2FC| >= 0.5'))
   ########### Adjust Variance  #######################################
   ################################################################################
   if(PRI_VAR != 'None'){
+    #pri_var <- 'animal.registration.sex'
+    #pri_var <- 'calculated.variables.deathtime_after_fed'
+    #pri_var <- 'animal_time_last_fed'
     # Set primary variable of interest
     if(TISSUE == c('Gastrocnemius_MSSM_1')){
       tod_cols <- col_data %>%
@@ -1770,7 +1523,7 @@ Adjusted p-value <= 0.05; |Log2FC| >= 0.5'))
       select(sample_key) %>% unlist() %>% as.character()
     # Collect tissue specific counts
     tod_counts <- count_data[,nona_sams]
-    #' #### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
+    #### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
     all(rownames(tod_cols) == colnames(tod_counts))
     
     # Create a design formula and load counts and supporting annotation into an S4 object (DESeq infrastructure)
@@ -1807,7 +1560,7 @@ Adjusted p-value <= 0.05; |Log2FC| >= 0.5'))
 ################################################################################
 
 # Find variables associated with PCs
-pc_cor_df <- cor_PC_1_4(rld = rld, ntop = 20000, intgroups = names(tod_cols)) %>%
+pc_cor_df <- cor_PC_1_4(rld = rld, ntop = 20000, intgroups = names(colData(rld))) %>%
   filter(Adjusted_R_Sq > 0.15) %>%
   arrange(PC)
 # Examine Variables of interest for Pcs 1 and 2
@@ -1867,7 +1620,7 @@ if(T){
 mypar()
 pcaData <- DESeq2::plotPCA(rld, 
                            intgroup=c(pri_var, 'sample_key','animal.key.anirandgroup',
-                                      'animal.registration.sex','animal.registration.cagenumber'), 
+                                      'animal.registration.sex','animal.registration.cagenumber','calculated.variables.deathtime_after_fed'), 
                            returnData=TRUE, ntop = 20000)
 percentVar <- round(100 * attr(pcaData, 'percentVar'))
 # Examine the PCA annotated with variables of interest
@@ -2011,7 +1764,7 @@ nona_sams <- tod_cols %>%
   select(sample_key) %>% unlist() %>% as.character()
 # Collect tissue specific counts
 tod_counts <- count_data[,nona_sams]
-#' #### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
+#### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
 all(rownames(tod_cols) == colnames(tod_counts))
 # Create a design formula and load counts and supporting annotation into an S4 object (DESeq infrastructure)
 design = formula(paste0('~ ',pri_var)) # Primary variable needs to be last.
@@ -2133,4 +1886,34 @@ pcaData %>%
 # 
 # pred.accuracy = round(mean(pred_sex == test_df[[mis_id_var]])*100,2)
 # pred.accuracy
+
+
+
+# Examine counts of top gene
+# assay(rld)['ENSRNOG00000050000',MIS_SUS] %>% as.numeric()
+# t <- assay(rld)['ENSRNOG00000050000',] %>% as.data.frame()
+# t$sample <- row.names(t)
+# t %>%
+#   filter(sample %!in% MIS_SUS) %>% as.numeric()
+# 
+# t <- counts(dds, normalized = TRUE) %>% as.data.frame()
+# t$ENSEMBL_RAT <- row.names(t)
+# t <- t %>% 
+#   filter(ENSEMBL_RAT == 'ENSRNOG00000050000') %>%
+#   t() %>% as.data.frame()
+# t$SAMPLE <- row.names(t)
+# t <- t[-79,]
+# b1 <- (col_data %>% filter(animal.key.batch == '1'))$sample_key %>% as.character()
+# t <- t %>% 
+#   mutate(COHORT = ifelse(SAMPLE %in% MIS_SUS, 'SUS', 'NORM')) %>%
+#   mutate(BATCH = ifelse(SAMPLE %in% b1, '1', '2'))
+# t <- t %>% as_tibble()
+# t <- t %>% mutate(COUNT = ENSRNOG00000050000 %>% unlist() %>% as.character() %>% as.numeric())
+# 
+# t %>%
+#   ggplot(aes(x = BATCH, y = COUNT, color = COHORT)) +
+#   geom_point()
+#plotCounts(dds, gene='ENSRNOG00000050000', intgroup='animal.key.batch')
+
+
 

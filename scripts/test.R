@@ -1,416 +1,786 @@
+#'---
+#' title: "PASS1A Rat Tissue: -- Data Assembly"
+#' author: "Alec Steep"
+#' date: "20200604"
+#' output:
+#'     html_document:
+#'         code_folding: hide
+#'         toc: true
+#'         highlight: zenburn
+#'     
+#'---
 
-#' #### Unsupervised Clustering w/ SOMs & K-means (Ordered by TOD Bins Group)
+#+ setup, include=FALSE
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(cache = FALSE)
 
-#+ Unsupervised Clustering w/ SOMs & K-means (Ordered by TOD Bins Group)
+#' ## Setup the Environment
+
+#+ Setup Environment, message=FALSE, results='hide', warning = FALSE
 ################################################################################
-#Unsupervised Clustering w/ SOMs & K-means (Ordered by TOD Bins Group) #
+##### Resources and Dependencies ###############################################
 ################################################################################
 
-# Order samples by time of death (time of day)
-tod_order <- fkid_cols %>%
-        arrange(specimen.collection.t_death) %>%
+# Set the working directory
+WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
+#setwd(WD)
+
+# Load the dependencies
+#source('https://bioconductor.org/biocLite.R')
+#BiocManager::install('ImpulseDE2')
+#install.packages('tidyverse')
+
+# Load dependencies
+pacs...man <- c('tidyverse','GenomicRanges', 'DESeq2','devtools','rafalib','GO.db','vsn','hexbin','ggplot2', 'GenomicFeatures','Biostrings','BSgenome','AnnotationHub','plyr','dplyr', 'org.Rn.eg.db','pheatmap','sva','formula.tools','pathview','biomaRt', 'PROPER','SeqGSEA','purrr','BioInstaller','RColorBrewer','lubridate', 'hms','ggpubr', 'ggrepel','genefilter','qvalue','ggfortify','som', 'vsn','org.Mm.eg.db','VennDiagram','EBImage','reshape2','xtable','kohonen','som','caret','enrichR','gplots','tiff','splines','gam','EnhancedVolcano','mvoutlier','multtest','bigutilsr','bigstatsr','magrittr','ImpulseDE2')
+lapply(pacs...man, FUN = function(X) {
+        do.call('library', list(X)) })
+
+#' ## Load Custom Functions
+
+#+ Functions, message=FALSE, results='hide', warning = FALSE
+################################################################################
+######################### Functions ############################################
+################################################################################
+
+# Set select
+select <- dplyr::select
+counts <- DESeq2::counts
+map <- purrr::map
+
+# Global options
+options(dplyr.print_max = 100)
+
+# Source the functions
+source(paste0(WD,'/functions/not_in.R'))
+source(paste0(WD,'/functions/rat_mouse_ortho.R'))
+source(paste0(WD,'/functions/mouse2rat_ortho.R'))
+source(paste0(WD,'/functions/lmp.R'))
+source(paste0(WD,'/functions/cor_PC_1_6.R'))
+source(paste0(WD,'/functions/elbow_finder.R'))
+source(paste0(WD,'/functions/cor_outlier2.R'))
+
+
+#' ## Declare Variables
+
+#+ Declare Variables
+################################################################################
+#####     Declare Variables     ################################################
+################################################################################
+#' #### Section to generate a table of major decisions
+
+# TISSUE: Hypothalamus, Liver, Kidney, Aorta, Adrenal, Brown Adipose, Cortex, Gastrocnemius, Heart, Hippocampus,Lung,Ovaries,PaxGene,Spleen,Testes, White Adipose
+
+# SCN: Hypothalamus (Suprachiasmatic nucleus)
+# LIV: Liver
+# KID: Kidney
+# AOR: Aorta
+# SKM: Gastrocnemius
+# HAT: Heart
+# ADG: Adrenal gland
+# BAT: Brown adipose tissue
+# WAT: White adipose tissue
+# COR: Cortex
+# HIP: Hippocampus
+# LUNG: Lung
+# OVR: Ovaries
+# SPL: Spleen
+# TES: Testes
+
+# Create the 
+df_tbl <- data.frame(matrix(ncol = 8, nrow = 0))
+names(df_tbl) <- c('Tissue','Tis','Seq_Batch','Misidentified',
+                   'Adjusted_Variables','Outliers','Formula')
+for(TISSUE in c('Testes')){
+        # for(TISSUE in c('Hypothalamus', 'Kidney', 'Aorta', 'Adrenal', 'Brown Adipose', 'Cortex', 'Gastrocnemius', 'Heart', 'Hippocampus','Lung','Ovaries','Spleen', 'White Adipose','Liver','Testes')){
+        # Declare Outliers
+        if(TISSUE == 'Kidney'){
+                TIS <- 'KID'
+                MIS_ID_VAR <- c('None')
+                MIS_SUS <- c('None')
+                MIS_ID <- c('None')
+                PRI_VAR <- c('animal.registration.sex')
+                FINAL_FORMULA <- formula(paste0('~ ',PRI_VAR[1],
+                                                ' + animal.key.anirandgroup'))
+                OUTLIERS <- c('None')
+        }else if(TISSUE == 'Liver'){
+                TIS <- 'LIV'
+                MIS_ID_VAR <- c('None')
+                MIS_SUS <- c('None')
+                MIS_ID <- c('None')
+                PRI_VAR <- c('animal.registration.sex')
+                OUTLIERS <- c('None')
+                FINAL_FORMULA <- formula(paste0('~ ',PRI_VAR[1],
+                                                ' + animal.key.anirandgroup'))
+        }else if(TISSUE == 'Hypothalamus'){
+                TIS <- 'SCN'
+                MIS_ID_VAR <- c('animal.registration.sex')
+                MIS_SUS <- c('90010015402_SF2','90011015402_SF2')
+                MIS_ID <- c('90010015402_SF2','90011015402_SF2')
+                PRI_VAR <- c('animal.registration.sex')
+                FINAL_FORMULA <- formula(paste0('~ ',PRI_VAR[1],
+                                                ' + animal.key.anirandgroup'))
+                OUTLIERS <- c('None')
+        }else if(TISSUE == 'Aorta'){
+                TIS <- 'AOR'
+                MIS_ID_VAR <- c('None')
+                MIS_SUS <- c('None')
+                MIS_ID <- c('None')
+                PRI_VAR <- c('None')
+                FINAL_FORMULA <- formula(paste0('~ animal.key.anirandgroup'))
+                OUTLIERS <- c('90159016502_SN2')
+        }else if(TISSUE == 'Gastrocnemius'){
+                TIS <- 'SKM'
+                MIS_ID_VAR <- c('None')
+                MIS_SUS <- c('None')
+                MIS_ID <- c('None')
+                PRI_VAR <- c('animal.registration.sex')
+                FINAL_FORMULA <- formula(paste0('~ ',PRI_VAR[1],
+                                                ' + animal.key.anirandgroup'))
+                OUTLIERS <- c('None')
+        }else if(TISSUE == 'Heart'){
+                TIS <- 'HAT'
+                MIS_ID_VAR <- c('None')
+                MIS_SUS <- c('None')
+                MIS_ID <- c('None')
+                PRI_VAR <- c('animal.registration.sex')
+                FINAL_FORMULA <- formula(paste0('~ ',PRI_VAR[1],
+                                                ' + animal.key.anirandgroup'))
+                OUTLIERS <- c('90052015802_SN1')
+        }else if(TISSUE == 'Adrenal'){
+                TIS <- 'ADG'
+                MIS_ID_VAR <- c('None')
+                MIS_SUS <- c('None')
+                MIS_ID <- c('None')
+                PRI_VAR <- c('animal.registration.sex')
+                FINAL_FORMULA <- formula(paste0('~ ',PRI_VAR[1],
+                                                ' + animal.key.anirandgroup'))
+                OUTLIERS <- c('None')
+        }else if(TISSUE == 'Brown Adipose'){
+                TIS <- 'BAT'
+                MIS_ID_VAR <- c('animal.registration.sex')
+                MIS_SUS <- c('90121016905_SF1','90014016905_SF1','90128016905_SF1','90047016905_SF1','90001016905_SF1',
+                             '90018016905_SF1')
+                MIS_ID <- c('None')
+                PRI_VAR <- c('animal.registration.sex')
+                FINAL_FORMULA <- formula(paste0('~ ',PRI_VAR[1],
+                                                ' + animal.key.anirandgroup'))
+                OUTLIERS <- c('90023016905_SF1','90047016905_SF1','90128016905_SF1')
+        }else if(TISSUE == 'White Adipose'){
+                TIS <- 'WAT'
+                MIS_ID_VAR <- c('animal.registration.sex')
+                MIS_SUS <- c('None')
+                MIS_ID <- c('None')
+                PRI_VAR <- c('animal.registration.sex')
+                FINAL_FORMULA <- formula(paste0('~ ',PRI_VAR[1],
+                                                ' + animal.key.anirandgroup'))
+                OUTLIERS <- c('None')
+        }else if(TISSUE == 'Cortex'){
+                TIS <- c('COR')
+                MIS_ID_VAR <- c('None')
+                MIS_SUS <- c('None')
+                MIS_ID <- c('None')
+                PRI_VAR <- c('animal.registration.sex')
+                FINAL_FORMULA <- formula(paste0('~ ',PRI_VAR[1],
+                                                ' + animal.key.anirandgroup'))
+                OUTLIERS <- c('None')
+        }else if(TISSUE == 'Hippocampus'){
+                TIS <- c('HIP')
+                MIS_ID_VAR <- c('animal.registration.sex')
+                MIS_SUS <- c('90115015202_SF2','90041015202_SF2')
+                MIS_ID <- c('None')
+                PRI_VAR <- c('None')
+                FINAL_FORMULA <- formula(paste0('~ animal.key.anirandgroup'))
+                OUTLIERS <- c('90040015202_SF2','90115015202_SF2','90041015202_SF2',
+                              '90009015202_SF2','90005015202_SF2','90139015202_SF2')
+        }else if(TISSUE == 'Lung'){
+                TIS <- 'LUNG'
+                OUTLIERS <- c('None')
+                MIS_ID_VAR <- c('animal.key.batch')
+                PRI_VAR <- c('animal.key.batch','animal.registration.sex')
+                MIS_SUS <- c('90120016604_SN3', '90146016604_SN3', '90112016604_SN3',
+                             '90129016604_SN3', '90124016604_SN3','90114016604_SN3',
+                             '90112016604_SN3','90126016604_SN3')
+                MIS_ID <- c('None')
+                FINAL_FORMULA <- formula(paste0('~ ',PRI_VAR[1],' + ',PRI_VAR[2],
+                                                ' + animal.key.anirandgroup'))
+        }else if(TISSUE == 'Ovaries'){
+                TIS <- c('OVR')
+                MIS_ID_VAR <- c('None')
+                MIS_SUS <- c('None')
+                MIS_ID <- c('None')
+                PRI_VAR <- c('None')
+                FINAL_FORMULA <- formula(paste0('~ animal.key.anirandgroup'))
+                OUTLIERS <- c('None')
+        }else if(TISSUE == 'Testes'){
+                TIS <- c('TES')
+                MIS_ID_VAR <- c('None')
+                MIS_SUS <- c('None')
+                MIS_ID <- c('None')
+                PRI_VAR <- c('None')
+                FINAL_FORMULA <- formula(paste0('~ animal.key.anirandgroup'))
+                OUTLIERS <- c('90017016302_SN2','90031016302_SN2','90127016302_SN2','90015016302_SN2','90129016302_SN2')
+        }else if(TISSUE == 'Spleen'){
+                TIS <- 'SPL'
+                MIS_ID_VAR <- c('None')
+                MIS_SUS <- c('None')
+                MIS_ID <- c('None')
+                PRI_VAR <- c('animal.registration.sex')
+                FINAL_FORMULA <- formula(paste0('~ ',PRI_VAR[1],
+                                                ' + animal.key.anirandgroup'))
+                OUTLIERS <- c('None')
+        }
+        # Create the row for the dataframe
+        df_r <- data.frame(Tissue = TISSUE,
+                           Tis = TIS,
+                           Seq_Batch = 'None',
+                           Misidentified = MIS_ID,
+                           Adjusted_Variance = PRI_VAR,
+                           Outliers = OUTLIERS,
+                           Formula = as.character(FINAL_FORMULA))
+        df_tbl <- rbind(df_tbl,df_r)
+}
+
+# Save the decision table
+table_file <- paste0(WD,'/data/20200603_rnaseq-tissue-data-assambly-table_steep.txt')
+#write.table(df_tbl, file = table_file,sep = '\t',row.names = F,quote = F)
+#' #### Final table saved as:  
+#' `r table_file`  
+#'  
+#'  
+#'  
+#' ## Take Homes  
+#' #### Tissue:  
+#' `r TISSUE`
+#' 
+#' #### Mis-identified Samples:  
+#' `r MIS_ID`
+#' 
+#' #### Covariables to Investigate:  
+#' `r PRI_VAR`
+#' 
+#' #### Final Modeling Formula:  
+#' `r FINAL_FORMULA`
+#' 
+#' #### Outlier Samples:  
+#' `r OUTLIERS`
+#' 
+#' 
+#' 
+#' 
+#' ## Load & Clean Data
+#' ##### Data files to load:
+#' * Count Matrix and Metadata Table from:
+#'     * RNA-Seq from Mt. Sinai
+#'         * 3 sequencing batches & metadata
+#'     * RNA-Seq from Stanford
+#'         * 2 sequencing batches & metadata
+
+#+ Load the Data
+################################################################################
+#####     Load & Clean Data      ###############################################
+################################################################################
+
+# Files last saved in: 20200309_exploration-rna-seq-phase1_steep.R
+
+if(F) {
+        # Count matrix
+        in_file <- paste0(WD,'/data/20200309_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv')
+        count_data <- read.table(in_file,sep = ',', header = TRUE,row.names = 1,check.names = FALSE)
+        
+        # Meatdata table
+        in_file <- paste0(WD,'/data/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt')
+        col_data <- read.table(in_file, header = TRUE, check.names = FALSE, sep = '\t')
+        row.names(col_data) <- col_data$sample_key
+        
+        # Adjust column objects
+        ########################
+        # To factors
+        factor_cols <- c('labelid',
+                         'vial_label',
+                         'animal.registration.sex',
+                         'animal.key.exlt4',
+                         'X2D_barcode',
+                         'BID',
+                         'Seq_flowcell_lane',
+                         'Seq_flowcell_run',
+                         'Seq_end_type',
+                         'Lib_UMI_cycle_num',
+                         'pid',
+                         'acute.test.staffid',
+                         'acute.test.siteid',
+                         'acute.test.versionnbr',
+                         'acute.test.contactshock',
+                         'animal.familiarization.staffid',
+                         'animal.familiarization.siteid',
+                         'animal.familiarization.versionnbr',
+                         'animal.familiarization.compliant',
+                         'animal.key.protocol',
+                         'animal.key.agegroup',
+                         'animal.key.batch',
+                         'animal.key.intervention',
+                         'animal.key.sitename',
+                         'animal.registration.staffid',
+                         'animal.registration.siteid',
+                         'animal.registration.versionnbr',
+                         'animal.registration.ratid',
+                         'animal.registration.batchnumber',
+                         'specimen.collection.bloodcomplete',
+                         'specimen.collection.bloodtechid',
+                         'specimen.collection.uterustype',
+                         'specimen.collection.uterustechid',
+                         'specimen.collection.deathtype',
+                         'specimen.processing.versionnbr',
+                         'specimen.processing.siteid',
+                         'bid',
+                         'specimen.processing.samplenumber',
+                         'specimen.processing.techid',
+                         'barcode',
+                         'shiptositeid',
+                         'receivedcas',
+                         'receivestatuscas')
+        for(fc in factor_cols){
+                col_data[[fc]] <- as.factor(col_data[[fc]])
+        }
+        
+        # To Dates: 03JUL2018
+        date_cols <- c('acute.test.d_visit',
+                       'acute.test.d_start',
+                       'animal.familiarization.d_visit',
+                       'animal.familiarization.d_treadmillbegin',
+                       'animal.familiarization.d_treadmillcomplete',
+                       'animal.registration.d_visit',
+                       'animal.registration.d_arrive',
+                       'animal.registration.d_reverselight',
+                       'specimen.collection.d_visit',
+                       'animal.registration.d_birth',
+                       'Seq_date')
+        for(dc in date_cols){
+                col_data[[dc]] <- ymd(col_data[[dc]])
+        }
+        
+        # From Dates: 2/14/2019
+        date_cols <- c('RNA_extr_date',
+                       'Lib_prep_date')
+        for(dc in date_cols){
+                col_data[[dc]] <- mdy(col_data[[dc]])
+        }
+        
+        # To Times: 10:30:00
+        time_cols <- c('acute.test.t_complete',
+                       'specimen.collection.t_anesthesia',
+                       'specimen.collection.t_bloodstart',
+                       'specimen.collection.t_bloodstop',
+                       'specimen.collection.t_edtafill',
+                       'specimen.collection.uteruscomplete',
+                       'specimen.collection.t_uterusstart',
+                       'specimen.collection.t_uterusstop',
+                       'specimen.collection.t_death',
+                       'specimen.processing.t_collection',
+                       'specimen.processing.t_edtaspin',
+                       'specimen.processing.t_freeze',
+                       'acute.test.howlongshock',
+                       'acute.test.t_start')
+        for(tc in time_cols){
+                col_data[[tc]] <- col_data[[tc]] %>% as.character() %>% parse_time() %>% as.numeric()
+        }
+        
+        # Releveling factors
+        col_data$animal.key.anirandgroup <- as.character(col_data$animal.key.anirandgroup)
+        col_data$animal.key.anirandgroup <- factor(col_data$animal.key.anirandgroup,
+                                                   levels = ec_levels)
+        
+        # Create a variable for time post exercise
+        col_data <- col_data %>%
+                mutate(specimen.collection.t_exercise_hour = case_when(
+                        animal.key.anirandgroup == 'Control - IPE' ~ -1,
+                        animal.key.anirandgroup == 'Control - 7 hr' ~ 7,
+                        animal.key.anirandgroup == 'Exercise - IPE' ~ 0,
+                        animal.key.anirandgroup == 'Exercise - 0.5 hr' ~ 0.5,
+                        animal.key.anirandgroup == 'Exercise - 1 hr' ~ 1,
+                        animal.key.anirandgroup == 'Exercise - 4 hr' ~ 4,
+                        animal.key.anirandgroup == 'Exercise - 7 hr' ~ 7,
+                        animal.key.anirandgroup == 'Exercise - 24 hr' ~ 24,
+                        animal.key.anirandgroup == 'Exercise - 48 hr' ~ 48))
+        
+        # Take the absolute value of the square root of seconds post exercise (consider negative numbers)
+        # Make sure to Subtract 1 hour (3600s) from 'Control - IPE' groups to account for exercise effect
+        col_data <- col_data %>%
+                mutate(calculated.variables.deathtime_after_acute =
+                               ifelse(animal.key.anirandgroup == 'Control - IPE',
+                                      calculated.variables.deathtime_after_acute - 3600,
+                                      calculated.variables.deathtime_after_acute))
+        col_data <- col_data %>%
+                mutate(specimen.collection.t_exercise_hour_sqrt = ifelse(
+                        calculated.variables.deathtime_after_acute < 0,
+                        (sqrt(abs(calculated.variables.deathtime_after_acute))/60/60)*(-1),
+                        (sqrt(abs(calculated.variables.deathtime_after_acute))/60/60)))
+        row.names(col_data) <- col_data$sample_key
+        
+        # Examine histograms
+        col_data %>%
+                filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
+                ggplot(aes(x=calculated.variables.deathtime_after_acute)) +
+                geom_histogram(bins = 68)
+        col_data %>%
+                filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
+                ggplot(aes(x=specimen.collection.t_exercise_hour_sqrt)) +
+                geom_histogram(bins = 68)
+        
+        # Generate a time-last-fed variable
+        col_data <- col_data %>%
+                mutate(animal_time_last_fed = case_when(
+                        animal.key.anirandgroup %!in% c('Control - 7 hr', 'Exercise - 7 hr') ~ parse_time('8:00'),
+                        (animal.key.anirandgroup %in% c('Control - 7 hr') & 
+                                 animal.registration.sex == 'Male') ~ parse_time('11:50'),
+                        (animal.key.anirandgroup %in% c('Control - 7 hr') & 
+                                 animal.registration.sex == 'Female') ~ parse_time('12:30'),
+                        (animal.key.anirandgroup %in% c('Exercise - 7 hr') & 
+                                 animal.registration.sex == 'Male') ~ parse_time('12:30'),
+                        (animal.key.anirandgroup %in% c('Exercise - 7 hr') & 
+                                 animal.registration.sex == 'Female') ~ parse_time('12:50')) %>% as.numeric())
+        
+        # Generate a time-fasted variable
+        col_data$calculated.variables.deathtime_after_fed <- (col_data$specimen.collection.t_death - col_data$animal_time_last_fed) %>% as.numeric()
+        
+        # Save data as an R objects
+        # ################################################################################
+        # To determine object size
+        sl <- object.size(count_data)
+        print(sl, units = 'auto')
+        # Meta Data
+        meta_file <- paste0(WD,'/data/20200603_rnaseq-meta-pass1a-stanford-sinai-proc_steep.rds')
+        saveRDS(col_data, file = meta_file)
+        
+        # Count Data
+        count_file <- paste0(WD, '/data/20200603_rnaseq-counts-pass1a-stanford-sinai-processed_steep.rds')
+        saveRDS(count_data, file = count_file)
+}
+
+meta_file <- paste0(WD,'/data/20200603_rnaseq-meta-pass1a-stanford-sinai-proc_steep.rds')
+#' #### Polished metadata saved as:  
+#' `r meta_file`  
+#'  
+count_file <- paste0(WD, '/data/20200603_rnaseq-counts-pass1a-stanford-sinai-processed_steep.rds')
+#' #### Polished read counts saved as:  
+#' `r count_file`  
+
+# Set a vector for Exercise/Control Levels and Colors
+ec_levels <- c('Exercise - IPE',
+               'Exercise - 0.5 hr',
+               'Exercise - 1 hr',
+               'Exercise - 4 hr',
+               'Exercise - 7 hr',
+               'Exercise - 24 hr',
+               'Exercise - 48 hr',
+               'Control - IPE',
+               'Control - 7 hr')
+ec_colors <- c('gold',
+               'darkgoldenrod1',
+               'orange',
+               'darkorange',
+               'darkorange2',
+               'darkorange3',
+               'darkorange4',
+               'steelblue1',
+               'steelblue4')
+
+# Load Metadata and count data as R objects
+################################################################################
+# Restore the metadata object
+meta_file <- paste0(WD,'/data/20200603_rnaseq-meta-pass1a-stanford-sinai-proc_steep.rds')
+col_data <- readRDS(file = meta_file)
+# Restore the count object
+count_file <- paste0(WD, '/data/20200603_rnaseq-counts-pass1a-stanford-sinai-processed_steep.rds')
+count_data <- readRDS(file = count_file)
+
+#' #### Retrieve Circadian Genes Associated with Tissue
+#' Data from Supplementary Table 2 from:  
+#' Yan, J., Wang, H., Liu, Y. & Shao, C. Analysis of gene regulatory networks in the mammalian circadian rhythm. PLoS Comput. Biol. 4, (2008).  
+#' Downloaded 20200326 by Alec Steep  
+#' 
+#' ## Place Genes in Genomic Ranges  
+#' 
+#' #### Reference Genome and Annotation:  
+#' Rnor_6.0 (GCA_000001895.4) assembly from Ensembl database (Release 96)  
+#' Found at: http://uswest.ensembl.org/Rattus_norvegicus/Info/Index.  
+#' 
+#' FASTA: Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz  
+#' ftp://ftp.ensembl.org/pub/release-96/fasta/rattus_norvegicus/dna/Rattus_norvegicus.Rnor_6.0.dna.toplevel.fa.gz  
+#' 
+#' GTF: Rattus_norvegicus.Rnor_6.0.96.gtf.gz  
+#' ftp://ftp.ensembl.org/pub/release-96/gtf/rattus_norvegicus/Rattus_norvegicus.Rnor_6.0.96.gtf.gz  
+#' 
+#' ## Annotate Genes by Chromosome
+
+#+ Annotate Genes by Chromosome
+################################################################################
+#####     Annotate Genes by Chromosome       ###################################
+################################################################################
+
+### Determine which control samples are male and female
+# Get the list of genes on the W chromosome
+
+# Construct your own personal galgal5 reference genome annotation
+# Construct from gtf file from Ensembl (same file used in mapping)
+#ens_gtf <- paste0(WD,'/data/Rattus_norvegicus.Rnor_6.0.96.gtf')
+#Rn_TxDb <- makeTxDbFromGFF(ens_gtf,
+# format=c('gtf'),
+# dataSource='Ensembl_Rattus6_gtf',
+# organism='Rattus norvegicus',
+# taxonomyId=NA,
+# circ_seqs=DEFAULT_CIRC_SEQS,
+# chrominfo=NULL,
+# miRBaseBuild=NA,
+# metadata=NULL)
+# Save the Rat Genomic Ranges Object
+#gf_file <- paste0(WD,'/data/20200603_Rnor-6.0.96-GRanges_steep.sqlite')
+#saveDb(Rn_TxDb, file=gf_file)
+
+# To load the annotation
+gf_file <- paste0(WD,'/data/20200603_Rnor-6.0.96-GRanges_steep.sqlite')
+Rn_TxDb <- loadDb(gf_file)
+# Define Female specific sex genes (X chromosome)
+# To examine chromosome names
+#seqlevels(Rn_TxDb)[1:23]
+# Extract genes as GRanges object, then names
+X_genes_gr <- genes(Rn_TxDb, columns = 'TXCHROM', filter = list(tx_chrom=c('X')))
+# Collect ensembl gene ids for female specific genes
+X_ens_id <- names(X_genes_gr)
+# Examine the gene symbols
+X_sym <- mapIds(org.Rn.eg.db, names(X_genes_gr), 'SYMBOL', 'ENSEMBL')
+# Extract genes as GRanges object, then names
+Y_genes_gr <- genes(Rn_TxDb, columns = 'TXCHROM', filter = list(tx_chrom=c('Y')))
+# Collect ensembl gene ids for female specific genes
+Y_ens_id <- names(Y_genes_gr)
+sex_ens_id <- c(X_ens_id,Y_ens_id)
+# Examine the gene symbols
+Y_sym <- mapIds(org.Rn.eg.db, names(Y_genes_gr), 'SYMBOL', 'ENSEMBL')
+
+#' ## Collect Samples of Interest and Normalize
+
+#+ Collect Samples of Interest and Normalize
+################################################################################
+#####     Collect Samples of Interest and Normalize      #######################
+################################################################################
+if(TISSUE == c('Gastrocnemius_MSSM_1')){
+        tod_cols <- col_data %>%
+                filter(Tissue == 'Gastrocnemius') %>%
+                filter(Seq_batch == 'MSSM_1') %>%
+                filter(!is.na(animal.registration.sex))
+}else if(TISSUE == c('Gastrocnemius_Stanford_1')){
+        tod_cols <- col_data %>%
+                filter(Tissue == 'Gastrocnemius') %>%
+                filter(Seq_batch == 'Stanford_1') %>%
+                filter(!is.na(animal.registration.sex))
+}else{
+        # Filter Samples (meta)
+        tod_cols <- col_data %>%
+                filter(Tissue == TISSUE) %>%
+                filter(!is.na(animal.registration.sex))
+}
+rownames(tod_cols) <- tod_cols$sample_key
+
+# Collect samples without NA values in TOD
+nona_sams <- tod_cols %>%
+        filter(!is.na(specimen.collection.t_death_hour)) %>%
+        filter(!is.na(animal.registration.sex)) %>%
         select(sample_key) %>% unlist() %>% as.character()
-tod_order2 <- fkid_cols %>%
-        arrange(specimen.collection.t_death_bins.type) %>%
-        select(specimen.collection.t_death_bins.type) %>% unlist() %>% as.character()
+# Collect tissue specific counts
+tod_counts <- count_data[,nona_sams]
 
-# Create a vector for TOD Bin levels
-tod_levels <- c("10.00-11.25",
-                "11.75-12.50",
-                "13.25-14.00",
-                "14.25-15.00",
-                "17.00-18.00")
+#' ##### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
+all(rownames(tod_cols) == colnames(tod_counts))
 
-# Arrange matrix in order of exercise and control groups
-# All expression values per gene are normalized to generate a level playing field. Means are subtracted by values and the resulting difference is divided by the standard deviation.
-som_tod <- assay(rld)[,tod_order]
-som_tod <- som_tod %>% t() %>% data.frame()
-# Test for multiv
-#x <- as.numeric(MVN::mvn(som_tod, mvnTest = "hz")$univariateNormality$`p value`)
-#(p.adjust(x, method = "BH") > 0.05) %>% table()
-som_tod$specimen.collection.t_death_bins.type <- factor(tod_order2, 
-                                                        levels = tod_levels)
+# Create a design formula and load counts and supporting annotation into an S4 object (DESeq infrastructure)
+design = ~ 1 # Primary variable needs to be last.
+title = paste0('Design: ',as.character(design))
+dds1 <- DESeqDataSetFromMatrix(countData = tod_counts,
+                               colData = tod_cols,
+                               design = design)
+# Reasoning from:
+#citation('PROPER')
+#dds
+#' #### We remove genes with an average sequencing depth (across samples) of less than 1
+#' Summary of DESeqDataSet Before Filtering:
+dds1
+zero_n <- dds1[(rowSums(counts(dds1))/ncol(dds1) < 1), ] %>% 
+        nrow() %>% as.character()
+reads_n <- 1
+keep <- rowSums(counts(dds1))/ncol(dds1) >= reads_n
+dds2 <- dds1[keep,]
+#' Summary of counts and annotation data in a DESeqDataSet after filtering   
+# TODO: Critic from Jun: Here we are removing features that have a low average expression. This may be removing important features that might have zero counts in some samples and higher counts in specific groups. Consider developing an algorithm that will account for features with expression in n or more samples.
+dds2
+filter_n <- nrow(dds1) - nrow(dds2) - as.numeric(zero_n)
+filter_p <- filter_n/(nrow(dds1) - as.numeric(zero_n))
+total_n <- nrow(dds1) - nrow(dds2)
 
-# MANOVA test
-# Generate a formula
-dependents <- colnames(som_tod)[colnames(som_tod) %!in% c("specimen.collection.t_death_bins.type")]
-form <- as.formula(paste0("cbind(",paste(dependents, collapse=","),")", "~specimen.collection.t_death_bins.type"))
-# Perform the MANOVA Test
-res_man <- manova(form, data = som_tod)
-res_sum <- summary.aov(res_man)
+#' ##### Number of Genes Removed:  
+#' Number of genes with average counts (across samples) less than 1 is `r zero_n`  
+#' 
+#' ##### If more stringent filtering thresholds employed:  
+#' Removing reads with less than or equal to `r reads_n` removes an additional `r filter_n` features or removes `r filter_p*100`% of the non-zero reads (total of `r total_n` features removed).
+dds <- dds2
 
-# Organize the index of genes by pvalue
-df_tod <- data.frame(1:(ncol(som_tod)-1))
-names(df_tod) <- 'idx'
-pvec <- vector()
-for(nr in 1:(ncol(som_tod)-1)){
-        pval <- res_sum[[nr]]$`Pr(>F)`[1]
-        pvec <- c(pvec, pval)
-}
-df_tod$pval <- pvec
+#' #### Reads per million for each sample  
+sort(colSums(assay(dds)))/1e6
 
-# Choose row index with significant p value
-c_tod <- df_tod %>%
-        filter(pval <= 0.05) %>%
-        select(idx) %>% unlist() %>% as.numeric()
-# Select only genes that show significant variance across timepoints
-som_tod <- som_tod[,c_tod]
+#' #### Size Factor Estimates (summary across samples):  
+#' Size facotrs are generally around 1 (scaled) and calculated using the median and are robust to genes with large read counts
+# estimateSizeFactors() gives us a robust estimate in sequencing depth.  
+dds <- estimateSizeFactors(dds)
+summary(sizeFactors(dds))
 
-# Center and scale the data for SOM
-proc_tod <- preProcess(som_tod, method=c("center", "scale"))
-norm_tod <- predict(proc_tod, som_tod)
-summary(norm_tod)
-tod_mat <- t(norm_tod) %>% as.matrix()
-# SOM
-set.seed(666)
-som_tod_plot <- som::som(tod_mat,6,5)
-plot(som_tod_plot, ylim=c(-2,2))
+#' #### Transform:  
+rld <- DESeq2::vst(dds, blind = FALSE)
+#' Variance Stabalizing Transform (vst)
+# for(n in 1){
+#         start_time <- Sys.time()
+#         #rld <- DESeq2::rlog(dds)
+#         end_time <- Sys.time()
+#         print(end_time - start_time)
+# }
+# This command is redundent, but included for safety
+rs <- rowSums(counts(dds))
 
-table(som_tod_plot$visual[,1:2])
+#' ## Early Identification/Removal of Outliers 
+#' Certain Tissues (e.g. Hippocampus & Testes) demonstrate obvious outlier samples that disrupt covariant identification and correction (could not be "batch-corrected"); therefore, we exercise an early identification and removal of outliers.
 
-# Perform k-means cluster_toding
-k_tod <-kmeans(som_mat,6)$cluster
-
-# Create an annotation for the heatmap
-ann_df <- col_data %>%
-        filter(sample_key %in% colnames(som_mat)) %>%
-        select(specimen.collection.t_death_bins.type)
-ann_df$specimen.collection.t_death_bins.type <- factor(ann_df$specimen.collection.t_death_bins.type, levels = tod_levels)
-ann_df <- ann_df %>% arrange(specimen.collection.t_death_bins.type)
-row.names(ann_df) <- colnames(som_mat)
-
-ann_colors = list(
-        specimen.collection.t_death_bins.type = 
-                c("10.00-11.25" = "gold",
-                  "11.75-12.50" = "darkgoldenrod1",
-                  "13.25-14.00" = "orange",
-                  "14.25-15.00" = "darkorange2",
-                  "17.00-18.00" = "darkorange4"))
-
-# Create heatmaps from kmeans
-heat_tods <- vector('list', 6)
-heat_tods[[1]] <- pheatmap(som_mat[k_tod==1,], 
-                           annotation_col = ann_df,
-                           annotation_colors = ann_colors,
-                           fontsize = 8,
-                           show_rownames=FALSE,
-                           show_colnames=FALSE,
-                           color = rev(brewer.pal(n = 9, name ="RdBu")),
-                           cluster_cols = FALSE,
-                           cluster_rows = FALSE,
-                           legend=F,
-                           annotation_legend = FALSE)
-heat_tods[[2]] <- pheatmap(som_mat[k_tod==2,], 
-                           annotation_col = ann_df,
-                           annotation_colors = ann_colors,
-                           fontsize = 8,
-                           show_rownames=FALSE,
-                           show_colnames=FALSE,
-                           color = rev(brewer.pal(n = 9, name ="RdBu")),
-                           cluster_cols = FALSE,
-                           cluster_rows = FALSE,
-                           legend=F,
-                           annotation_legend = FALSE)
-heat_tods[[3]] <- pheatmap(som_mat[k_tod==3,], 
-                           annotation_col = ann_df,
-                           annotation_colors = ann_colors,
-                           fontsize = 8,
-                           show_rownames=FALSE,
-                           show_colnames=FALSE,
-                           color = rev(brewer.pal(n = 9, name ="RdBu")),
-                           cluster_cols = FALSE,
-                           cluster_rows = FALSE,
-                           legend=F,
-                           annotation_legend = FALSE)
-heat_tods[[4]] <- pheatmap(som_mat[k_tod==4,], 
-                           annotation_col = ann_df,
-                           annotation_colors = ann_colors,
-                           fontsize = 8,
-                           show_rownames=FALSE,
-                           show_colnames=FALSE,
-                           color = rev(brewer.pal(n = 9, name ="RdBu")),
-                           cluster_cols = FALSE,
-                           cluster_rows = FALSE,
-                           legend=F,
-                           annotation_legend = FALSE)
-heat_tods[[5]] <- pheatmap(som_mat[k_tod==5,], 
-                           annotation_col = ann_df,
-                           annotation_colors = ann_colors,
-                           fontsize = 8,
-                           show_rownames=FALSE,
-                           show_colnames=FALSE,
-                           color = rev(brewer.pal(n = 9, name ="RdBu")),
-                           cluster_cols = FALSE,
-                           cluster_rows = FALSE,
-                           legend=F,
-                           annotation_legend = FALSE)
-heat_tods[[6]] <- pheatmap(som_mat[k_tod==6,], 
-                           annotation_col = ann_df,
-                           annotation_colors = ann_colors,
-                           fontsize = 8,
-                           show_rownames=FALSE,
-                           show_colnames=FALSE,
-                           color = rev(brewer.pal(n = 9, name ="RdBu")),
-                           cluster_cols = FALSE,
-                           cluster_rows = FALSE,
-                           legend=F,
-                           annotation_legend = FALSE)
-
-# Clusters are numbers in numerical order from 1 to 6 from bottom-left to top-right
-# Identify the circadian rhythm genes that belong to each cluster
-i <- 1
-cluster_tod <- list()
-circ_tod <- list()
-circ_tod_df <- list()
-ENSEMBL_RAT <- vector()
-for(yn in 0:4){
-        for(xn in 0:5){
-                # Collect gene ids for each cluster_tod
-                c_rn <- som_tod_plot$visual[(som_tod_plot$visual$x == xn & som_tod_plot$visual$y == yn),] %>%
-                        row.names() %>% as.numeric()
-                cluster_tod[[i]] <- som_tod_plot$data[c_rn,] %>% row.names()
-                # Collect all gene ids
-                ENSEMBL_RAT <- c(ENSEMBL_RAT, cluster_tod[[i]])
-                # collect circadian gene ids per cluster_tod
-                i <- i + 1
-        }
-}
-
-# Create a geom_tile to mimic the som and visualize the kmeans cluster_tods
-grad_tods <- vector('list', 6)
-kmeans_cluster_tod <- list()
-for(kn in 1:6){
-        # Kmeans cluster_tod 1
-        x <- 0:5
-        y <- 0:4
-        tile_df <- expand.grid(X=x,Y=y)
-        # Kmeans cluster_tod genes are in which som cluster_tods
-        kgenes <- names(k_tod[k_tod==kn])
-        kmeans_cluster_tod[[kn]] <- kgenes
-        circ_tod[[kn]] <- circ_kid %>%
-                filter(ENSEMBL_RAT %in% kgenes) %>%
-                select(ENSEMBL_RAT) %>% unlist(use.names = FALSE)
-        # collect additional information for circadian genes in cluster_tod
-        circ_tod_df[[kn]] <- circ_kid %>%
-                filter(ENSEMBL_RAT %in% kgenes) %>%
-                select(NUM.TISSUE, ENSEMBL_RAT, SYMBOL_RAT)
-        Z <- vector()
-        for(i in 1:30){
-                Z <- c(Z, (kgenes[kgenes %in% cluster_tod[[i]]] %>% length()))
-        }
-        tile_df$Z <- Z
-        # Generate the kmeans plot
-        grad_tods[[kn]] <- local({
-                kn <- kn
-                kmsom <- ggplot(tile_df, aes(x = X, y = Y, fill =Z)) +
-                        geom_raster(interpolate=TRUE) +
-                        scale_fill_gradient2(low="navy", mid="white", high="red", 
-                                             midpoint=30, limits=range(tile_df$Z),
-                                             guide = FALSE) +
-                        theme(axis.text        = element_blank(),
-                              axis.ticks       = element_blank(),
-                              axis.title       = element_blank(),
-                              panel.background = element_blank())
-                print(kmsom)
-        })
-}
-
-# Create a dataframe for logistic regression
-logreg_tod <- data.frame(ENSEMBL_RAT)
-# Generate a column for circadian gene status
-logreg_tod <- mutate(logreg_tod, CIRC = ifelse(ENSEMBL_RAT %in% circ_kid$ENSEMBL_RAT, 1, 0))
-# Generate 6 columns for each kmeans cluster_tod status
-for(i in 1:6){
-        new_col_name <- paste0('C',i)
-        logreg_tod <- logreg_tod %>% 
-                mutate(!!sym(new_col_name) := ifelse(ENSEMBL_RAT %in% kmeans_cluster_tod[[i]], 1, 0))
-}
-
-# Remove gene ids and set them to rownames
-row.names(logreg_tod) <- logreg_tod$ENSEMBL_RAT
-logreg_tod <-  logreg_tod %>% select(-ENSEMBL_RAT)
-
-# Adjust column objects
-factor_cols <- colnames(logreg_tod)
-for(fc in factor_cols){
-        logreg_tod[[fc]] <- as.factor(logreg_tod[[fc]])
-}
-str(logreg_tod)
-
-# Fit a logistic regression model
-mod_tod <- glm(formula = CIRC ~ C1+C2+C3+C4+C5+C6, 
-               family = binomial(link = logit), 
-               data = logreg_tod)
-summary(mod_tod)
-
-# Perform a Chi-square analysis
-#######################
-# Create a proper data structure for chi squared
-x2_list <- list()
-for(i in 1:6){
-        n_clust <- length(kmeans_cluster_tod[[i]])
-        n_circ <- length(circ_tod[[i]])
-        n_no_circ <- n_clust - n_circ
-        x2_list[[i]] <- c(n_circ, n_no_circ)
-}
-
-x2_df <- as.data.frame(x2_list)
-row.names(x2_df) <- c('CIRC','NON-CIRC')
-for(i in 1:6){
-        new_col_name <- paste0('C',i)
-        colnames(x2_df)[i] <- new_col_name
-}
-
-# Create the proper data structure for visualization of chi square with mosaic plot
-mosaic_df <- data.frame(ENSEMBL_RAT)
-# Generate a column for circadian gene status
-mosaic_df <- mutate(mosaic_df, CIRC = ifelse(ENSEMBL_RAT %in% circ_kid$ENSEMBL_RAT, 'CIRC', "NON-CIRC"))
-# Generate a Cluster columcluster_tod status
-mosaic_df <- mosaic_df %>%
-        mutate(CLUSTER = case_when(ENSEMBL_RAT %in% kmeans_cluster_tod[[1]] ~ 1,
-                                   ENSEMBL_RAT %in% kmeans_cluster_tod[[2]] ~ 2,
-                                   ENSEMBL_RAT %in% kmeans_cluster_tod[[3]] ~ 3,
-                                   ENSEMBL_RAT %in% kmeans_cluster_tod[[4]] ~ 4,
-                                   ENSEMBL_RAT %in% kmeans_cluster_tod[[5]] ~ 5,
-                                   ENSEMBL_RAT %in% kmeans_cluster_tod[[6]] ~ 6))
-# Generate a table of results
-mosaic_tbl <- table(mosaic_df$CIRC, mosaic_df$CLUSTER, dnn=c("CIRC","CLUSTER"))
-
-# Perform Chi-squared
-#sink('')
-(( c=chisq.test(x2_df, simulate.p.value = TRUE) ))
-(( fisher.test(x2_df, simulate.p.value = TRUE) ))
-
-#sink()
-c$observed
-c$expected
-
-# Visualize the chisquare analysis with a mosaic plot
-mos_tod <- mosaic(~ CIRC + CLUSTER, data = mosaic_tbl,
-                  shade = TRUE, legend = TRUE)
-plot(logreg_tod)
-
-# Clusters enriched WITH circadian genes
-# 4
-grad_tods[[4]]
-heat_tods[[4]]
-mypar()
-plot(som_tod_plot, ylim=c(-2,2))
-
-# Cluster enriched WITHOUT circadian genes
-# 5
-grad_tods[[5]]
-heat_tods[[5]]
-plot(som_tod_plot, ylim=c(-2,2))
-
-# Add a column for time of death binned specifically to exercise group
-# TODO: Add this to original metadata generation script, then update excel documentation
-#col_data <- col_data %>%
-#        mutate(specimen.collection.t_death_bins_ec = case_when(
-#                specimen.collection.t_death_bins.type == "Exercise - IPE" ~ "13:15 - 13:35",
-#                specimen.collection.t_death_bins.type == "Exercise - 0.5 hr" ~ "11:55 - 12:15",
-#                specimen.collection.t_death_bins.type == "Exercise - 1 hr" ~ "13:55 - 14:15",
-#                specimen.collection.t_death_bins.type == "Exercise - 4 hr" ~ "14:35 - 14:55",
-#                specimen.collection.t_death_bins.type == "Exercise - 7 hr" ~ "17:35 - 17:55",
-#                specimen.collection.t_death_bins.type == "Exercise - 24 hr" ~ "10:35 - 10:55",
-#                specimen.collection.t_death_bins.type == "Exercise - 48 hr" ~ "11:15 - 11:35",
-#                specimen.collection.t_death_bins.type == "Control - IPE" ~ "9:55 - 10:15",
-#                specimen.collection.t_death_bins.type == "Control - 7 hr" ~ "16:55 - 17:15"))
-
-
-# Plot the circadian genes in cluster_tod 4
-# Create a dataframe for the plot
-df1 <- data.frame(t(som_mat), check.names = FALSE)
-df1$sample_key <- row.names(df1)
-df2 <- col_data %>%
-        select(specimen.collection.t_death, 
-               specimen.collection.t_death_bins.type)
-df2$sample_key <- row.names(df2)
-# Adjust the column names to be symbols for ease of plot interpretation
-df_plot <- left_join(df1, df2, by = "sample_key")
-genes <- colnames(df_plot)[grepl('ENSRNOG', colnames(df_plot))]
-symbols <- mapIds(org.Rn.eg.db, genes, "SYMBOL", "ENSEMBL")
-colnames(df_plot)[grepl('ENSRNOG', colnames(df_plot))] <- symbols
-
-# Melt the plot
-melt_plot <- reshape2::melt(df_plot, id.vars = c("specimen.collection.t_death", 
-                                                 "specimen.collection.t_death_bins.type"))
-# Adjust columns and factor levels
-melt_plot$value <- as.numeric(melt_plot$value)
-melt_plot$specimen.collection.t_death_bins.type <- factor(melt_plot$specimen.collection.t_death_bins.type, 
-                                                          levels = tod_levels)
-
-# To re-examine SOM
-plot(som_tod_plot, ylim=c(-2,2))
-
-# Plot the circadian genes for cluster_tod of choice
-# Show all tods they are enriched with and without in powerpoint
-plot(grad_tods[[5]])
-heat_tods[[5]]
-melt_plot %>%
-        filter(variable %in% circ_tod_df[[5]]$SYMBOL_RAT) %>%
-        ggplot(aes(x = as.integer(specimen.collection.t_death_bins.type), 
-                   y = value, 
-                   color = variable),
-               group = "1") +
-        geom_point(alpha = 0.05) +
-        #geom_line(aes(group = "1")) +
-        stat_smooth(alpha = 0.02, se = F) +
-        ylab("rlog Transformed Expression \n(centered [0] and scaled [1])") +
-        xlab("Time of Death") +
-        scale_x_continuous(breaks = seq(1,5,by=1),
-                           labels=tod_levels) +
-        theme(legend.position = "none")
-
-
-# TODO: Turn this into a function rat2mouse
+#+ Early Identification/Removal of Outliers, results="asis",echo=FALSE,message=FALSE
 ################################################################################
-x <- row.names(rld)
-# Load in annotations
-mart_mm_ens = useMart("ensembl", dataset="mmusculus_gene_ensembl")
-mart_rn_ens = useMart("ensembl", dataset="rnorvegicus_gene_ensembl")
-# Create ortholog table
-ortho_df <- getLDS(attributes=c("ensembl_gene_id","mmusculus_homolog_orthology_confidence"),
-                   filters="ensembl_gene_id", 
-                   values = x, 
-                   mart=mart_rn_ens,
-                   attributesL=c("ensembl_gene_id"), 
-                   martL=mart_mm_ens) # Use biomart to get orthologs
-str(ortho_df)
-
-# Filter out any low confidence orthologs and any genes that are not one-to-one orthologs in both directions
-ortho_df <- ortho_df[ortho_df$Mouse.orthology.confidence..0.low..1.high. == '1',]
-ortho_df <- ortho_df[!duplicated(ortho_df[,1]),]
-ortho_df <- ortho_df[!duplicated(ortho_df[,3]),]
-names(ortho_df) <- c('ENSEMBL_RAT','CONFIDENCE','ENSEMBL_MOUSE') 
-ortho_df <- ortho_df %>%
-        select(-CONFIDENCE)
+################### Early Identification/Removal of Outliers ###################
 ################################################################################
 
-# Pathway enrichment for all genes, CIRC genes, and NON-CIRC genes in cluster_tod 5
-all_out <- kmeans_cluster_tod[[1]]
-circ_out <- circ_tod[[1]]
+#' #### Outlier Sample Detection Strategy (PCA-Approach)  
+#' ###### Samples are plotted across principle components (PCs) with PC values used to calculate distances across multiple dimensions. Distance metrics include: Infinite (median and MAD), Mahalanobis, and Local Outlier Factor (LOF). Samples are classified as outliers by their distances across one or more "high variance" PCs. Often, a threshold of greater than or equal to 6 standard deviations (Tukey) from the mean distances in one or more PC(s) justifies outlier status, however, classification is at the discretion of the analysis. Thresholds are adjusted in consideration of skewed distance distributions and multiple tests. This strategy was adopted from Florian Privé, PhD (https://www.r-bloggers.com/detecting-outlier-samples-in-pca/).
+#' 
+#' #### Description of Plots  
+#' ###### Variance by PCs:  A plot of the variance explained by PCs. Dashed vertical lines represent the elbow.
+#' ###### Samples by Multidimensional Distance (2 plots):  Samples are plotted by their Local Outlier Factor (log10) and Mahalanobis Distance (log10). Multivariant distances apply across PCs and the PC (above the elbow in the previous plot) with the maximum infinite distance--unique to each PC--is plotted. Thresholds in red represent a potential outlier detection threshold accounting for skewness and multiple testing. In the PC-annotated plot, samples are labeled if they appear above either threshold.
+#' ###### PCA of Testes (PCs 1 & 2):  Samples plotted across major PCs 1 & 2. Suspected outliers--samples above either threshold in the Multidimesnional Distance Plots--are labeled by a unique sample identifier. All samples are colored by their maximum infinite distance within major PCs above the "elbow" from plot, "Variance by PCs."
+#' 
 
-# Convert genes to mouse orthologs for pathway enrichment
-all_out <- ortho_df %>%
-        filter(ENSEMBL_RAT %in% all_out) %>%
-        select(ENSEMBL_MOUSE) %>% unlist() %>% as.character()
-all_out <- mapIds(org.Mm.eg.db, all_out, "SYMBOL", "ENSEMBL") %>% unlist(use.names = FALSE)
-
-# Save these list to file
-out_file <- paste0(WD,'/data/20200420_rnaseq-kidney-kmeans-ord6-clust1-all_steep.txt')
-write.table(all_out, file = out_file, quote = FALSE, 
-            row.names = FALSE, col.names = FALSE, sep ='\n')
-
-# Convert genes to mouse orthologs for pathway enrichment
-circ_out <- ortho_df %>%
-        filter(ENSEMBL_RAT %in% circ_out) %>%
-        select(ENSEMBL_MOUSE) %>% unlist() %>% as.character()
-circ_out <- mapIds(org.Mm.eg.db, circ_out, "SYMBOL", "ENSEMBL") %>% unlist(use.names = FALSE)
-
-# Save these list to file
-out_file <- paste0(WD,'/data/20200420_rnaseq-kidney-kmeans-ord2-clust4-circ_steep.txt')
-write.table(circ_out, file = out_file, quote = FALSE, 
-            row.names = FALSE, col.names = FALSE, sep ='\n')
-
-# Pathway enrichment for all genes, CIRC genes, and NON-CIRC genes in any cluster_tod that resembles any sort of circadian effect
+# A few Hippocampus samples demonstrate considerably low Lib_molarity that cannot be compensated for. These samples will be treated as outliers and removed.
+if(TISSUE %in% c('Hippocampus','Testes')){
+        if(TISSUE == 'Hippocampus'){
+                pri_var <- 'Lib_molarity'
+        }else if(TISSUE == 'Testes'){
+                pri_var <- 'Lib_frag_size..bp.'
+                #pri_var <- 'Lib_molarity..nM.'
+        }
+        pca <- prcomp(t(assay(rld)), scale. = F)
+        percentVar <- pca$sdev^2/sum(pca$sdev^2)
+        PC <- pca$x %>% as.data.frame()
+        PC$sample_key <- row.names(pca$x)
+        df_plot <- data.frame(PC = seq_along(pca$sdev^2/sum(pca$sdev^2)),
+                              VAR = pca$sdev^2/sum(pca$sdev^2)) %>%
+                mutate(ELBOW = ifelse(PC < elbow_finder(PC,VAR)[1], 'UPPER', 'FORE'))
+        p <- df_plot %>%  
+                ggplot(aes(PC,VAR, color = ELBOW)) +
+                geom_point() +
+                geom_vline(xintercept = elbow_finder(df_plot$PC,df_plot$VAR)[1], linetype='dashed') +
+                ggtitle('Variance by PCs') +
+                ylab('Variance')
+        plot(p)
+        PC_meta <- t(pca$x) %>%
+                as_tibble() %>%
+                mutate(PC = seq_along(pca$sdev^2/sum(pca$sdev^2))) %>%
+                mutate(VAR = pca$sdev^2/sum(pca$sdev^2)) %>%
+                mutate(ELBOW = ifelse(PC < elbow_finder(PC,VAR)[1], 'UPPER', 'FORE')) %>%
+                filter(ELBOW == 'UPPER') %>%
+                mutate(PC = as.character(sprintf('PC%d',PC))) %>%
+                filter(PC %in% c('PC1','PC2','PC3','PC4'))
+        # Reset the pca object
+        pca <- prcomp(t(assay(rld)), scale. = F, 
+                      rank. = elbow_finder(df_plot$PC,df_plot$VAR)[1])
+        # Collect Standard Deviations
+        pca$sd <- apply(pca$x, 2, function(x) abs(x - median(x)) / mad(x))
+        join_meta <- PC_meta[,c('PC','VAR')]ww
+        names(join_meta) <- c('SD_DIST_PC','PC_VAR')
+        PC <- PC %>%
+                select(
+                        c(sprintf('PC%d',1:(elbow_finder(df_plot$PC,df_plot$VAR)[1])),'sample_key')) %>%
+                mutate(sample_n = seq_along(PC1)) %>%
+                mutate(SD_DIST = apply(pca$x, 2, function(x) abs(x - median(x)) / mad(x)) %>%
+                               apply(1, max)) %>%
+                mutate(SD_DIST_PC = colnames(pca$sd)[apply(pca$sd,1,which.max)]) %>%
+                mutate(TUKEY_OUTLIER = ifelse(SD_DIST > 6, 'Outlier', 'Normal')) %>%
+                mutate(MAHALANOBIS_DIST = dist_ogk(pca$x)) %>%
+                # Bonferroni correction
+                mutate(MAHALANOBIS_FDR = pchisq(MAHALANOBIS_DIST, df = elbow_finder(df_plot$PC,df_plot$VAR)[1], lower.tail = FALSE)*length(MAHALANOBIS_DIST)) %>%
+                mutate(MAHALANOBIS_OUTLIER = ifelse(MAHALANOBIS_FDR <= 0.05, 
+                                                    'Outlier', 'Normal')) %>%
+                mutate(LOF = LOF(pca$x, log = F)) %>%
+                left_join(y = col_data, by = 'sample_key') %>%
+                left_join(y = join_meta, by = 'SD_DIST_PC') %>%
+                arrange(dplyr::desc(SD_DIST))
+        p <- PC %>%
+                mutate(PC_LABEL = ifelse(log(LOF) > tukey_mc_up(log(PC$LOF)) | 
+                                                 log(MAHALANOBIS_DIST) > tukey_mc_up(log(PC$MAHALANOBIS_DIST)), SD_DIST_PC, '')) %>%
+                ggplot(aes(x = log(MAHALANOBIS_DIST), y = log(LOF), color = animal.key.anirandgroup)) +
+                geom_point(size = 2) +
+                scale_color_manual(values=ec_colors) +
+                geom_vline(xintercept = tukey_mc_up(log(PC$MAHALANOBIS_DIST)), color = 'red') +
+                geom_hline(yintercept = tukey_mc_up(log(PC$LOF)),  color = 'red') +
+                ggtitle('Samples by Multidimensional Distance') +
+                ylab('Local Outlier Factor (log)') +
+                xlab('Mahalanobis Distance (log)')
+        # Samples plotted against 2 multidimension distance metrics--local
+        plot(p)
+        # Examine the variance from of the PC that is associated with the outlier
+        p <- PC %>%
+                mutate(PC_LABEL = ifelse(log(LOF) > tukey_mc_up(log(PC$LOF)) | 
+                                                 log(MAHALANOBIS_DIST) > tukey_mc_up(log(PC$MAHALANOBIS_DIST)), SD_DIST_PC, '')) %>%
+                ggplot(aes(x = log(MAHALANOBIS_DIST), y = log(LOF), color = PC_VAR)) +
+                geom_point(size = 2) +
+                geom_label_repel(aes(label=PC_LABEL)) +
+                #geom_label_repel(aes(label=sample_key)) +
+                geom_vline(xintercept = tukey_mc_up(log(PC$MAHALANOBIS_DIST)), color = 'red') +
+                geom_hline(yintercept = tukey_mc_up(log(PC$LOF)),  color = 'red') +
+                ggtitle('Samples by Multidimensional Distance') +
+                ylab('Local Outlier Factor (log)') +
+                xlab('Mahalanobis Distance (log)') +
+                labs(color='Variance per PC') 
+        plot(p)
+        p <- PC %>%
+                mutate(OUTLIER = ifelse(log(LOF) > tukey_mc_up(log(PC$LOF)) | 
+                                                log(MAHALANOBIS_DIST) > tukey_mc_up(log(PC$MAHALANOBIS_DIST)), sample_key, '')) %>%
+                ggplot(aes(x = PC1, y = PC2, color = SD_DIST)) +
+                geom_point(size = 3) +
+                coord_equal() +
+                geom_label_repel(aes(label=OUTLIER)) +
+                xlab(paste0('PC1: ',round(percentVar[1]*100,2),'% variance')) +
+                ylab(paste0('PC2: ',round(percentVar[2]*100,2),'% variance')) + 
+                ggtitle(paste0('PCA of ',TISSUE,' Gene Expression:\n',FINAL_FORMULA))
+        plot(p)
+        tod_cols <- col_data %>%
+                filter(Tissue == TISSUE) %>%
+                filter(sample_key %!in% OUTLIERS) %>%
+                filter(!is.na(animal.registration.sex))
+        rownames(tod_cols) <- tod_cols$sample_key
+        nona_sams <- tod_cols %>%
+                filter(!is.na(specimen.collection.t_death_hour)) %>%
+                filter(!is.na(animal.registration.sex)) %>%
+                select(sample_key) %>% unlist() %>% as.character()
+        tod_counts <- count_data[,nona_sams]
+        all(rownames(tod_cols) == colnames(tod_counts))
+        design = ~ 1 # Primary variable needs to be last.
+        title = paste0('Design: ',as.character(design))
+        dds1 <- DESeqDataSetFromMatrix(countData = tod_counts,
+                                       colData = tod_cols,
+                                       design = design)
+        zero_n <- dds1[(rowSums(counts(dds1))/ncol(dds1) < 1), ] %>% 
+                nrow() %>% as.character()
+        reads_n <- 1
+        keep <- rowSums(counts(dds1))/ncol(dds1) >= reads_n
+        dds2 <- dds1[keep,]
+        dds2
+        dds <- dds2
+        sort(colSums(assay(dds)))/1e6
+        dds <- estimateSizeFactors(dds)
+        summary(sizeFactors(dds))
+        rld <- DESeq2::vst(dds, blind = FALSE)
+        rs <- rowSums(counts(dds))
+}
