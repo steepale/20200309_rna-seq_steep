@@ -836,6 +836,25 @@ for(mdl in c('gam', 'sin', 'ce', 'ec')){
   #   mutate(!!summary_col := map(!!model_col, summary))
 }
 
+(by_gene_df %>%
+  filter(SYMBOL_RAT == 'Bcl10') %>%
+  ungroup() %>%
+  select(sin_anova))[[1]]
+(by_gene_df %>%
+    filter(SYMBOL_RAT == 'Bcl10') %>%
+    ungroup() %>%
+    select(gam_anova))[[1]]
+(by_gene_df %>%
+    filter(SYMBOL_RAT == 'Bcl10') %>%
+    ungroup() %>%
+    select(ce_anova))[[1]]
+(by_gene_df %>%
+    filter(SYMBOL_RAT == 'Bcl10') %>%
+    ungroup() %>%
+    select(ec_anova))[[1]]
+
+d %>% filter(BIN_TYPE == 'Ambiguous_High') %>% select(SYMBOL_RAT)
+
 # Collect all the PVEs
 pve_df <- by_gene_df %>%
   select(ENSEMBL_RAT, SYMBOL_RAT,gam_anova,sin_anova,ce_anova,ec_anova)
