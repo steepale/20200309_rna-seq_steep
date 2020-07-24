@@ -70,6 +70,143 @@ source(paste0(WD,'/functions/cor_outlier2.R'))
 source(paste0(WD,'/functions/sin.R'))
 source(paste0(WD,'/functions/cos.R'))
 
+# A function to collect the non-parametric p-value
+################################################################################
+p.test.cos <- function(data,TOD,iter,every=10) {
+  pval <- rep(0,dim(data)[1])
+  cat(iter, "permutations in progress\n")
+  PVE<-pve.FR(data,TOD)
+  for(i in 1:iter) {
+    # Shuffles the samples
+    new.data<-data[,sample(1:dim(data)[2])]
+    # Calculate the proportion of variance explained
+    tmp.PVE <- pve.FR(new.data,TOD)
+    # Generates a running count of simulated PVE 
+    # that are larger or equal to the actual PVE
+    pval <- pval + as.numeric(tmp.PVE >= PVE)
+    if(i %% every == 0) cat(every)
+    if(i %% (10*every) == 0) cat("\n")
+  }
+  # Calculate the p value by dividing the running count by the number of iterations
+  pval <- pval / iter
+}
+################################################################################
+
+# A function to collect the non-parametric p-value
+################################################################################
+p.test.ce <- function(data,TOD,iter,every=10) {
+  pval <- rep(0,dim(data)[1])
+  cat(iter, "permutations in progress\n")
+  PVE<-pve.FR(data,TOD)
+  for(i in 1:iter) {
+    # Shuffles the samples
+    new.data<-data[,sample(1:dim(data)[2])]
+    # Calculate the proportion of variance explained
+    tmp.PVE <- pve.FR(new.data,TOD)
+    # Generates a running count of simulated PVE 
+    # that are larger or equal to the actual PVE
+    pval <- pval + as.numeric(tmp.PVE >= PVE)
+    if(i %% every == 0) cat(every)
+    if(i %% (10*every) == 0) cat("\n")
+  }
+  # Calculate the p value by dividing the running count by the number of iterations
+  pval <- pval / iter
+}
+################################################################################
+
+
+# Collect the percent variance explained 
+################################################################################
+PVE_e <- function(df){
+  ss_ns <- df %>% 
+    filter(term == 'ns(specimen.collection.t_exercise_hour_sqrt, df = 4)') %>%
+    select(sumsq) %>% as.numeric()
+  ss_res <- df %>% 
+    filter(term == 'Residuals') %>%
+    select(sumsq) %>% as.numeric()
+  ss_total <- df %>% select(sumsq) %>% sum()
+  # Collect the PVEs
+  pve_exer <- ss_ns/ss_total
+  pve_res <- ss_res/ss_total
+  # Output pve exercise
+  pve_exer
+}
+################################################################################
+
+# Collect the percent variance explained 
+################################################################################
+PVE_c <- function(df){
+  # Collect the sum of squares from each model term
+  ss_sin <- df %>% 
+    filter(term == 'SIN(specimen.collection.t_death_hour)') %>%
+    select(sumsq) %>% as.numeric()
+  ss_cos <- df %>% 
+    filter(term == 'COS(specimen.collection.t_death_hour)') %>%
+    select(sumsq) %>% as.numeric()
+  ss_res <- df %>% 
+    filter(term == 'Residuals') %>%
+    select(sumsq) %>% as.numeric()
+  ss_total <- df %>% select(sumsq) %>% sum()
+  # Collect the PVEs
+  pve_circ <- (ss_sin + ss_cos)/ss_total
+  pve_res <- ss_res/ss_total
+  # Output all 3 PVE (circ, exer, res)
+  pve_circ
+}
+################################################################################
+
+# Collect the percent variance explained from a sin or cosine aspect of a model
+################################################################################
+PVE_comb_e <- function(df){
+  # Collect the sum of squares from each model term
+  ss_sin <- df %>% 
+    filter(term == 'SIN(specimen.collection.t_death_hour)') %>%
+    select(sumsq) %>% as.numeric()
+  ss_cos <- df %>% 
+    filter(term == 'COS(specimen.collection.t_death_hour)') %>%
+    select(sumsq) %>% as.numeric()
+  ss_ns <- df %>% 
+    filter(term == 'ns(specimen.collection.t_exercise_hour_sqrt, df = 4)') %>%
+    select(sumsq) %>% as.numeric()
+  ss_res <- df %>% 
+    filter(term == 'Residuals') %>%
+    select(sumsq) %>% as.numeric()
+  ss_total <- df %>% select(sumsq) %>% sum()
+  # Collect the PVEs
+  pve_circ <- (ss_sin + ss_cos)/ss_total
+  pve_exer <- ss_ns/ss_total
+  pve_res <- ss_res/ss_total
+  # Output exercise
+  pve_exer
+}
+################################################################################
+
+# Collect the percent variance explained from a sin or cosine aspect of a model
+################################################################################
+PVE_comb_c <- function(df){
+  # Collect the sum of squares from each model term
+  ss_sin <- df %>% 
+    filter(term == 'SIN(specimen.collection.t_death_hour)') %>%
+    select(sumsq) %>% as.numeric()
+  ss_cos <- df %>% 
+    filter(term == 'COS(specimen.collection.t_death_hour)') %>%
+    select(sumsq) %>% as.numeric()
+  ss_ns <- df %>% 
+    filter(term == 'ns(specimen.collection.t_exercise_hour_sqrt, df = 4)') %>%
+    select(sumsq) %>% as.numeric()
+  ss_res <- df %>% 
+    filter(term == 'Residuals') %>%
+    select(sumsq) %>% as.numeric()
+  ss_total <- df %>% select(sumsq) %>% sum()
+  # Collect the PVEs
+  pve_circ <- (ss_sin + ss_cos)/ss_total
+  pve_exer <- ss_ns/ss_total
+  pve_res <- ss_res/ss_total
+  # Output exercise
+  pve_circ
+}
+################################################################################
+
 #' ## Declare Variables
 
 #+ Declare Variables
@@ -99,7 +236,6 @@ table_file <- paste0(WD,'/data/20200603_rnaseq-tissue-data-assambly-table_steep.
 df_tbl <- read.table(file = table_file,sep = '\t', header = T, check.names = F)
 
 models_df <- data.frame()
-
 #TISSUE <- "Kidney"
 for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Brown Adipose', 'Cortex','Gastrocnemius', 'Heart', 'Hippocampus','Ovaries','Spleen','Testes', 'White Adipose')){
   print(TISSUE)
@@ -333,7 +469,6 @@ col_data <- readRDS(file = meta_file)
 count_file <- paste0(WD, '/data/20200603_rnaseq-counts-pass1a-stanford-sinai-processed_steep.rds')
 count_data <- readRDS(file = count_file)
 
-
 #' #### Retrieve Circadian Genes Associated with Tissue
 #' Data from Supplementary Table 2 from 1. Yan, J., Wang, H., Liu, Y. & Shao, C. Analysis of gene regulatory networks in the mammalian circadian rhythm. PLoS Comput. Biol. 4, (2008).
 #' Downloaded 20200326 by Alec Steep
@@ -512,7 +647,6 @@ rld <- DESeq2::vst(dds, blind = F)
 # This command is redundent, but included for safety
 rs <- rowSums(counts(dds))
 
-#' #### TODO: Adjust Variance
 
 #' ### Adjust Variance
 
@@ -551,7 +685,7 @@ pcaData <- DESeq2::plotPCA(rld,
 percentVar <- round(100 * attr(pcaData, "percentVar"))
 #pdf(paste0(WD,"/plots/20200426_rnaseq-",TIS,"-PCA-sexmod-modeling_steep.pdf"),
 # width = 6, height = 4)
-ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registration.sex)) +
+p <- ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registration.sex)) +
   geom_point(size=3) +
   #geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
   xlab(paste0("PC1: ",percentVar[1],"% variance")) +
@@ -561,6 +695,7 @@ ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registr
   guides(color=guide_legend(title="animal.key.anirandgroup")) +
   scale_color_manual(values=ec_colors) +
   theme(legend.title=element_blank())
+plot(p)
 #dev.off()
 
 #' #### Annotate Data for Modeling By Cluster
@@ -574,7 +709,7 @@ time_cols <- tod_cols %>%
 
 # Select the normalized counts
 tod_counts <- assay(rld) 
-t_counts <- setNames(melt(tod_counts), 
+t_counts <- setNames(reshape2::melt(tod_counts), 
                      c('ENSEMBL_RAT', 'sample_key', 'count'))
 
 # Join the dataframes and nest
@@ -621,6 +756,7 @@ all(by_gene_df$ENSEMBL_RAT == by_gene_df7$ENSEMBL_RAT)
 gam_mod <- function(df) {
         lm(count ~ ns(specimen.collection.t_exercise_hour_sqrt, df = 4), data = df)
 }
+
 # Generate model functions for the residual
 gam_mod2 <- function(df) {
   lm(count ~ ns(resid, df = 4), data = df)
@@ -642,13 +778,13 @@ sin_mod2 <- function(df) {
 ce_mod <- function(df) {
   lm(count ~ SIN(specimen.collection.t_death_hour) + 
        COS(specimen.collection.t_death_hour) +
-       ns(specimen.collection.t_exercise_hour_sqrt, df = 4) + 1, data = df)
+       ns(specimen.collection.t_exercise_hour_sqrt, df = 4), data = df)
 }
 # Generate a model that combines circadian with exercise (exercise first)
 ec_mod <- function(df) {
-  lm(count ~ SIN(specimen.collection.t_death_hour) + 
-       COS(specimen.collection.t_death_hour) +
-       ns(specimen.collection.t_exercise_hour_sqrt, df = 4) + 1, data = df)
+  lm(count ~ ns(specimen.collection.t_exercise_hour_sqrt, df = 4) +
+       SIN(specimen.collection.t_death_hour) + 
+       COS(specimen.collection.t_death_hour), data = df)
 }
 
 # Add the gene symbol
@@ -656,10 +792,18 @@ by_gene_df$SYMBOL_RAT = mapIds(org.Rn.eg.db, as.character(by_gene_df7$ENSEMBL_RA
 
 # In case you'd like to subset the data
 #by_gene_df_bk <- by_gene_df
-by_gene_df <- by_gene_df_bk
+#by_gene_df <- by_gene_df_bk
 
+# by_gene_df <- by_gene_df %>%
+#   filter(SYMBOL_RAT == 'Arntl')
+keepers <- manova_df %>% 
+  filter(TISSUE == 'Kidney') %>%
+  filter(MANOVA_PVAL <= 0.05) %>%
+  select(ENSEMBL_RAT) %>% unlist() %>% as.character()
 by_gene_df <- by_gene_df %>%
-  filter(SYMBOL_RAT == 'Arntl')
+  ungroup() %>%
+  filter(ENSEMBL_RAT %in% keepers) %>%
+  dplyr::sample_n(size = 5000)
 
 # Perform a series of analyses for each model
 for(mdl in c('gam', 'sin', 'ce', 'ec')){
@@ -667,225 +811,204 @@ for(mdl in c('gam', 'sin', 'ce', 'ec')){
   ################################################################################
   # Collect variables
   ( model_col <- as.symbol(paste0(mdl,'_model')) )
+  anova_int <- as.symbol(paste0(mdl,'_anova_int'))
   anova_col <- as.symbol(paste0(mdl,'_anova'))
   resid_col <- as.symbol(paste0(mdl,'_resid'))
   metrics_col <- as.symbol(paste0(mdl,'_metrics'))
   summary_col <- as.symbol(paste0(mdl,'_summary'))
   MODEL <- match.fun(paste0(mdl,'_mod'))
-  
   # Run models and save as a column
   by_gene_df <- by_gene_df %>%
     mutate(!!model_col := map(data, MODEL))
   # Examine the ANOVA report on models
   by_gene_df <- by_gene_df %>%
-    mutate(!!anova_col := map(!!model_col, anova))
+    mutate(!!anova_int := map(!!model_col, anova)) %>%
+    mutate(!!anova_col := map(!!anova_int, broom::tidy)) %>%
+    select(-all_of(anova_int))
   # Add the residuals
-  by_gene_df <- by_gene_df %>%
-    mutate(!!resid_col := map2(data, !!model_col, modelr::add_residuals))
-  # Examine the model metrics
-  by_gene_df <- by_gene_df %>%
-    mutate(!!metrics_col := map(!!model_col, broom::glance))
-  # Examine some model summaries
-  by_gene_df <- by_gene_df %>%
-    mutate(!!summary_col := map(!!model_col, summary))
+  # by_gene_df <- by_gene_df %>%
+  #   mutate(!!resid_col := map2(data, !!model_col, modelr::add_residuals))
+  # # Examine the model metrics
+  # by_gene_df <- by_gene_df %>%
+  #   mutate(!!metrics_col := map(!!model_col, broom::glance))
+  # # Examine some model summaries
+  # by_gene_df <- by_gene_df %>%
+  #   mutate(!!summary_col := map(!!model_col, summary))
 }
 
-by_gene_df %>%
-  ungroup() %>%
-  filter(SYMBOL_RAT == 'Arntl') %>%
-  select(ce_model) %>%
-  mutate(anova_rep = map(ce_model, .f = anova)) %>%
-  unnest(anova_rep)
-
-by_gene_df %>%
-  ungroup() %>%
-  filter(SYMBOL_RAT == 'Arntl') %>%
-  select(ec_model) %>%
-  mutate(anova_rep = map(ec_model, .f = anova)) %>%
-  unnest(anova_rep)
-
-by_gene_df %>%
-  ungroup() %>%
-  filter(SYMBOL_RAT == 'Arntl') %>%
-  select(gam_model) %>%
-  mutate(anova_rep = map(gam_model, .f = anova)) %>%
-  unnest(anova_rep)
-
-by_gene_df %>%
-  ungroup() %>%
-  filter(SYMBOL_RAT == 'Arntl') %>%
-  select(sin_model) %>%
-  mutate(anova_rep = map(sin_model, .f = anova)) %>%
-  unnest(anova_rep)
-
-models_df %>%
-  filter(TISSUE == 'Kidney') %>%
-  filter(ENSEMBL_RAT == 'ENSRNOG00000014448')
-
-models_df$TISSUE %>% table()
-
-
-
-
-# circadian with exercise Model (circadian first)
-################################################################################
-# Run models and save as a column
-by_gene_df <- by_gene_df %>%
-  mutate(ce_model = map(data, ce_mod))
-# Examine the ANOVA report on models
-by_gene_df <- by_gene_df %>%
-  mutate(ce_ANOVA = map(ce_model, anova))
-# Add the residuals
-by_gene_df <- by_gene_df %>%
-  mutate(ce_resid = map2(data, ce_model, modelr::add_residuals))
-# Examine the model metrics
-by_gene_df <- by_gene_df %>%
-  mutate(ce_metrics = map(ce_model, broom::glance))
-# Examine some model summaries
-by_gene_df <- by_gene_df %>%
-  mutate(ce_summary = map(ce_model, summary))
-# Save the model metrics
-ce_metrics <- by_gene_df %>%
-  unnest(ce_metrics)
-# Object with the anova metrics
-ce_anova <- by_gene_df %>%
-  unnest(ce_ANOVA)
-
-# exercise with circadian Model (exercise first)
-################################################################################
-# Run models and save as a column
-by_gene_df <- by_gene_df %>%
-  mutate(ec_model = map(data, ec_mod))
-# Examine the ANOVA report on models
-by_gene_df <- by_gene_df %>%
-  mutate(ec_ANOVA = map(ec_model, anova))
-# Add the residuals
-by_gene_df <- by_gene_df %>%
-  mutate(ec_resid = map2(data, ec_model, modelr::add_residuals))
-# Examine the model metrics
-by_gene_df <- by_gene_df %>%
-  mutate(ec_metrics = map(ec_model, broom::glance))
-# Examine some model summaries
-by_gene_df <- by_gene_df %>%
-  mutate(ec_summary = map(ec_model, summary))
-# Save the model metrics
-ec_metrics <- by_gene_df %>%
-  unnest(ec_metrics)
-# Object with the anova metrics
-ec_anova <- by_gene_df %>%
-  unnest(ec_ANOVA)
-
-# Generalized Additive Models (pass1)
-################################################################################
-# Run models and save as a column
-by_gene_df <- by_gene_df %>%
-        mutate(gam_model = map(data, gam_mod))
-# Examine the ANOVA report on models
-by_gene_df <- by_gene_df %>%
-        mutate(gam_ANOVA = map(gam_model, anova))
-# Add the residuals
-by_gene_df <- by_gene_df %>%
-        mutate(gam_resid = map2(data, gam_model, modelr::add_residuals))
-# Examine the model metrics
-by_gene_df <- by_gene_df %>%
-        mutate(gam_metrics = map(gam_model, broom::glance))
-# Examine some model summaries
-by_gene_df <- by_gene_df %>%
-        mutate(gam_summary = map(gam_model, summary))
-# Save the model metrics
-gam_metrics <- by_gene_df %>%
-        mutate(gam_metrics = map(gam_model, broom::glance)) %>%
-        unnest(gam_metrics)
-
-# SIN/COS Model
-################################################################################
-# Run models and save as a column
-by_gene_df <- by_gene_df %>%
-        mutate(sin_model = map(data, sin_mod))
-# Examine the ANOVA report on models
-by_gene_df <- by_gene_df %>%
-        mutate(sin_ANOVA = map(sin_model, anova))
-# Add the residuals
-by_gene_df <- by_gene_df %>%
-        mutate(sin_resid = map2(data, sin_model, modelr::add_residuals))
-# Examine the model metrics
-by_gene_df <- by_gene_df %>%
-        mutate(sin_metrics = map(sin_model, broom::glance))
-# Examine some model summaries
-by_gene_df <- by_gene_df %>%
-        mutate(sin_summary = map(sin_model, summary))
-# Examine the model metrics
-sin_metrics <- by_gene_df %>%
-  mutate(sin_metrics = map(sin_model, broom::glance)) %>%
-  unnest(sin_metrics)
-
-# Generalized Additive Model (on SIN Model residuals)
-################################################################################
-# Run models and save as a column
-by_gene_df <- by_gene_df %>%
-  mutate(gam_model2 = map(sin_resid, gam_mod2))
-# Examine the ANOVA report on models
-by_gene_df <- by_gene_df %>%
-  mutate(gam_ANOVA2 = map(gam_model2, anova))
-# Add the residuals
-by_gene_df <- by_gene_df %>%
-  mutate(gam_resid2 = map2(sin_resid, gam_model2, modelr::add_residuals))
-# Examine the model metrics
-by_gene_df <- by_gene_df %>%
-  mutate(gam_metrics2 = map(gam_model2, broom::glance))
-# Examine some model summaries
-by_gene_df <- by_gene_df %>%
-  mutate(gam_summary2 = map(gam_model2, summary))
-# Save the model metrics
-gam_metrics2 <- by_gene_df %>%
-  mutate(gam_metrics2 = map(gam_model2, broom::glance)) %>%
-  unnest(gam_metrics2)
-
-# SIN/COS Model (on SIN Model residuals)
-################################################################################
-# Run models and save as a column
-by_gene_df <- by_gene_df %>%
-  mutate(sin_model2 = map(gam_resid, sin_mod2))
-# Examine the ANOVA report on models
-by_gene_df <- by_gene_df %>%
-  mutate(sin_ANOVA2 = map(sin_model2, anova))
-# Add the residuals
-by_gene_df <- by_gene_df %>%
-  mutate(sin_resid2 = map2(gam_resid, sin_model2, modelr::add_residuals))
-# Examine the model metrics
-by_gene_df <- by_gene_df %>%
-  mutate(sin_metrics2 = map(sin_model2, broom::glance))
-# Examine some model summaries
-by_gene_df <- by_gene_df %>%
-  mutate(sin_summary2 = map(sin_model2, summary))
-# Examine the model metrics
-sin_metrics2 <- by_gene_df %>%
-  mutate(sin_metrics2 = map(sin_model2, broom::glance)) %>%
-  unnest(sin_metrics2)
-
-# Generate the data frame
-modelsr2_df <- data.frame(TISSUE = TISSUE,
-           ENSEMBL_RAT = (sin_metrics %>% 
-                             arrange(factor(ENSEMBL_RAT, levels = by_gene_df$ENSEMBL_RAT)))$ENSEMBL_RAT,
-           SIN1_R2 = (sin_metrics %>% 
-                            arrange(factor(ENSEMBL_RAT, levels = by_gene_df$ENSEMBL_RAT)))$adj.r.squared,
-           SIN2_R2 = (sin_metrics2 %>% 
-                        arrange(factor(ENSEMBL_RAT, levels = by_gene_df$ENSEMBL_RAT)))$adj.r.squared,
-           GAM1_R2 = (gam_metrics %>% 
-                        arrange(factor(ENSEMBL_RAT, levels = by_gene_df$ENSEMBL_RAT)))$adj.r.squared,
-           GAM2_R2 = (gam_metrics2 %>% 
-                        arrange(factor(ENSEMBL_RAT, levels = by_gene_df$ENSEMBL_RAT)))$adj.r.squared) %>%
-  as_tibble()
-
-#####################
-
+# Collect all the PVEs
+pve_df <- by_gene_df %>%
+  select(ENSEMBL_RAT, SYMBOL_RAT,gam_anova,sin_anova,ce_anova,ec_anova)
+# Collect the PVE from models and different aspects of combined models
+pve_df <- pve_df %>%
+  mutate(pve_e = map_dbl(gam_anova, PVE_e)) %>%
+  mutate(pve_c = map_dbl(sin_anova, PVE_c)) %>%
+  mutate(pve_ec_c = map_dbl(ec_anova, PVE_comb_c)) %>%
+  mutate(pve_ec_e = map_dbl(ec_anova, PVE_comb_e)) %>%
+  mutate(pve_ce_c = map_dbl(ce_anova, PVE_comb_c)) %>%
+  mutate(pve_ce_e = map_dbl(ce_anova, PVE_comb_e)) %>%
+  select(-gam_anova,-sin_anova,-ce_anova,-ec_anova) %>%
+  #filter(pve_e >= 0.3 | pve_c >= 0.3) %>%
+  mutate(LINEARITY = ifelse((pve_ec_c == pve_ce_c & pve_ec_e == pve_ce_e),
+                             'Orthogonal','Colinear')) %>%
+  mutate(BIN_TYPE = case_when(pve_c > pve_e + 0.15 ~ 'Circadian',
+                              pve_e > pve_c + 0.15 ~ 'Exercise',
+                              (((pve_c <= pve_e + 0.15) & (pve_e <= pve_c + 0.15)) & pve_c >= 0.3 & pve_e >= 0.3) ~ 'Ambiguous_High',
+                              (((pve_c <= pve_e + 0.15) & (pve_e <= pve_c + 0.15)) & (pve_c < 0.3 | pve_e < 0.3)) ~ 'Ambiguous_Low')) %>%
+  mutate(BIN_TYPE_ce = case_when(pve_ce_c > pve_ce_e + 0.15 ~ 'Circadian',
+                              pve_ce_e > pve_ce_c + 0.15 ~ 'Exercise',
+                              (((pve_ce_c <= pve_ce_e + 0.15) & (pve_ce_e <= pve_ce_c + 0.15)) & pve_ce_c >= 0.3 & pve_ce_e >= 0.3) ~ 'Ambiguous_High',
+                              (((pve_ce_c <= pve_ce_e + 0.15) & (pve_ce_e <= pve_ce_c + 0.15)) & (pve_ce_c < 0.3 | pve_ce_e < 0.3)) ~ 'Ambiguous_Low')) %>%
+  mutate(BIN_TYPE_ec = case_when(pve_ec_c > pve_ec_e + 0.15 ~ 'Circadian',
+                              pve_ec_e > pve_ec_c + 0.15 ~ 'Exercise',
+                              (((pve_ec_c <= pve_ec_e + 0.15) & (pve_ec_e <= pve_ec_c + 0.15)) & pve_ec_c >= 0.3 & pve_ec_e >= 0.3) ~ 'Ambiguous_High',
+                              (((pve_ec_c <= pve_ec_e + 0.15) & (pve_ec_e <= pve_ec_c + 0.15)) & (pve_ec_c < 0.3 | pve_ec_e < 0.3)) ~ 'Ambiguous_Low')) %>%
+  mutate(TISSUE == TISSUE1)
 # Concatenate the dataframes
-models_df <- rbind(models_df, modelsr2_df)
+models_df <- rbind(models_df, pve_df)
 # Save the final output table
-models_file <- paste0(WD,'/data/20200603_rnaseq-tissue-models-residuals-r2-table_steep.txt')
+models_file <- paste0(WD,'/data/20200603_rnaseq-tissue-models-pve-table_steep.txt')
 #write.table(models_df, file = models_file,sep = '\t',row.names = F,quote = F)
-#}
-# Load the file
+}
+
+# Load and join the Manova file
+manova_file <- paste0(WD,'/data/20200413_rnaseq-tissue-manova-table_steep.txt')
+manova_df <- read.table(file = manova_file ,sep = '\t', header = T, check.names = F) %>%
+  as_tibble()
+bin_df <- left_join(models_df, manova_df, by = c("TISSUE","ENSEMBL_RAT"))
+
+# Visualize the clusters across tissues
+d <- bin_df %>%
+  #filter(TISSUE == TISSUE1) %>%
+  filter(MANOVA_PVAL <= 0.05)
+
+# PVE (between models)
+p <- ggplot() +
+  geom_point(data = d, 
+             aes(x = pve_e, y= pve_c, color = BIN_TYPE), 
+             alpha = 0.5) +
+  # geom_density_2d_filled(data = d, 
+  #                        aes(x = GAM1_R2, y= SIN1_R2), alpha = 0.5) +
+  # geom_density_2d(data = d, 
+  #                 aes(x = GAM1_R2, y= SIN1_R2), 
+  #                 size = 0.25, colour = "black") +
+  xlim(0,1) + ylim(0,1) +
+  geom_abline(intercept = 0, slope = 1) +
+  geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
+  geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
+  xlab("PVE Natural Spline Model (Exercise)") +
+  ylab("PVE SIN/COS Model (Circadian)") +
+  ggtitle("Circadian vs. Exercise:\nPVE Comparisons Between Models") +
+  theme_bw() +
+  # theme(strip.text = element_text(size=18),
+  #       axis.text.x = element_text(size = 16),
+  #       axis.text.y = element_text(size = 14),
+  #       axis.title.x = element_text(size = 20),
+  #       axis.title.y = element_text(size = 20),
+  #       legend.text = element_text(size = 16)) +
+  #facet_wrap(vars(TISSUE)) +
+  scale_color_manual(values = c('Ambiguous_High' = "red",
+                                'Ambiguous_Low' = "grey",
+                                'Circadian' = "green",
+                                'Exercise' = 'blue')) +
+  coord_equal()
+pdf(paste0(WD,'/plots/20200628_rnaseq-kidney-faceted-theoretical-bins_steep.pdf'),width=26,height=14)
+plot(p)
+dev.off()
+
+# PVE (within models -- circadian first)
+p <- ggplot() +
+  geom_point(data = d, 
+             aes(x = pve_ce_e, y= pve_ce_c, color = BIN_TYPE), 
+             alpha = 0.8) +
+  # geom_density_2d_filled(data = d, 
+  #                        aes(x = GAM1_R2, y= SIN1_R2), alpha = 0.5) +
+  # geom_density_2d(data = d, 
+  #                 aes(x = GAM1_R2, y= SIN1_R2), 
+  #                 size = 0.25, colour = "black") +
+  xlim(0,1) + ylim(0,1) +
+  geom_abline(intercept = 0, slope = 1) +
+  geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
+  geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
+  xlab("PVE Exercise") +
+  ylab("PVE Circadian") +
+  ggtitle("Circadian vs. Exercise:\nPVE Comparisons within Model") +
+  theme_bw() +
+  theme(strip.text = element_text(size=18),
+        axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 14),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 20),
+        legend.text = element_text(size = 16)) +
+  facet_wrap(vars(TISSUE)) +
+  scale_color_manual(values = c('Ambiguous_High' = "red",
+                                'Ambiguous_Low' = "grey",
+                                'Circadian' = "green",
+                                'Exercise' = 'blue')) +
+  coord_equal()
+pdf(paste0(WD,'/plots/20200628_rnaseq-kidney-faceted-theoretical-bins-ce_steep.pdf'),width=26,height=14)
+plot(p)
+dev.off()
+
+# PVE (within models -- exercise first)
+p <- ggplot() +
+  geom_point(data = d, 
+             aes(x = pve_ec_e, y= pve_ec_c, color = BIN_TYPE), 
+             alpha = 0.8) +
+  # geom_density_2d_filled(data = d, 
+  #                        aes(x = GAM1_R2, y= SIN1_R2), alpha = 0.5) +
+  # geom_density_2d(data = d, 
+  #                 aes(x = GAM1_R2, y= SIN1_R2), 
+  #                 size = 0.25, colour = "black") +
+  xlim(0,1) + ylim(0,1) +
+  geom_abline(intercept = 0, slope = 1) +
+  geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
+  geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
+  xlab("PVE Exercise") +
+  ylab("PVE Circadian") +
+  ggtitle("Circadian vs. Exercise:\nPVE Comparisons within Model") +
+  theme_bw() +
+  theme(strip.text = element_text(size=18),
+        axis.text.x = element_text(size = 16),
+        axis.text.y = element_text(size = 14),
+        axis.title.x = element_text(size = 20),
+        axis.title.y = element_text(size = 20),
+        legend.text = element_text(size = 16)) +
+  facet_wrap(vars(TISSUE)) +
+  scale_color_manual(values = c('Ambiguous_High' = "red",
+                                'Ambiguous_Low' = "grey",
+                                'Circadian' = "green",
+                                'Exercise' = 'blue')) +
+  coord_equal()
+pdf(paste0(WD,'/plots/20200628_rnaseq-kidney-faceted-theoretical-bins-ec_steep.pdf'),width=26,height=14)
+plot(p)
+dev.off()
+
+d %>%
+  group_by(BIN_TYPE) %>%
+  tally()
+d %>%
+  group_by(BIN_TYPE_ce) %>%
+  tally()
+d %>%
+  group_by(BIN_TYPE_ec) %>%
+  tally()
+
+
+
+
+# TISSUE_COL <- c()
+# for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Brown Adipose', 'Cortex','Gastrocnemius', 'Heart', 'Hippocampus','Ovaries','Spleen','Testes', 'White Adipose')){
+#   tissue_col <- rep(TISSUE, 5000)
+#   TISSUE_COL <- c(tissue_col, TISSUE_COL)
+# }
+# 
+# TISSUE_COL <- c(rep('Kidney', 100), TISSUE_COL)
+# models_df$TISSUE <- TISSUE_COL
+# 
+# length(TISSUE_COL)
+# models_df_bk <- models_df
+# # Load the file
 models_df <- read.table(file = models_file ,sep = '\t', header = T, check.names = F) %>% as_tibble()
 
 
@@ -1902,9 +2025,160 @@ ggplot(model_metrics, aes(r.squared.gam, r.squared.sin)) +
                          hjust=0, vjust=0)
 
 
+################################################################################
 
 
+# circadian with exercise Model (circadian first)
+################################################################################
+# Run models and save as a column
+by_gene_df <- by_gene_df %>%
+  mutate(ce_model = map(data, ce_mod))
+# Examine the ANOVA report on models
+by_gene_df <- by_gene_df %>%
+  mutate(ce_ANOVA = map(ce_model, anova))
+# Add the residuals
+by_gene_df <- by_gene_df %>%
+  mutate(ce_resid = map2(data, ce_model, modelr::add_residuals))
+# Examine the model metrics
+by_gene_df <- by_gene_df %>%
+  mutate(ce_metrics = map(ce_model, broom::glance))
+# Examine some model summaries
+by_gene_df <- by_gene_df %>%
+  mutate(ce_summary = map(ce_model, summary))
+# Save the model metrics
+ce_metrics <- by_gene_df %>%
+  unnest(ce_metrics)
+# Object with the anova metrics
+ce_anova <- by_gene_df %>%
+  unnest(ce_ANOVA)
 
+# exercise with circadian Model (exercise first)
+################################################################################
+# Run models and save as a column
+by_gene_df <- by_gene_df %>%
+  mutate(ec_model = map(data, ec_mod))
+# Examine the ANOVA report on models
+by_gene_df <- by_gene_df %>%
+  mutate(ec_ANOVA = map(ec_model, anova))
+# Add the residuals
+by_gene_df <- by_gene_df %>%
+  mutate(ec_resid = map2(data, ec_model, modelr::add_residuals))
+# Examine the model metrics
+by_gene_df <- by_gene_df %>%
+  mutate(ec_metrics = map(ec_model, broom::glance))
+# Examine some model summaries
+by_gene_df <- by_gene_df %>%
+  mutate(ec_summary = map(ec_model, summary))
+# Save the model metrics
+ec_metrics <- by_gene_df %>%
+  unnest(ec_metrics)
+# Object with the anova metrics
+ec_anova <- by_gene_df %>%
+  unnest(ec_ANOVA)
+
+# Generalized Additive Models (pass1)
+################################################################################
+# Run models and save as a column
+by_gene_df <- by_gene_df %>%
+  mutate(gam_model = map(data, gam_mod))
+# Examine the ANOVA report on models
+by_gene_df <- by_gene_df %>%
+  mutate(gam_ANOVA = map(gam_model, anova))
+# Add the residuals
+by_gene_df <- by_gene_df %>%
+  mutate(gam_resid = map2(data, gam_model, modelr::add_residuals))
+# Examine the model metrics
+by_gene_df <- by_gene_df %>%
+  mutate(gam_metrics = map(gam_model, broom::glance))
+# Examine some model summaries
+by_gene_df <- by_gene_df %>%
+  mutate(gam_summary = map(gam_model, summary))
+# Save the model metrics
+gam_metrics <- by_gene_df %>%
+  mutate(gam_metrics = map(gam_model, broom::glance)) %>%
+  unnest(gam_metrics)
+
+# SIN/COS Model
+################################################################################
+# Run models and save as a column
+by_gene_df <- by_gene_df %>%
+  mutate(sin_model = map(data, sin_mod))
+# Examine the ANOVA report on models
+by_gene_df <- by_gene_df %>%
+  mutate(sin_ANOVA = map(sin_model, anova))
+# Add the residuals
+by_gene_df <- by_gene_df %>%
+  mutate(sin_resid = map2(data, sin_model, modelr::add_residuals))
+# Examine the model metrics
+by_gene_df <- by_gene_df %>%
+  mutate(sin_metrics = map(sin_model, broom::glance))
+# Examine some model summaries
+by_gene_df <- by_gene_df %>%
+  mutate(sin_summary = map(sin_model, summary))
+# Examine the model metrics
+sin_metrics <- by_gene_df %>%
+  mutate(sin_metrics = map(sin_model, broom::glance)) %>%
+  unnest(sin_metrics)
+
+# Generalized Additive Model (on SIN Model residuals)
+################################################################################
+# Run models and save as a column
+by_gene_df <- by_gene_df %>%
+  mutate(gam_model2 = map(sin_resid, gam_mod2))
+# Examine the ANOVA report on models
+by_gene_df <- by_gene_df %>%
+  mutate(gam_ANOVA2 = map(gam_model2, anova))
+# Add the residuals
+by_gene_df <- by_gene_df %>%
+  mutate(gam_resid2 = map2(sin_resid, gam_model2, modelr::add_residuals))
+# Examine the model metrics
+by_gene_df <- by_gene_df %>%
+  mutate(gam_metrics2 = map(gam_model2, broom::glance))
+# Examine some model summaries
+by_gene_df <- by_gene_df %>%
+  mutate(gam_summary2 = map(gam_model2, summary))
+# Save the model metrics
+gam_metrics2 <- by_gene_df %>%
+  mutate(gam_metrics2 = map(gam_model2, broom::glance)) %>%
+  unnest(gam_metrics2)
+
+# SIN/COS Model (on SIN Model residuals)
+################################################################################
+# Run models and save as a column
+by_gene_df <- by_gene_df %>%
+  mutate(sin_model2 = map(gam_resid, sin_mod2))
+# Examine the ANOVA report on models
+by_gene_df <- by_gene_df %>%
+  mutate(sin_ANOVA2 = map(sin_model2, anova))
+# Add the residuals
+by_gene_df <- by_gene_df %>%
+  mutate(sin_resid2 = map2(gam_resid, sin_model2, modelr::add_residuals))
+# Examine the model metrics
+by_gene_df <- by_gene_df %>%
+  mutate(sin_metrics2 = map(sin_model2, broom::glance))
+# Examine some model summaries
+by_gene_df <- by_gene_df %>%
+  mutate(sin_summary2 = map(sin_model2, summary))
+# Examine the model metrics
+sin_metrics2 <- by_gene_df %>%
+  mutate(sin_metrics2 = map(sin_model2, broom::glance)) %>%
+  unnest(sin_metrics2)
+
+# Generate the data frame
+modelsr2_df <- data.frame(TISSUE = TISSUE,
+                          ENSEMBL_RAT = (sin_metrics %>% 
+                                           arrange(factor(ENSEMBL_RAT, levels = by_gene_df$ENSEMBL_RAT)))$ENSEMBL_RAT,
+                          SIN1_R2 = (sin_metrics %>% 
+                                       arrange(factor(ENSEMBL_RAT, levels = by_gene_df$ENSEMBL_RAT)))$adj.r.squared,
+                          SIN2_R2 = (sin_metrics2 %>% 
+                                       arrange(factor(ENSEMBL_RAT, levels = by_gene_df$ENSEMBL_RAT)))$adj.r.squared,
+                          GAM1_R2 = (gam_metrics %>% 
+                                       arrange(factor(ENSEMBL_RAT, levels = by_gene_df$ENSEMBL_RAT)))$adj.r.squared,
+                          GAM2_R2 = (gam_metrics2 %>% 
+                                       arrange(factor(ENSEMBL_RAT, levels = by_gene_df$ENSEMBL_RAT)))$adj.r.squared) %>%
+  as_tibble()
+
+#####################
 
 
 

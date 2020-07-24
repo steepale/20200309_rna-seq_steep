@@ -1,0 +1,5 @@
+"versionNbr (Form Version Number)","Rule Version Specific (0=no,1=yes)","Form Name (* indicates multiple forms involved)","Field Name (* indicates multiple fields involved)","Data Capture Rules Sequence","Rule Description","Rule Display Message","Rule Definition","Fields Involved","formGUID","fieldGUID","versionGUID"
+1,1,"Animal Chow Log","chowlotnumber",0,"Chow lot number is missing.","Q1 Chow Lot Number","<cfif not len(trim(form.chowLotNumber))>","CHOWLOTNUMBER_ANCL","DB6A9FC2-2AA8-4F9B-AA6C-CAF0C8493CE0","C63312CC-A823-FD93-A534-D4914DD95A0B","D10CAB0D-734C-4300-9B0F-F998BDD18DAA"
+1,1,"Animal Chow Log","chowratbatch",1,"Rat batch associated with chow is missing.","Q2 Rat Batch Associated with Chow","<cfif not len(trim(form.chowRatBatch))>","CHOWRATBATCH_ANCL","DB6A9FC2-2AA8-4F9B-AA6C-CAF0C8493CE0","35511A96-447D-30DB-2864-23E19DB77F52","D10CAB0D-734C-4300-9B0F-F998BDD18DAA"
+1,1,"Animal Chow Log","chowdatereceived",2,"Date chow received is missing.","Q3 Date Chow Received","<cfif not len(trim(form.chowDateReceived))>","CHOWDATERECEIVED_ANCL","DB6A9FC2-2AA8-4F9B-AA6C-CAF0C8493CE0","73D19ADB-ACEA-C8C8-0FF4-4A2A60EF76E3","D10CAB0D-734C-4300-9B0F-F998BDD18DAA"
+

@@ -61,7 +61,6 @@ source(paste0(WD,'/functions/cor_PC_1_6.R'))
 source(paste0(WD,'/functions/elbow_finder.R'))
 source(paste0(WD,'/functions/cor_outlier2.R'))
 
-
 #' ## Declare Variables
 
 #+ Declare Variables
@@ -92,7 +91,7 @@ source(paste0(WD,'/functions/cor_outlier2.R'))
 df_tbl <- data.frame(matrix(ncol = 8, nrow = 0))
 names(df_tbl) <- c('Tissue','Tis','Seq_Batch','Misidentified',
                    'Adjusted_Variables','Outliers','Formula')
-for(TISSUE in c('Testes')){
+for(TISSUE in c('Hippocampus')){
         # for(TISSUE in c('Hypothalamus', 'Kidney', 'Aorta', 'Adrenal', 'Brown Adipose', 'Cortex', 'Gastrocnemius', 'Heart', 'Hippocampus','Lung','Ovaries','Spleen', 'White Adipose','Liver','Testes')){
         # Declare Outliers
         if(TISSUE == 'Kidney'){
@@ -444,6 +443,27 @@ if(F) {
         # Generate a time-fasted variable
         col_data$calculated.variables.deathtime_after_fed <- (col_data$specimen.collection.t_death - col_data$animal_time_last_fed) %>% as.numeric()
         
+        # Generate a non-zero variable
+        # The fraction of non-zero counts (function)
+        nonzero <- function(x) sum(x != 0)
+        # Non zero counts
+        nzc <- apply(count_data,2,nonzero)
+        ginic <- apply(count_data,2,reldist::gini)
+        # Non zero fraction 
+        nzf <- nzc/nrow(count_data)
+        # Mean gene expresison
+        m <- apply(count_data,2,mean)
+        # SD gene expression
+        sd <- apply(count_data,2,sd)
+        # Coefficient of variation
+        cv <- sd/m
+        # Join the dataframe into meta data
+        nz_tis_df <- data.frame('sample_key' = colnames(count_data),
+                                'NZF' = nzf,
+                                'GINI' = ginic,
+                                'CV' = cv)
+        col_data <- left_join(col_data, nz_tis_df, by = c('sample_key'))
+        
         # Save data as an R objects
         # ################################################################################
         # To determine object size
@@ -494,6 +514,7 @@ col_data <- readRDS(file = meta_file)
 # Restore the count object
 count_file <- paste0(WD, '/data/20200603_rnaseq-counts-pass1a-stanford-sinai-processed_steep.rds')
 count_data <- readRDS(file = count_file)
+
 
 #' #### Retrieve Circadian Genes Associated with Tissue
 #' Data from Supplementary Table 2 from:  
@@ -697,7 +718,7 @@ if(TISSUE %in% c('Hippocampus','Testes')){
                       rank. = elbow_finder(df_plot$PC,df_plot$VAR)[1])
         # Collect Standard Deviations
         pca$sd <- apply(pca$x, 2, function(x) abs(x - median(x)) / mad(x))
-        join_meta <- PC_meta[,c('PC','VAR')]ww
+        join_meta <- PC_meta[,c('PC','VAR')]
         names(join_meta) <- c('SD_DIST_PC','PC_VAR')
         PC <- PC %>%
                 select(
@@ -744,43 +765,91 @@ if(TISSUE %in% c('Hippocampus','Testes')){
                 xlab('Mahalanobis Distance (log)') +
                 labs(color='Variance per PC') 
         plot(p)
+        # Visualize the gini index
+        p <- PC %>%
+                ggplot(aes(x = log(MAHALANOBIS_DIST), y = log(LOF), color = GINI)) +
+                geom_point(size = 2) +
+                #geom_label_repel(aes(label=sample_key)) +
+                geom_vline(xintercept = tukey_mc_up(log(PC$MAHALANOBIS_DIST)), color = 'red') +
+                geom_hline(yintercept = tukey_mc_up(log(PC$LOF)),  color = 'red') +
+                ggtitle('Samples by Multidimensional Distance') +
+                ylab('Local Outlier Factor (log)') +
+                xlab('Mahalanobis Distance (log)') +
+                labs(color='Gini Index') +
+                scale_color_continuous(high = "#132B43", low = "#56B1F7",
+                                       name = "Gini Index")
+        plot(p)
+        
+        PC <- PC %>%
+                mutate(OUT_LABEL = ifelse(log(LOF) > tukey_mc_up(log(PC$LOF)) | 
+                                                 log(MAHALANOBIS_DIST) > tukey_mc_up(log(PC$MAHALANOBIS_DIST)), sample_key, ''))
+        # Plot the Gini Index for these samples
+        p <- ggplot() +
+                geom_violin(data = PC, aes(x = TISSUE, y= GINI)) +
+                geom_jitter(data = PC, aes(x = TISSUE, y= GINI, 
+                                           color = log(MAHALANOBIS_DIST)), 
+                            height = NULL, width = 0.15, 
+                            alpha = 0.9, size = 2) +
+                geom_label_repel(data = PC, aes(x = TISSUE, y= GINI,label=OUT_LABEL)) +
+                xlab("") +
+                ylab("Gini Index") +
+                theme_light() +
+                theme(axis.text.x = element_text(size = 16),
+                      axis.text.y = element_text(size = 14),
+                      axis.title.y = element_text(size = 20),
+                      legend.title = element_text(),
+                      legend.text = element_text(size = 16)) +
+                scale_color_continuous(high = "#132B43", low = "#56B1F7",
+                                       name = "Mahalanobis Distance (log)")
+        plot(p)
+        
         p <- PC %>%
                 mutate(OUTLIER = ifelse(log(LOF) > tukey_mc_up(log(PC$LOF)) | 
                                                 log(MAHALANOBIS_DIST) > tukey_mc_up(log(PC$MAHALANOBIS_DIST)), sample_key, '')) %>%
-                ggplot(aes(x = PC1, y = PC2, color = SD_DIST)) +
+                ggplot(aes(x = PC1, y = PC2, color = log(MAHALANOBIS_DIST))) +
                 geom_point(size = 3) +
                 coord_equal() +
                 geom_label_repel(aes(label=OUTLIER)) +
                 xlab(paste0('PC1: ',round(percentVar[1]*100,2),'% variance')) +
                 ylab(paste0('PC2: ',round(percentVar[2]*100,2),'% variance')) + 
-                ggtitle(paste0('PCA of ',TISSUE,' Gene Expression:\n',FINAL_FORMULA))
+                ggtitle(paste0(TISSUE)) +
+                scale_color_continuous(high = "#132B43",low = "#56B1F7",
+                                       name = "Mahalanobis Distance (log)")
         plot(p)
-        tod_cols <- col_data %>%
-                filter(Tissue == TISSUE) %>%
-                filter(sample_key %!in% OUTLIERS) %>%
-                filter(!is.na(animal.registration.sex))
-        rownames(tod_cols) <- tod_cols$sample_key
-        nona_sams <- tod_cols %>%
-                filter(!is.na(specimen.collection.t_death_hour)) %>%
-                filter(!is.na(animal.registration.sex)) %>%
-                select(sample_key) %>% unlist() %>% as.character()
-        tod_counts <- count_data[,nona_sams]
-        all(rownames(tod_cols) == colnames(tod_counts))
-        design = ~ 1 # Primary variable needs to be last.
-        title = paste0('Design: ',as.character(design))
-        dds1 <- DESeqDataSetFromMatrix(countData = tod_counts,
-                                       colData = tod_cols,
-                                       design = design)
-        zero_n <- dds1[(rowSums(counts(dds1))/ncol(dds1) < 1), ] %>% 
-                nrow() %>% as.character()
-        reads_n <- 1
-        keep <- rowSums(counts(dds1))/ncol(dds1) >= reads_n
-        dds2 <- dds1[keep,]
-        dds2
-        dds <- dds2
-        sort(colSums(assay(dds)))/1e6
-        dds <- estimateSizeFactors(dds)
-        summary(sizeFactors(dds))
-        rld <- DESeq2::vst(dds, blind = FALSE)
-        rs <- rowSums(counts(dds))
 }
+
+
+
+
+
+#
+
+
+# tod_cols <- col_data %>%
+#         filter(Tissue == TISSUE) %>%
+#         filter(sample_key %!in% OUTLIERS) %>%
+#         filter(!is.na(animal.registration.sex))
+# rownames(tod_cols) <- tod_cols$sample_key
+# nona_sams <- tod_cols %>%
+#         filter(!is.na(specimen.collection.t_death_hour)) %>%
+#         filter(!is.na(animal.registration.sex)) %>%
+#         select(sample_key) %>% unlist() %>% as.character()
+# tod_counts <- count_data[,nona_sams]
+# all(rownames(tod_cols) == colnames(tod_counts))
+# design = ~ 1 # Primary variable needs to be last.
+# title = paste0('Design: ',as.character(design))
+# dds1 <- DESeqDataSetFromMatrix(countData = tod_counts,
+#                                colData = tod_cols,
+#                                design = design)
+# zero_n <- dds1[(rowSums(counts(dds1))/ncol(dds1) < 1), ] %>% 
+#         nrow() %>% as.character()
+# reads_n <- 1
+# keep <- rowSums(counts(dds1))/ncol(dds1) >= reads_n
+# dds2 <- dds1[keep,]
+# dds2
+# dds <- dds2
+# sort(colSums(assay(dds)))/1e6
+# dds <- estimateSizeFactors(dds)
+# summary(sizeFactors(dds))
+# rld <- DESeq2::vst(dds, blind = FALSE)
+# rs <- rowSums(counts(dds))

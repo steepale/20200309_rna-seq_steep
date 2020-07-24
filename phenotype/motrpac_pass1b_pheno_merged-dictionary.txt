@@ -1,0 +1,543 @@
+BICUniqueID	FullName	Field.Name	CsvName	Alias..Field.Name.description.	Data.Type	Categorical.Values	Categorical.Definitions	FormName	Calculated.Created.variable..1.yes.	Continous.Range.Min	Continous.Range.Max	Data.Set.Name.	Field.Name.Alias..Field.Name.description.
+pass1bf0001	pid	pid	Key	Unique, randomly generated 8 digit numeric identifier used in linkage to phenotypic data	varchar								
+pass1bf0002	bid	bid	Specimen.Processing	Unique 5 digit numeric identifier of all samples collected for an acute test/sample collection period. All samples collected during that period will have the same BID.	varchar			Animal Sample Processing					
+pass1bf0003	labelid	labelid	Specimen.Processing	Unique 11 digit identifier for specimen label ID, originating at the collection site, that provides a link to specimen processing and used for shipments to the biorepository (will be the same as VialLabel only in instances where aliquots are not further processed at the biorepository)	varchar			Animal Sample Processing					
+pass1bf0004	viallabel	viallabel		Unique 11 digit numeric identifier of a sample vial made up of the BID, Timepoint, Sample Type, and Aliquot number									
+pass1bf0005	Key.protocol	protocol	Key	Protocol in which the procedures for sample collection were outlined.	int	|1|2	|Phase 1A|Phase 1B						
+pass1bf0006	Key.agegroup	agegroup	Key	Age group for the animal	int	|1|2	|6 months|18 months						
+pass1bf0007	Key.d_arrive	d_arrive	Key	Date animal arrived at site (d_arrive from Animal Registration Form)	datetime								
+pass1bf0008	Key.d_sacrifice	d_sacrifice	Key	Date animal sacrificed (d_visit from Animal Specimen Collection Form)	datetime	|01/01/1960	|Missing date code: animals not included in sacrifice per protocol						
+pass1bf0009	Key.intervention	intervention	Key	For Phase 1A the exercise group is defined by those who complete the acute exercise test. For Phase 1B the exercise group is defined by those who complete exercise training.	int	|1|2|3	|Exercise (Phase 1A)|Training (Phase 1B)|Control						
+pass1bf0010	Key.sacrificetime	sacrificetime	Key	For Phase 1A Sacrifice Time refers to the number of hours prior to sacrifice (post-acute test for the exercise group). For Phase 1B Sacrifice Time refers to the number of weeks of training.	int	|1|2|3|4|5|6|7|8|9|10|11	|Immediate Post Exercise (Phase 1A)|0.5 hour (Phase 1A)|1 hour (Phase 1A)|4 hour (Phase 1A)|7 hour (Phase 1A)|24 hour (Phase 1A)|48 hour (Phase 1A)|1 week of training or control time (Phase 1B)|2 weeks of training (Phase 1B)|4 weeks of training (Phase 1B)|8 weeks of training or control time (Phase 1B)						
+pass1bf0011	Key.anirandgroup	anirandgroup	Key	Description of the randomization group	varchar								
+pass1bf0012	Key.sitename	sitename	Key	The site where the samples were collected.  One of three PASS: Iowa, Florida, or Joslin.	int	|910|930|940	|Joslin|University of Florida|University of Iowa						
+pass1bf0013	Registration.d_visit	d_visit	Registration	Date Completed	datetime			Animal Registration					
+pass1bf0014	Registration.days_visit	days_visit	Registration	[C] Day (in relation to arrival date) Completed	int			Animal Registration	1				
+pass1bf0015	Registration.staffid	staffid	Registration	Staff ID	int			Animal Registration					
+pass1bf0016	Registration.siteid	siteid	Registration	Site Numeric ID	int	|910|930|940	|Joslin Diabetes Center|University of Florida|University of Iowa	Animal Registration					
+pass1bf0017	Registration.formname	formname	Registration	Form Name	varchar	Animal Registration		Animal Registration					
+pass1bf0018	Registration.versionnbr	versionnbr	Registration	Version Number	int	1		Animal Registration					
+pass1bf0019	Registration.ratid	ratid	Registration	Site rat ID	varchar			Animal Registration					
+pass1bf0020	Registration.d_arrive	d_arrive	Registration	What date did the rat arrive at the site?	datetime			Animal Registration					
+pass1bf0021	Registration.days_arrive	days_arrive	Registration	[C] What day (in relation to arrival date) did the rat arrive at the site?	int			Animal Registration	1				
+pass1bf0022	Registration.batchnumber	batchnumber	Registration	Batch Number	varchar			Animal Registration					
+pass1bf0023	Registration.d_reverselight	d_reverselight	Registration	What date was the rat housed in reverse light? (can be same as Q2)	datetime			Animal Registration					
+pass1bf0024	Registration.days_reverselight	days_reverselight	Registration	[C] What day (in relation to arrival date) was the rat housed in reverse light? (can be same as Q2)	int			Animal Registration	1				
+pass1bf0025	Registration.d_birth	d_birth	Registration	What is the rat's date of birth?	datetime			Animal Registration					
+pass1bf0026	Registration.days_birth	days_birth	Registration	[C] What is the rat's day (in relation to arrival date) of birth?	int			Animal Registration	1				
+pass1bf0027	Registration.sex	sex	Registration	What is the sex of the rat?	int	|1|2	|Female|Male	Animal Registration					
+pass1bf0028	Registration.weight	weight	Registration	What is the rat's body weight?	numeric			Animal Registration		300	600		
+pass1bf0029	Registration.cagenumber	cagenumber	Registration	In what cage number is the rat housed?	varchar			Animal Registration					
+pass1bf0030	Registration.comments	comments	Registration	Comments:	varchar(MAX)			Animal Registration					
+pass1bf0031	Familiarization.d_visit	d_visit	Familiarization	Date Completed	datetime			Animal Familiarization					
+pass1bf0032	Familiarization.days_visit	days_visit	Familiarization	[C] Day (in relation to arrival date) Completed	int			Animal Familiarization	1				
+pass1bf0033	Familiarization.staffid	staffid	Familiarization	Staff ID	int			Animal Familiarization					
+pass1bf0034	Familiarization.siteid	siteid	Familiarization	Site Numeric ID	int	|910|930|940	|Joslin Diabetes Center|University of Florida|University of Iowa	Animal Familiarization					
+pass1bf0035	Familiarization.formname	formname	Familiarization	Form Name	varchar	Animal Familiarization		Animal Familiarization					
+pass1bf0036	Familiarization.versionnbr	versionnbr	Familiarization	Version Number	int	2		Animal Familiarization					
+pass1bf0037	Familiarization.d_treadmillbegin	d_treadmillbegin	Familiarization	What date did the rat begin treadmill familiarization?	datetime			Animal Familiarization					
+pass1bf0038	Familiarization.days_treadmillbegin	days_treadmillbegin	Familiarization	[C] What day (in relation to arrival date) did the rat begin treadmill familiarization?	int			Animal Familiarization	1				
+pass1bf0039	Familiarization.d_treadmillcomplete	d_treadmillcomplete	Familiarization	What date did the rat complete treadmill familiarization?	datetime			Animal Familiarization					
+pass1bf0040	Familiarization.days_treadmillcomplete	days_treadmillcomplete	Familiarization	[C] What day (in relation to arrival date) did the rat complete treadmill familiarization?	int			Animal Familiarization	1				
+pass1bf0041	Familiarization.activity_score	activity_score	Familiarization	What is the rat's activity score?	numeric			Animal Familiarization					
+pass1bf0042	Familiarization.compliant	compliant	Familiarization	Is this rat compliant?	int	|1|0	|Yes|No	Animal Familiarization					
+pass1bf0043	Familiarization.weight	weight	Familiarization	What is the rat's body weight?	numeric			Animal Familiarization		300	600		
+pass1bf0044	Familiarization.fat	fat	Familiarization	What is the rat's percent body fat?*	numeric			Animal Familiarization		0	100		
+pass1bf0045	Familiarization.lean	lean	Familiarization	What is the rat's percent lean?*	numeric			Animal Familiarization		0	100		
+pass1bf0046	Familiarization.comments	comments	Familiarization	Comments:	varchar(MAX)			Animal Familiarization					
+pass1bf0047	Training.d_visit	d_visit	Training	Date Completed	datetime			Animal Training					
+pass1bf0048	Training.days_visit	days_visit	Training	[C] Day (in relation to arrival date) Completed	int			Animal Training	1				
+pass1bf0049	Training.staffid	staffid	Training	Staff ID	int			Animal Training					
+pass1bf0050	Training.siteid	siteid	Training	Site Numeric ID	int	|910|930|940	|Joslin Diabetes Center|University of Florida|University of Iowa	Animal Training					
+pass1bf0051	Training.formname	formname	Training	Form Name	varchar	Animal Training		Animal Training					
+pass1bf0052	Training.versionnbr	versionnbr	Training	Version Number	int	1		Animal Training					
+pass1bf0053	Training.day1date	day1date	Training	Day 1 Date	datetime			Animal Training					
+pass1bf0054	Training.day1_days	day1_days	Training	[C] Day 1 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0055	Training.day1time	day1time	Training	Day 1 Time	varchar			Animal Training					
+pass1bf0056	Training.day1_treadmillspeed	day1_treadmillspeed	Training	Day 1 Treadmill Speed	numeric			Animal Training					
+pass1bf0057	Training.day1_treadmillincline	day1_treadmillincline	Training	Day 1 Treadmill Incline	numeric			Animal Training					
+pass1bf0058	Training.day1_timeontreadmill	day1_timeontreadmill	Training	Day 1 Time on Treadmill	int			Animal Training					
+pass1bf0059	Training.day1_weight	day1_weight	Training	Day 1 Weight	numeric			Animal Training					
+pass1bf0060	Training.day1_posttrainlact	day1_posttrainlact	Training	Day 1 Post-training Lactate	numeric			Animal Training					
+pass1bf0061	Training.day1_score	day1_score	Training	Day 1 Score	int			Animal Training		1	4		
+pass1bf0062	Training.day1_comments	day1_comments	Training	Day 1 Comments	varchar(MAX)			Animal Training					
+pass1bf0063	Training.day2date	day2date	Training	Day 2 Date	datetime			Animal Training					
+pass1bf0064	Training.day2_days	day2_days	Training	[C] Day 2 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0065	Training.day2time	day2time	Training	Day 2 Time	varchar			Animal Training					
+pass1bf0066	Training.day2_treadmillspeed	day2_treadmillspeed	Training	Day 2 Treadmill Speed	numeric			Animal Training					
+pass1bf0067	Training.day2_treadmillincline	day2_treadmillincline	Training	Day 2 Treadmill Incline	numeric			Animal Training					
+pass1bf0068	Training.day2_timeontreadmill	day2_timeontreadmill	Training	Day 2 Time on Treadmill	int			Animal Training					
+pass1bf0069	Training.day2_weight	day2_weight	Training	Day 2 Weight	numeric			Animal Training					
+pass1bf0070	Training.day2_posttrainlact	day2_posttrainlact	Training	Day 2 Post-Training Lactate	numeric			Animal Training					
+pass1bf0071	Training.day2_score	day2_score	Training	Day 2 Score	int			Animal Training		1	4		
+pass1bf0072	Training.day2_comments	day2_comments	Training	Day 2 Comments	varchar(MAX)			Animal Training					
+pass1bf0073	Training.day3date	day3date	Training	Day 3 Date	datetime			Animal Training					
+pass1bf0074	Training.day3_days	day3_days	Training	[C] Day 3 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0075	Training.day3time	day3time	Training	Day 3 Time	varchar			Animal Training					
+pass1bf0076	Training.day3_treadmillspeed	day3_treadmillspeed	Training	Day 3 Treadmill Speed	numeric			Animal Training					
+pass1bf0077	Training.day3_treadmillincline	day3_treadmillincline	Training	Day 3 Treadmill Incline	numeric			Animal Training					
+pass1bf0078	Training.day3_timeontreadmill	day3_timeontreadmill	Training	Day 3 Time on Treadmill	int			Animal Training					
+pass1bf0079	Training.day3_weight	day3_weight	Training	Day 3 Weight	numeric			Animal Training					
+pass1bf0080	Training.day3_posttrainlact	day3_posttrainlact	Training	Day 3 Post-training Lactate	numeric			Animal Training					
+pass1bf0081	Training.day3_score	day3_score	Training	Day 3 Score	int			Animal Training		1	4		
+pass1bf0082	Training.day3_comments	day3_comments	Training	Day 3 Comments	varchar(MAX)			Animal Training					
+pass1bf0083	Training.day4date	day4date	Training	Day 4 Date	datetime			Animal Training					
+pass1bf0084	Training.day4_days	day4_days	Training	[C] Day 4 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0085	Training.day4time	day4time	Training	Day 4 Time	varchar			Animal Training					
+pass1bf0086	Training.day4_treadmillspeed	day4_treadmillspeed	Training	Day 4 Treadmill Speed	numeric			Animal Training					
+pass1bf0087	Training.day4_treadmillincline	day4_treadmillincline	Training	Day 4 Treadmill Incline	numeric			Animal Training					
+pass1bf0088	Training.day4_timeontreadmill	day4_timeontreadmill	Training	Day 4 Time on Treadmill	int			Animal Training					
+pass1bf0089	Training.day4_weight	day4_weight	Training	Day 4 Weight	numeric			Animal Training					
+pass1bf0090	Training.day4_posttrainlact	day4_posttrainlact	Training	Day 4 Post-training Lactate	numeric			Animal Training					
+pass1bf0091	Training.day4_score	day4_score	Training	Day 4 Score	int			Animal Training		1	4		
+pass1bf0092	Training.day4_comments	day4_comments	Training	Day 4 Comments	varchar(MAX)			Animal Training					
+pass1bf0093	Training.day5date	day5date	Training	Day 5 Date	datetime			Animal Training					
+pass1bf0094	Training.day5_days	day5_days	Training	[C] Day 5 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0095	Training.day5time	day5time	Training	Day 5 Time	varchar			Animal Training					
+pass1bf0096	Training.day5_treadmillspeed	day5_treadmillspeed	Training	Day 5 Treadmill Speed	numeric			Animal Training					
+pass1bf0097	Training.day5_treadmillincline	day5_treadmillincline	Training	Day 5 Treadmill Incline	numeric			Animal Training					
+pass1bf0098	Training.day5_timeontreadmill	day5_timeontreadmill	Training	Day 5 Time on Treadmill	int			Animal Training					
+pass1bf0099	Training.day5_weight	day5_weight	Training	Day 5 Weight	numeric			Animal Training					
+pass1bf0100	Training.day5_posttrainlact	day5_posttrainlact	Training	Day 5 Post-training Lactate	numeric			Animal Training					
+pass1bf0101	Training.day5_score	day5_score	Training	Day 5 Score	int			Animal Training		1	4		
+pass1bf0102	Training.day5_comments	day5_comments	Training	Day 5 Comments	varchar(MAX)			Animal Training					
+pass1bf0103	Training.day6date	day6date	Training	Day 6 Date	datetime			Animal Training					
+pass1bf0104	Training.day6_days	day6_days	Training	[C] Day 6 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0105	Training.day6time	day6time	Training	Day 6 Time	varchar			Animal Training					
+pass1bf0106	Training.day6_treadmillspeed	day6_treadmillspeed	Training	Day 6 Treadmill Speed	numeric			Animal Training					
+pass1bf0107	Training.day6_treadmillincline	day6_treadmillincline	Training	Day 6 Treadmill Incline	numeric			Animal Training					
+pass1bf0108	Training.day6_timeontreadmill	day6_timeontreadmill	Training	Day 6 Time on Treadmill	int			Animal Training					
+pass1bf0109	Training.day6_weight	day6_weight	Training	Day 6 Weight	numeric			Animal Training					
+pass1bf0110	Training.day6_posttrainlact	day6_posttrainlact	Training	Day 6 Post-training Lactate	numeric			Animal Training					
+pass1bf0111	Training.day6_score	day6_score	Training	Day 6 Score	int			Animal Training		1	4		
+pass1bf0112	Training.day6_comments	day6_comments	Training	Day 6 Comments	varchar(MAX)			Animal Training					
+pass1bf0113	Training.day7date	day7date	Training	Day 7 Date	datetime			Animal Training					
+pass1bf0114	Training.day7_days	day7_days	Training	[C] Day 7 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0115	Training.day7time	day7time	Training	Day 7 Time	varchar			Animal Training					
+pass1bf0116	Training.day7_treadmillspeed	day7_treadmillspeed	Training	Day 7 Treadmill Speed	numeric			Animal Training					
+pass1bf0117	Training.day7_treadmillincline	day7_treadmillincline	Training	Day 7 Treadmill Incline	numeric			Animal Training					
+pass1bf0118	Training.day7_timeontreadmill	day7_timeontreadmill	Training	Day 7 Time on Treadmill	int			Animal Training					
+pass1bf0119	Training.day7_weight	day7_weight	Training	Day 7 Weight	numeric			Animal Training					
+pass1bf0120	Training.day7_posttrainlact	day7_posttrainlact	Training	Day 7 Post-training Lactate	numeric			Animal Training					
+pass1bf0121	Training.day7_score	day7_score	Training	Day 7 Score	int			Animal Training		1	4		
+pass1bf0122	Training.day7_comments	day7_comments	Training	Day 7 Comments	varchar(MAX)			Animal Training					
+pass1bf0123	Training.day8date	day8date	Training	Day 8 Date	datetime			Animal Training					
+pass1bf0124	Training.day8_days	day8_days	Training	[C] Day 8 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0125	Training.day8time	day8time	Training	Day 8 Time	varchar			Animal Training					
+pass1bf0126	Training.day8_treadmillspeed	day8_treadmillspeed	Training	Day 8 Treadmill Speed	numeric			Animal Training					
+pass1bf0127	Training.day8_treadmillincline	day8_treadmillincline	Training	Day 8 Treadmill Incline	numeric			Animal Training					
+pass1bf0128	Training.day8_timeontreadmill	day8_timeontreadmill	Training	Day 8 Time on Treadmill	int			Animal Training					
+pass1bf0129	Training.day8_weight	day8_weight	Training	Day 8 Weight	numeric			Animal Training					
+pass1bf0130	Training.day8_posttrainlact	day8_posttrainlact	Training	Day 8 Post-training Lactate	numeric			Animal Training					
+pass1bf0131	Training.day8_score	day8_score	Training	Day 8 Score	int			Animal Training		1	4		
+pass1bf0132	Training.day8_comments	day8_comments	Training	Day 8 Comments	varchar(MAX)			Animal Training					
+pass1bf0133	Training.day9date	day9date	Training	Day 9 Date	datetime			Animal Training					
+pass1bf0134	Training.day9_days	day9_days	Training	[C] Day 9 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0135	Training.day9time	day9time	Training	Day 9 Time	varchar			Animal Training					
+pass1bf0136	Training.day9_treadmillspeed	day9_treadmillspeed	Training	Day 9 Treadmill Speed	numeric			Animal Training					
+pass1bf0137	Training.day9_treadmillincline	day9_treadmillincline	Training	Day 9 Treadmill Incline	numeric			Animal Training					
+pass1bf0138	Training.day9_timeontreadmill	day9_timeontreadmill	Training	Day 9 Time on Treadmill	int			Animal Training					
+pass1bf0139	Training.day9_weight	day9_weight	Training	Day 9 Weight	numeric			Animal Training					
+pass1bf0140	Training.day9_posttrainlact	day9_posttrainlact	Training	Day 9 Post-training Lactate	numeric			Animal Training					
+pass1bf0141	Training.day9_score	day9_score	Training	Day 9 Score	int			Animal Training		1	4		
+pass1bf0142	Training.day9_comments	day9_comments	Training	Day 9 Comments	varchar(MAX)			Animal Training					
+pass1bf0143	Training.day10date	day10date	Training	Day 10 Date	datetime			Animal Training					
+pass1bf0144	Training.day10_days	day10_days	Training	[C] Day 10 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0145	Training.day10time	day10time	Training	Day 10 Time	varchar			Animal Training					
+pass1bf0146	Training.day10_treadmillspeed	day10_treadmillspeed	Training	Day 10 Treadmill Speed	numeric			Animal Training					
+pass1bf0147	Training.day10_treadmillincline	day10_treadmillincline	Training	Day 10 Treadmill Incline	numeric			Animal Training					
+pass1bf0148	Training.day10_timeontreadmill	day10_timeontreadmill	Training	Day 10 Time on Treadmill	int			Animal Training					
+pass1bf0149	Training.day10_weight	day10_weight	Training	Day 10 Weight	numeric			Animal Training					
+pass1bf0150	Training.day10_posttrainlact	day10_posttrainlact	Training	Day 10 Post-training Lactate	numeric			Animal Training					
+pass1bf0151	Training.day10_score	day10_score	Training	Day 10 Score	int			Animal Training		1	4		
+pass1bf0152	Training.day10_comments	day10_comments	Training	Day 10 Comments	varchar(MAX)			Animal Training					
+pass1bf0153	Training.day11date	day11date	Training	Day 11 Date	datetime			Animal Training					
+pass1bf0154	Training.day11_days	day11_days	Training	[C] Day 11 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0155	Training.day11time	day11time	Training	Day 11 Time	varchar			Animal Training					
+pass1bf0156	Training.day11_treadmillspeed	day11_treadmillspeed	Training	Day 11 Treadmill Speed	numeric			Animal Training					
+pass1bf0157	Training.day11_treadmillincline	day11_treadmillincline	Training	Day 11 Treadmill Incline	numeric			Animal Training					
+pass1bf0158	Training.day11_timeontreadmill	day11_timeontreadmill	Training	Day 11 Time on Treadmill	int			Animal Training					
+pass1bf0159	Training.day11_weight	day11_weight	Training	Day 11 Weight	numeric			Animal Training					
+pass1bf0160	Training.day11_posttrainlact	day11_posttrainlact	Training	Day 11 Post-training Lactate	numeric			Animal Training					
+pass1bf0161	Training.day11_score	day11_score	Training	Day 11 Score	int			Animal Training		1	4		
+pass1bf0162	Training.day11_comments	day11_comments	Training	Day 11 Comments	varchar(MAX)			Animal Training					
+pass1bf0163	Training.day12date	day12date	Training	Day 12 Date	datetime			Animal Training					
+pass1bf0164	Training.day12_days	day12_days	Training	[C] Day 12 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0165	Training.day12time	day12time	Training	Day 12 Time	varchar			Animal Training					
+pass1bf0166	Training.day12_treadmillspeed	day12_treadmillspeed	Training	Day 12 Treadmill Speed	numeric			Animal Training					
+pass1bf0167	Training.day12_treadmillincline	day12_treadmillincline	Training	Day 12 Treadmill Incline	numeric			Animal Training					
+pass1bf0168	Training.day12_timeontreadmill	day12_timeontreadmill	Training	Day 12 Time on Treadmill	int			Animal Training					
+pass1bf0169	Training.day12_weight	day12_weight	Training	Day 12 Weight	numeric			Animal Training					
+pass1bf0170	Training.day12_posttrainlact	day12_posttrainlact	Training	Day 12 Post-training Lactate	numeric			Animal Training					
+pass1bf0171	Training.day12_score	day12_score	Training	Day 12 Score	int			Animal Training		1	4		
+pass1bf0172	Training.day12_comments	day12_comments	Training	Day 12 Comments	varchar(MAX)			Animal Training					
+pass1bf0173	Training.day13date	day13date	Training	Day 13 Date	datetime			Animal Training					
+pass1bf0174	Training.day13_days	day13_days	Training	[C] Day 13 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0175	Training.day13time	day13time	Training	Day 13 Time	varchar			Animal Training					
+pass1bf0176	Training.day13_treadmillspeed	day13_treadmillspeed	Training	Day 13 Treadmill Speed	numeric			Animal Training					
+pass1bf0177	Training.day13_treadmillincline	day13_treadmillincline	Training	Day 13 Treadmill Incline	numeric			Animal Training					
+pass1bf0178	Training.day13_timeontreadmill	day13_timeontreadmill	Training	Day 13 Time on Treadmill	int			Animal Training					
+pass1bf0179	Training.day13_weight	day13_weight	Training	Day 13 Weight	numeric			Animal Training					
+pass1bf0180	Training.day13_posttrainlact	day13_posttrainlact	Training	Day 13 Post-training Lactate	numeric			Animal Training					
+pass1bf0181	Training.day13_score	day13_score	Training	Day 13 Score	int			Animal Training		1	4		
+pass1bf0182	Training.day13_comments	day13_comments	Training	Day 13 Comments	varchar(MAX)			Animal Training					
+pass1bf0183	Training.day14date	day14date	Training	Day 14 Date	datetime			Animal Training					
+pass1bf0184	Training.day14_days	day14_days	Training	[C] Day 14 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0185	Training.day14time	day14time	Training	Day 14 Time	varchar			Animal Training					
+pass1bf0186	Training.day14_treadmillspeed	day14_treadmillspeed	Training	Day 14 Treadmill Speed	numeric			Animal Training					
+pass1bf0187	Training.day14_treadmillincline	day14_treadmillincline	Training	Day 14 Treadmill incline	numeric			Animal Training					
+pass1bf0188	Training.day14_timeontreadmill	day14_timeontreadmill	Training	Day 14 Time on Treadmill	int			Animal Training					
+pass1bf0189	Training.day14_weight	day14_weight	Training	Day 14 Weight	numeric			Animal Training					
+pass1bf0190	Training.day14_posttrainlact	day14_posttrainlact	Training	Day 14 Post-training Lactate	numeric			Animal Training					
+pass1bf0191	Training.day14_score	day14_score	Training	Day 14 Score	int			Animal Training		1	4		
+pass1bf0192	Training.day14_comments	day14_comments	Training	Day 14 Comments	varchar(MAX)			Animal Training					
+pass1bf0193	Training.day15date	day15date	Training	Day 15 Date	datetime			Animal Training					
+pass1bf0194	Training.day15_days	day15_days	Training	[C] Day 15 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0195	Training.day15time	day15time	Training	Day 15 Time	varchar			Animal Training					
+pass1bf0196	Training.day15_treadmillspeed	day15_treadmillspeed	Training	Day 15 Treadmill Speed	numeric			Animal Training					
+pass1bf0197	Training.day15_treadmillincline	day15_treadmillincline	Training	Day 15 Treadmill Incline	numeric			Animal Training					
+pass1bf0198	Training.day15_timeontreadmill	day15_timeontreadmill	Training	Day 15 Time on Treadmill	int			Animal Training					
+pass1bf0199	Training.day15_weight	day15_weight	Training	Day 15 Weight	numeric			Animal Training					
+pass1bf0200	Training.day15_posttrainlact	day15_posttrainlact	Training	Day 15 Post-training Lactate	numeric			Animal Training					
+pass1bf0201	Training.day15_score	day15_score	Training	Day 15 Score	int			Animal Training		1	4		
+pass1bf0202	Training.day15_comments	day15_comments	Training	Day 15 Comments	varchar(MAX)			Animal Training					
+pass1bf0203	Training.day16date	day16date	Training	Day 16 Date	datetime			Animal Training					
+pass1bf0204	Training.day16_days	day16_days	Training	[C] Day 16 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0205	Training.day16time	day16time	Training	Day 16 Time	varchar			Animal Training					
+pass1bf0206	Training.day16_treadmillspeed	day16_treadmillspeed	Training	Day 16 Treadmill Speed	numeric			Animal Training					
+pass1bf0207	Training.day16_treadmillincline	day16_treadmillincline	Training	Day 16 Treadmill Incline	numeric			Animal Training					
+pass1bf0208	Training.day16_timeontreadmill	day16_timeontreadmill	Training	Day 16 Time on Treadmill	int			Animal Training					
+pass1bf0209	Training.day16_weight	day16_weight	Training	Day 16 Weight	numeric			Animal Training					
+pass1bf0210	Training.day16_posttrainlact	day16_posttrainlact	Training	Day 16 Post-training Lactate	numeric			Animal Training					
+pass1bf0211	Training.day16_score	day16_score	Training	Day 16 Score	int			Animal Training		1	4		
+pass1bf0212	Training.day16_comments	day16_comments	Training	Day 16 Comments	varchar(MAX)			Animal Training					
+pass1bf0213	Training.day17date	day17date	Training	Day 17 Date	datetime			Animal Training					
+pass1bf0214	Training.day17_days	day17_days	Training	[C] Day 17 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0215	Training.day17time	day17time	Training	Day 17 Time	varchar			Animal Training					
+pass1bf0216	Training.day17_treadmillspeed	day17_treadmillspeed	Training	Day 17 Treadmill Speed	numeric			Animal Training					
+pass1bf0217	Training.day17_treadmillincline	day17_treadmillincline	Training	Day 17 Treadmill Incline	numeric			Animal Training					
+pass1bf0218	Training.day17_timeontreadmill	day17_timeontreadmill	Training	Day 17 Time on Treadmill	int			Animal Training					
+pass1bf0219	Training.day17_weight	day17_weight	Training	Day 17 Weight	numeric			Animal Training					
+pass1bf0220	Training.day17_posttrainlact	day17_posttrainlact	Training	Day 17 Post-training Lactate	numeric			Animal Training					
+pass1bf0221	Training.day17_score	day17_score	Training	Day 17 Score	int			Animal Training		1	4		
+pass1bf0222	Training.day17_comments	day17_comments	Training	Day 17 Comments	varchar(MAX)			Animal Training					
+pass1bf0223	Training.day18date	day18date	Training	Day 18 Date	datetime			Animal Training					
+pass1bf0224	Training.day18_days	day18_days	Training	[C] Day 18 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0225	Training.day18time	day18time	Training	Day 18 Time	varchar			Animal Training					
+pass1bf0226	Training.day18_treadmillspeed	day18_treadmillspeed	Training	Day 18 Treadmill Speed	numeric			Animal Training					
+pass1bf0227	Training.day18_treadmillincline	day18_treadmillincline	Training	Day 18 Treadmill Incline	numeric			Animal Training					
+pass1bf0228	Training.day18_timeontreadmill	day18_timeontreadmill	Training	Day 18 Time on Treadmill	int			Animal Training					
+pass1bf0229	Training.day18_weight	day18_weight	Training	Day 18 Weight	numeric			Animal Training					
+pass1bf0230	Training.day18_posttrainlact	day18_posttrainlact	Training	Day 18 Post-training Lactate	numeric			Animal Training					
+pass1bf0231	Training.day18_score	day18_score	Training	Day 18 Score	int			Animal Training		1	4		
+pass1bf0232	Training.day18_comments	day18_comments	Training	Day 18 Comments	varchar(MAX)			Animal Training					
+pass1bf0233	Training.day19date	day19date	Training	Day 19 Date	datetime			Animal Training					
+pass1bf0234	Training.day19_days	day19_days	Training	[C] Day 19 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0235	Training.day19time	day19time	Training	Day 19 Time	varchar			Animal Training					
+pass1bf0236	Training.day19_treadmillspeed	day19_treadmillspeed	Training	Day 19 Treadmill Speed	numeric			Animal Training					
+pass1bf0237	Training.day19_treadmillincline	day19_treadmillincline	Training	Day 19 Treadmill Incline	numeric			Animal Training					
+pass1bf0238	Training.day19_timeontreadmill	day19_timeontreadmill	Training	Day 19 Time on Treadmill	int			Animal Training					
+pass1bf0239	Training.day19_weight	day19_weight	Training	Day 19 Weight	numeric			Animal Training					
+pass1bf0240	Training.day19_posttrainlact	day19_posttrainlact	Training	Day 19 Post-training Lactate	numeric			Animal Training					
+pass1bf0241	Training.day19_score	day19_score	Training	Day 19 Score	int			Animal Training		1	4		
+pass1bf0242	Training.day19_comments	day19_comments	Training	Day 19 Comments	varchar(MAX)			Animal Training					
+pass1bf0243	Training.day20date	day20date	Training	Day 20 Date	datetime			Animal Training					
+pass1bf0244	Training.day20_days	day20_days	Training	[C] Day 20 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0245	Training.day20time	day20time	Training	Day 20 Time	varchar			Animal Training					
+pass1bf0246	Training.day20_treadmillspeed	day20_treadmillspeed	Training	Day 20 Treadmill Speed	numeric			Animal Training					
+pass1bf0247	Training.day20_treadmillincline	day20_treadmillincline	Training	Day 20 Treadmill Incline	numeric			Animal Training					
+pass1bf0248	Training.day20_timeontreadmill	day20_timeontreadmill	Training	Day 20 Time on Treadmill	int			Animal Training					
+pass1bf0249	Training.day20_weight	day20_weight	Training	Day 20 Weight	numeric			Animal Training					
+pass1bf0250	Training.day20_posttrainlact	day20_posttrainlact	Training	Day 20 Post-training Lactate	numeric			Animal Training					
+pass1bf0251	Training.day20_score	day20_score	Training	Day 20 Score	int			Animal Training		1	4		
+pass1bf0252	Training.day20_comments	day20_comments	Training	Day 20 Comments	varchar(MAX)			Animal Training					
+pass1bf0253	Training.day21date	day21date	Training	Day 21 Date	datetime			Animal Training					
+pass1bf0254	Training.day21_days	day21_days	Training	[C] Day 21 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0255	Training.day21time	day21time	Training	Day 21 Time	varchar			Animal Training					
+pass1bf0256	Training.day21_treadmillspeed	day21_treadmillspeed	Training	Day 21 Treadmill Speed	numeric			Animal Training					
+pass1bf0257	Training.day21_treadmillincline	day21_treadmillincline	Training	Day 21 Treadmill Incline	numeric			Animal Training					
+pass1bf0258	Training.day21_timeontreadmill	day21_timeontreadmill	Training	Day 21 Time on Treadmill	int			Animal Training					
+pass1bf0259	Training.day21_weight	day21_weight	Training	Day 21 Weight	numeric			Animal Training					
+pass1bf0260	Training.day21_posttrainlact	day21_posttrainlact	Training	Day 21 Post-training Lactate	numeric			Animal Training					
+pass1bf0261	Training.day21_score	day21_score	Training	Day 21 Score	int			Animal Training		1	4		
+pass1bf0262	Training.day21_comments	day21_comments	Training	Day 21 Comments	varchar(MAX)			Animal Training					
+pass1bf0263	Training.day22date	day22date	Training	Day 22 Date	datetime			Animal Training					
+pass1bf0264	Training.day22_days	day22_days	Training	[C] Day 22 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0265	Training.day22time	day22time	Training	Day 22 Time	varchar			Animal Training					
+pass1bf0266	Training.day22_treadmillspeed	day22_treadmillspeed	Training	Day 22 Treadmill Speed	numeric			Animal Training					
+pass1bf0267	Training.day22_treadmillincline	day22_treadmillincline	Training	Day 22 Treadmill Incline	numeric			Animal Training					
+pass1bf0268	Training.day22_timeontreadmill	day22_timeontreadmill	Training	Day 22 Time on Treadmill	int			Animal Training					
+pass1bf0269	Training.day22_weight	day22_weight	Training	Day 22 Weight	numeric			Animal Training					
+pass1bf0270	Training.day22_posttrainlact	day22_posttrainlact	Training	Day 22 Post-training Lactate	numeric			Animal Training					
+pass1bf0271	Training.day22_score	day22_score	Training	Day 22 Score	int			Animal Training		1	4		
+pass1bf0272	Training.day22_comments	day22_comments	Training	Day 22 Comments	varchar(MAX)			Animal Training					
+pass1bf0273	Training.day23date	day23date	Training	Day 23 Date	datetime			Animal Training					
+pass1bf0274	Training.day23_days	day23_days	Training	[C] Day 23 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0275	Training.day23time	day23time	Training	Day 23 Time	varchar			Animal Training					
+pass1bf0276	Training.day23_treadmillspeed	day23_treadmillspeed	Training	Day 23 Treadmill Speed	numeric			Animal Training					
+pass1bf0277	Training.day23_treadmillincline	day23_treadmillincline	Training	Day 23 Treadmill Incline	numeric			Animal Training					
+pass1bf0278	Training.day23_timeontreadmill	day23_timeontreadmill	Training	Day 23 Time on Treadmill	int			Animal Training					
+pass1bf0279	Training.day23_weight	day23_weight	Training	Day 23 Weight	numeric			Animal Training					
+pass1bf0280	Training.day23_posttrainlact	day23_posttrainlact	Training	Day 23 Post-training Lactate	numeric			Animal Training					
+pass1bf0281	Training.day23_score	day23_score	Training	Day 23 Score	int			Animal Training		1	4		
+pass1bf0282	Training.day23_comments	day23_comments	Training	Day 23 Comments	varchar(MAX)			Animal Training					
+pass1bf0283	Training.day24date	day24date	Training	Day 24 Date	datetime			Animal Training					
+pass1bf0284	Training.day24_days	day24_days	Training	[C] Day 24 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0285	Training.day24time	day24time	Training	Day 24 Time	varchar			Animal Training					
+pass1bf0286	Training.day24_treadmillspeed	day24_treadmillspeed	Training	Day 24 Treadmill Speed	numeric			Animal Training					
+pass1bf0287	Training.day24_treadmillincline	day24_treadmillincline	Training	Day 24 Treadmill Incline	numeric			Animal Training					
+pass1bf0288	Training.day24_timeontreadmill	day24_timeontreadmill	Training	Day 24 Time on Treadmill	int			Animal Training					
+pass1bf0289	Training.day24_weight	day24_weight	Training	Day 24 Weight	numeric			Animal Training					
+pass1bf0290	Training.day24_posttrainlact	day24_posttrainlact	Training	Day 24 Post-training Lactate	numeric			Animal Training					
+pass1bf0291	Training.day24_score	day24_score	Training	Day 24 Score	int			Animal Training		1	4		
+pass1bf0292	Training.day24_comments	day24_comments	Training	Day 24 Comments	varchar(MAX)			Animal Training					
+pass1bf0293	Training.day25date	day25date	Training	Day 25 Date	datetime			Animal Training					
+pass1bf0294	Training.day25_days	day25_days	Training	[C] Day 25 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0295	Training.day25time	day25time	Training	Day 25 Time	varchar			Animal Training					
+pass1bf0296	Training.day25_treadmillspeed	day25_treadmillspeed	Training	Day 25 Treadmill Speed	numeric			Animal Training					
+pass1bf0297	Training.day25_treadmillincline	day25_treadmillincline	Training	Day 25 Treadmill Incline	numeric			Animal Training					
+pass1bf0298	Training.day25_timeontreadmill	day25_timeontreadmill	Training	Day 25 Time on Treadmill	int			Animal Training					
+pass1bf0299	Training.day25_weight	day25_weight	Training	Day 25 Weight	numeric			Animal Training					
+pass1bf0300	Training.day25_posttrainlact	day25_posttrainlact	Training	Day 25 Post-training Lactate	numeric			Animal Training					
+pass1bf0301	Training.day25_score	day25_score	Training	Day 25 Score	int			Animal Training		1	4		
+pass1bf0302	Training.day25_comments	day25_comments	Training	Day 25 Comments	varchar(MAX)			Animal Training					
+pass1bf0303	Training.day26date	day26date	Training	Day 26 Date	datetime			Animal Training					
+pass1bf0304	Training.day26_days	day26_days	Training	[C] Day 26 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0305	Training.day26time	day26time	Training	Day 26 Time	varchar			Animal Training					
+pass1bf0306	Training.day26_treadmillspeed	day26_treadmillspeed	Training	Day 26 Treadmill Speed	numeric			Animal Training					
+pass1bf0307	Training.day26_treadmillincline	day26_treadmillincline	Training	Day 26 Treadmill incline	numeric			Animal Training					
+pass1bf0308	Training.day26_timeontreadmill	day26_timeontreadmill	Training	Day 26 Time on Treadmill	int			Animal Training					
+pass1bf0309	Training.day26_weight	day26_weight	Training	Day 26 Weight	numeric			Animal Training					
+pass1bf0310	Training.day26_posttrainlact	day26_posttrainlact	Training	Day 26 Post-training Lactate	numeric			Animal Training					
+pass1bf0311	Training.day26_score	day26_score	Training	Day 26 Score	int			Animal Training		1	4		
+pass1bf0312	Training.day26_comments	day26_comments	Training	Day 26 Comments	varchar(MAX)			Animal Training					
+pass1bf0313	Training.day27date	day27date	Training	Day 27 Date	datetime			Animal Training					
+pass1bf0314	Training.day27_days	day27_days	Training	[C] Day 27 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0315	Training.day27time	day27time	Training	Day 27 Time	varchar			Animal Training					
+pass1bf0316	Training.day27_treadmillspeed	day27_treadmillspeed	Training	Day 27 Treadmill Speed	numeric			Animal Training					
+pass1bf0317	Training.day27_treadmillincline	day27_treadmillincline	Training	Day 27 Treadmill Incline	numeric			Animal Training					
+pass1bf0318	Training.day27_timeontreadmill	day27_timeontreadmill	Training	Day 27 Time on Treadmill	int			Animal Training					
+pass1bf0319	Training.day27_weight	day27_weight	Training	Day 27 Weight	numeric			Animal Training					
+pass1bf0320	Training.day27_posttrainlact	day27_posttrainlact	Training	Day 27 Post-training Lactate	numeric			Animal Training					
+pass1bf0321	Training.day27_score	day27_score	Training	Day 27 Score	int			Animal Training		1	4		
+pass1bf0322	Training.day27_comments	day27_comments	Training	Day 27 Comments	varchar(MAX)			Animal Training					
+pass1bf0323	Training.day28date	day28date	Training	Day 28 Date	datetime			Animal Training					
+pass1bf0324	Training.day28_days	day28_days	Training	[C] Day 28 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0325	Training.day28time	day28time	Training	Day 28 Time	varchar			Animal Training					
+pass1bf0326	Training.day28_treadmillspeed	day28_treadmillspeed	Training	Day 28 Treadmill Speed	numeric			Animal Training					
+pass1bf0327	Training.day28_treadmillincline	day28_treadmillincline	Training	Day 28 Treadmill Incline	numeric			Animal Training					
+pass1bf0328	Training.day28_timeontreadmill	day28_timeontreadmill	Training	Day 28 Time on Treadmill	int			Animal Training					
+pass1bf0329	Training.day28_weight	day28_weight	Training	Day 28 Weight	numeric			Animal Training					
+pass1bf0330	Training.day28_posttrainlact	day28_posttrainlact	Training	Day 28 Post-training Lactate	numeric			Animal Training					
+pass1bf0331	Training.day28_score	day28_score	Training	Day 28 Score	int			Animal Training		1	4		
+pass1bf0332	Training.day28_comments	day28_comments	Training	Day 28 Comments	varchar(MAX)			Animal Training					
+pass1bf0333	Training.day29date	day29date	Training	Day 29 Date	datetime			Animal Training					
+pass1bf0334	Training.day29_days	day29_days	Training	[C] Day 29 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0335	Training.day29time	day29time	Training	Day 29 Time	varchar			Animal Training					
+pass1bf0336	Training.day29_treadmillspeed	day29_treadmillspeed	Training	Day 29 Treadmill Speed	numeric			Animal Training					
+pass1bf0337	Training.day29_treadmillincline	day29_treadmillincline	Training	Day 29 Treadmill Incline	numeric			Animal Training					
+pass1bf0338	Training.day29_timeontreadmill	day29_timeontreadmill	Training	Day 29 Time on Treadmill	int			Animal Training					
+pass1bf0339	Training.day29_weight	day29_weight	Training	Day 29 Weight	numeric			Animal Training					
+pass1bf0340	Training.day29_posttrainlact	day29_posttrainlact	Training	Day 29 Post-training Lactate	numeric			Animal Training					
+pass1bf0341	Training.day29_score	day29_score	Training	Day 29 Score	int			Animal Training		1	4		
+pass1bf0342	Training.day29_comments	day29_comments	Training	Day 29 Comments	varchar(MAX)			Animal Training					
+pass1bf0343	Training.day30date	day30date	Training	Day 30 Date	datetime			Animal Training					
+pass1bf0344	Training.day30_days	day30_days	Training	[C] Day 30 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0345	Training.day30time	day30time	Training	Day 30 Time	varchar			Animal Training					
+pass1bf0346	Training.day30_treadmillspeed	day30_treadmillspeed	Training	Day 30 Treadmill Speed	numeric			Animal Training					
+pass1bf0347	Training.day30_treadmillincline	day30_treadmillincline	Training	Day 30 Treadmill Incline	numeric			Animal Training					
+pass1bf0348	Training.day30_timeontreadmill	day30_timeontreadmill	Training	Day 30 Time on Treadmill	int			Animal Training					
+pass1bf0349	Training.day30_weight	day30_weight	Training	Day 30 Weight	numeric			Animal Training					
+pass1bf0350	Training.day30_posttrainlact	day30_posttrainlact	Training	Day 30 Post-training Lactate	numeric			Animal Training					
+pass1bf0351	Training.day30_score	day30_score	Training	Day 30 Score	int			Animal Training		1	4		
+pass1bf0352	Training.day30_comments	day30_comments	Training	Day 30 Comments	varchar(MAX)			Animal Training					
+pass1bf0353	Training.day31date	day31date	Training	Day 31 Date	datetime			Animal Training					
+pass1bf0354	Training.day31_days	day31_days	Training	[C] Day 31 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0355	Training.day31time	day31time	Training	Day 31 Time	varchar			Animal Training					
+pass1bf0356	Training.day31_treadmillspeed	day31_treadmillspeed	Training	Day 31 Treadmill Speed	numeric			Animal Training					
+pass1bf0357	Training.day31_treadmillincline	day31_treadmillincline	Training	Day 31 Treadmill Incline	numeric			Animal Training					
+pass1bf0358	Training.day31_timeontreadmill	day31_timeontreadmill	Training	Day 31 Time on Treadmill	int			Animal Training					
+pass1bf0359	Training.day31_weight	day31_weight	Training	Day 31 Weight	numeric			Animal Training					
+pass1bf0360	Training.day31_posttrainlact	day31_posttrainlact	Training	Day 31 Post-training Lactate	numeric			Animal Training					
+pass1bf0361	Training.day31_score	day31_score	Training	Day 31 Score	int			Animal Training		1	4		
+pass1bf0362	Training.day31_comments	day31_comments	Training	Day 31 Comments	varchar(MAX)			Animal Training					
+pass1bf0363	Training.day32date	day32date	Training	Day 32 Date	datetime			Animal Training					
+pass1bf0364	Training.day32_days	day32_days	Training	[C] Day 32 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0365	Training.day32time	day32time	Training	Day 32 Time	varchar			Animal Training					
+pass1bf0366	Training.day32_treadmillspeed	day32_treadmillspeed	Training	Day 32 Treadmill Speed	numeric			Animal Training					
+pass1bf0367	Training.day32_treadmillincline	day32_treadmillincline	Training	Day 32 Treadmill Incline	numeric			Animal Training					
+pass1bf0368	Training.day32_timeontreadmill	day32_timeontreadmill	Training	Day 32 Time on Treadmill	int			Animal Training					
+pass1bf0369	Training.day32_weight	day32_weight	Training	Day 32 Weight	numeric			Animal Training					
+pass1bf0370	Training.day32_posttrainlact	day32_posttrainlact	Training	Day 32 Post-training Lactate	numeric			Animal Training					
+pass1bf0371	Training.day32_score	day32_score	Training	Day 32 Score	int			Animal Training		1	4		
+pass1bf0372	Training.day32_comments	day32_comments	Training	Day 32 Comments	varchar(MAX)			Animal Training					
+pass1bf0373	Training.day33date	day33date	Training	Day 33 Date	datetime			Animal Training					
+pass1bf0374	Training.day33_days	day33_days	Training	[C] Day 33 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0375	Training.day33time	day33time	Training	Day 33 Time	varchar			Animal Training					
+pass1bf0376	Training.day33_treadmillspeed	day33_treadmillspeed	Training	Day 33 Treadmill Speed	numeric			Animal Training					
+pass1bf0377	Training.day33_treadmillincline	day33_treadmillincline	Training	Day 33 Treadmill Incline	numeric			Animal Training					
+pass1bf0378	Training.day33_timeontreadmill	day33_timeontreadmill	Training	Day 33 Time on Treadmill	int			Animal Training					
+pass1bf0379	Training.day33_weight	day33_weight	Training	Day 33 Weight	numeric			Animal Training					
+pass1bf0380	Training.day33_posttrainlact	day33_posttrainlact	Training	Day 33 Post-training Lactate	numeric			Animal Training					
+pass1bf0381	Training.day33_score	day33_score	Training	Day 33 Score	int			Animal Training		1	4		
+pass1bf0382	Training.day33_comments	day33_comments	Training	Day 33 Comments	varchar(MAX)			Animal Training					
+pass1bf0383	Training.day34date	day34date	Training	Day 34 Date	datetime			Animal Training					
+pass1bf0384	Training.day34_days	day34_days	Training	[C] Day 34 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0385	Training.day34time	day34time	Training	Day 34 Time	varchar			Animal Training					
+pass1bf0386	Training.day34_treadmillspeed	day34_treadmillspeed	Training	Day 34 Treadmill Speed	numeric			Animal Training					
+pass1bf0387	Training.day34_treadmillincline	day34_treadmillincline	Training	Day 34 Treadmill incline	numeric			Animal Training					
+pass1bf0388	Training.day34_timeontreadmill	day34_timeontreadmill	Training	Day 34 Time on Treadmill	int			Animal Training					
+pass1bf0389	Training.day34_weight	day34_weight	Training	Day 34 Weight	numeric			Animal Training					
+pass1bf0390	Training.day34_posttrainlact	day34_posttrainlact	Training	Day 34 Post-training Lactate	numeric			Animal Training					
+pass1bf0391	Training.day34_score	day34_score	Training	Day 34 Score	int			Animal Training		1	4		
+pass1bf0392	Training.day34_comments	day34_comments	Training	Day 34 Comments	varchar(MAX)			Animal Training					
+pass1bf0393	Training.day35date	day35date	Training	Day 35 Date	datetime			Animal Training					
+pass1bf0394	Training.day35_days	day35_days	Training	[C] Day 35 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0395	Training.day35time	day35time	Training	Day 35 Time	varchar			Animal Training					
+pass1bf0396	Training.day35_treadmillspeed	day35_treadmillspeed	Training	Day 35 Treadmill Speed	numeric			Animal Training					
+pass1bf0397	Training.day35_treadmillincline	day35_treadmillincline	Training	Day 35 Treadmill Incline	numeric			Animal Training					
+pass1bf0398	Training.day35_timeontreadmill	day35_timeontreadmill	Training	Day 35 Time on Treadmill	int			Animal Training					
+pass1bf0399	Training.day35_weight	day35_weight	Training	Day 35 Weight	numeric			Animal Training					
+pass1bf0400	Training.day35_posttrainlact	day35_posttrainlact	Training	Day 35 Post-training Lactate	numeric			Animal Training					
+pass1bf0401	Training.day35_score	day35_score	Training	Day 35 Score	int			Animal Training		1	4		
+pass1bf0402	Training.day35_comments	day35_comments	Training	Day 35 Comments	varchar(MAX)			Animal Training					
+pass1bf0403	Training.day36date	day36date	Training	Day 36 Date	datetime			Animal Training					
+pass1bf0404	Training.day36_days	day36_days	Training	[C] Day 36 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0405	Training.day36time	day36time	Training	Day 36 Time	varchar			Animal Training					
+pass1bf0406	Training.day36_treadmillspeed	day36_treadmillspeed	Training	Day 36 Treadmill Speed	numeric			Animal Training					
+pass1bf0407	Training.day36_treadmillincline	day36_treadmillincline	Training	Day 36 Treadmill Incline	numeric			Animal Training					
+pass1bf0408	Training.day36_timeontreadmill	day36_timeontreadmill	Training	Day 36 Time on Treadmill	int			Animal Training					
+pass1bf0409	Training.day36_weight	day36_weight	Training	Day 36 Weight	numeric			Animal Training					
+pass1bf0410	Training.day36_posttrainlact	day36_posttrainlact	Training	Day 36 Post-training Lactate	numeric			Animal Training					
+pass1bf0411	Training.day36_score	day36_score	Training	Day 36 Score	int			Animal Training		1	4		
+pass1bf0412	Training.day36_comments	day36_comments	Training	Day 36 Comments	varchar(MAX)			Animal Training					
+pass1bf0413	Training.day37date	day37date	Training	Day 37 Date	datetime			Animal Training					
+pass1bf0414	Training.day37_days	day37_days	Training	[C] Day 37 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0415	Training.day37time	day37time	Training	Day 37 Time	varchar			Animal Training					
+pass1bf0416	Training.day37_treadmillspeed	day37_treadmillspeed	Training	Day 37 Treadmill Speed	numeric			Animal Training					
+pass1bf0417	Training.day37_treadmillincline	day37_treadmillincline	Training	Day 37 Treadmill Incline	numeric			Animal Training					
+pass1bf0418	Training.day37_timeontreadmill	day37_timeontreadmill	Training	Day 37 Time on Treadmill	int			Animal Training					
+pass1bf0419	Training.day37_weight	day37_weight	Training	Day 37 Weight	numeric			Animal Training					
+pass1bf0420	Training.day37_posttrainlact	day37_posttrainlact	Training	Day 37 Post-training Lactate	numeric			Animal Training					
+pass1bf0421	Training.day37_score	day37_score	Training	Day 37 Score	int			Animal Training		1	4		
+pass1bf0422	Training.day37_comments	day37_comments	Training	Day 37 Comments	varchar(MAX)			Animal Training					
+pass1bf0423	Training.day38date	day38date	Training	Day 38 Date	datetime			Animal Training					
+pass1bf0424	Training.day38_days	day38_days	Training	[C] Day 38 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0425	Training.day38time	day38time	Training	Day 38 Time	varchar			Animal Training					
+pass1bf0426	Training.day38_treadmillspeed	day38_treadmillspeed	Training	Day 38 Treadmill Speed	numeric			Animal Training					
+pass1bf0427	Training.day38_treadmillincline	day38_treadmillincline	Training	Day 38 Treadmill Incline	numeric			Animal Training					
+pass1bf0428	Training.day38_timeontreadmill	day38_timeontreadmill	Training	Day 38 Time on Treadmill	int			Animal Training					
+pass1bf0429	Training.day38_weight	day38_weight	Training	Day 38 Weight	numeric			Animal Training					
+pass1bf0430	Training.day38_posttrainlact	day38_posttrainlact	Training	Day 38 Post-training Lactate	numeric			Animal Training					
+pass1bf0431	Training.day38_score	day38_score	Training	Day 38 Score	int			Animal Training		1	4		
+pass1bf0432	Training.day38_comments	day38_comments	Training	Day 38 Comments	varchar(MAX)			Animal Training					
+pass1bf0433	Training.day39date	day39date	Training	Day 39 Date	datetime			Animal Training					
+pass1bf0434	Training.day39_days	day39_days	Training	[C] Day 39 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0435	Training.day39time	day39time	Training	Day 39 Time	varchar			Animal Training					
+pass1bf0436	Training.day39_treadmillspeed	day39_treadmillspeed	Training	Day 39 Treadmill Speed	numeric			Animal Training					
+pass1bf0437	Training.day39_treadmillincline	day39_treadmillincline	Training	Day 39 Treadmill Incline	numeric			Animal Training					
+pass1bf0438	Training.day39_timeontreadmill	day39_timeontreadmill	Training	Day 39 Time on Treadmill	int			Animal Training					
+pass1bf0439	Training.day39_weight	day39_weight	Training	Day 39 Weight	numeric			Animal Training					
+pass1bf0440	Training.day39_posttrainlact	day39_posttrainlact	Training	Day 39 Post-training Lactate	numeric			Animal Training					
+pass1bf0441	Training.day39_score	day39_score	Training	Day 39 Score	int			Animal Training		1	4		
+pass1bf0442	Training.day39_comments	day39_comments	Training	Day 39 Comments	varchar(MAX)			Animal Training					
+pass1bf0443	Training.day40date	day40date	Training	Day 40 Date	datetime			Animal Training					
+pass1bf0444	Training.day40_days	day40_days	Training	[C] Day 40 Day (in relation to arrival date)	int			Animal Training	1				
+pass1bf0445	Training.day40time	day40time	Training	Day 40 Time	varchar			Animal Training					
+pass1bf0446	Training.day40_treadmillspeed	day40_treadmillspeed	Training	Day 40 Treadmill Speed	numeric			Animal Training					
+pass1bf0447	Training.day40_treadmillincline	day40_treadmillincline	Training	Day 40 Treadmill Incline	numeric			Animal Training					
+pass1bf0448	Training.day40_timeontreadmill	day40_timeontreadmill	Training	Day 40 Time on Treadmill	int			Animal Training					
+pass1bf0449	Training.day40_weight	day40_weight	Training	Day 40 Weight	numeric			Animal Training					
+pass1bf0450	Training.day40_posttrainlact	day40_posttrainlact	Training	Day 40 Post-training Lactate	numeric			Animal Training					
+pass1bf0451	Training.day40_score	day40_score	Training	Day 40 Score	int			Animal Training		1	4		
+pass1bf0452	Training.day40_comments	day40_comments	Training	Day 40 Comments	varchar(MAX)			Animal Training					
+pass1bf0453	VO2.Max.Test.d_visit	d_visit	VO2.Max.Test	Date Completed	datetime			Animal VO2 Max Test					
+pass1bf0454	VO2.Max.Test.days_visit	days_visit	VO2.Max.Test	[C] Day (in relation to arrival date) Completed	int			Animal VO2 Max Test	1				
+pass1bf0455	VO2.Max.Test.staffid	staffid	VO2.Max.Test	Staff ID	int			Animal VO2 Max Test					
+pass1bf0456	VO2.Max.Test.siteid	siteid	VO2.Max.Test	Site Numeric ID	int	|910|930|940	|Joslin Diabetes Center|University of Florida|University of Iowa	Animal VO2 Max Test					
+pass1bf0457	VO2.Max.Test.visitcode	visitcode	VO2.Max.Test	Visit	varchar			Animal VO2 Max Test					
+pass1bf0458	VO2.Max.Test.formname	formname	VO2.Max.Test	Form Name	varchar	Animal VO2 Max Test		Animal VO2 Max Test					
+pass1bf0459	VO2.Max.Test.versionnbr	versionnbr	VO2.Max.Test	Version Number	int	1		Animal VO2 Max Test					
+pass1bf0460	VO2.Max.Test.d_vo2	d_vo2	VO2.Max.Test	What date did the rat start the VO2 max test?	datetime			Animal VO2 Max Test					
+pass1bf0461	VO2.Max.Test.days_vo2	days_vo2	VO2.Max.Test	[C] What day (in relation to arrival date) did the rat start the VO2 max test?	int			Animal VO2 Max Test	1				
+pass1bf0462	VO2.Max.Test.t_vo2	t_vo2	VO2.Max.Test	What time did the rat start the VO2 max test?	varchar			Animal VO2 Max Test					
+pass1bf0463	VO2.Max.Test.blactate_begin	blactate_begin	VO2.Max.Test	Blood Lactate at the beginning of exercise	numeric			Animal VO2 Max Test					
+pass1bf0464	VO2.Max.Test.vo2_max	vo2_max	VO2.Max.Test	VO2 at max	numeric			Animal VO2 Max Test					
+pass1bf0465	VO2.Max.Test.vco2_max	vco2_max	VO2.Max.Test	VCO2 at max	numeric			Animal VO2 Max Test					
+pass1bf0466	VO2.Max.Test.rer_max	rer_max	VO2.Max.Test	RER at max	numeric			Animal VO2 Max Test					
+pass1bf0467	VO2.Max.Test.speed_max	speed_max	VO2.Max.Test	Max speed of running	numeric			Animal VO2 Max Test					
+pass1bf0468	VO2.Max.Test.t_complete	t_complete	VO2.Max.Test	What time did the rat complete the VO2 max test?	varchar			Animal VO2 Max Test					
+pass1bf0469	VO2.Max.Test.blactate_end	blactate_end	VO2.Max.Test	Blood Lactate at end of exercise	numeric			Animal VO2 Max Test					
+pass1bf0470	VO2.Max.Test.vo2_comments	vo2_comments	VO2.Max.Test	Comments:	varchar(MAX)			Animal VO2 Max Test					
+pass1bf0471	NMR.Testing.d_visit	d_visit	NMR.Testing	Date Completed	datetime			Animal NMR Testing					
+pass1bf0472	NMR.Testing.days_visit	days_visit	NMR.Testing	[C] Day (in relation to arrival date) Completed	int			Animal NMR Testing	1				
+pass1bf0473	NMR.Testing.staffid	staffid	NMR.Testing	Staff ID	int			Animal NMR Testing					
+pass1bf0474	NMR.Testing.siteid	siteid	NMR.Testing	Site Numeric ID	int	|910|930|940	|Joslin Diabetes Center|University of Florida|University of Iowa	Animal NMR Testing					
+pass1bf0475	NMR.Testing.visitcode	visitcode	NMR.Testing	Visit	varchar			Animal NMR Testing					
+pass1bf0476	NMR.Testing.formname	formname	NMR.Testing	Form Name	varchar	Animal NMR Testing		Animal NMR Testing					
+pass1bf0477	NMR.Testing.versionnbr	versionnbr	NMR.Testing	Version Number	int	1		Animal NMR Testing					
+pass1bf0478	NMR.Testing.d_nmr	d_nmr	NMR.Testing	What date was the NMR data collected?	datetime			Animal NMR Testing					
+pass1bf0479	NMR.Testing.days_nmr	days_nmr	NMR.Testing	[C] What day (in relation to arrival date) was the NMR data collected?	int			Animal NMR Testing	1				
+pass1bf0480	NMR.Testing.nmr_weight	nmr_weight	NMR.Testing	What is the rat's body weight?	numeric			Animal NMR Testing					
+pass1bf0481	NMR.Testing.nmr_fat	nmr_fat	NMR.Testing	What is the rat’s percent body fat?	numeric			Animal NMR Testing					
+pass1bf0482	NMR.Testing.nmr_lean	nmr_lean	NMR.Testing	What is the rat's percent lean?	numeric			Animal NMR Testing					
+pass1bf0483	NMR.Testing.nmr_fluid	nmr_fluid	NMR.Testing	What is the rat's percent fluid?	numeric			Animal NMR Testing					
+pass1bf0484	NMR.Testing.nmr_comments	nmr_comments	NMR.Testing	Comments:	varchar(MAX)			Animal NMR Testing					
+pass1bf0485	Terminal.Weight.bw	bw	Terminal.Weight	Terminal body Weight (g)	varchar								
+pass1bf0486	Terminal.Weight.lg	lg	Terminal.Weight	Terminal lateral gastrocnemius weight (mg)	varchar								
+pass1bf0487	Terminal.Weight.mg	mg	Terminal.Weight	Terminal medial gastrocnemius weight (mg)	varchar								
+pass1bf0488	Terminal.Weight.pl	pl	Terminal.Weight	Terminal plantaris weight (mg)	varchar								
+pass1bf0489	Terminal.Weight.sol	sol	Terminal.Weight	Terminal soleus weight (mg)	varchar								
+pass1bf0490	Specimen.Collection.d_visit	d_visit	Specimen.Collection	Date Completed	datetime			Animal Specimen Collection					
+pass1bf0491	Specimen.Collection.days_visit	days_visit	Specimen.Collection	[C] Day (in relation to arrival date) Completed	int			Animal Specimen Collection	1				
+pass1bf0492	Specimen.Collection.staffid	staffid	Specimen.Collection	Staff ID	int			Animal Specimen Collection					
+pass1bf0493	Specimen.Collection.siteid	siteid	Specimen.Collection	Site Numeric ID	int	|910|930|940	|Joslin Diabetes Center|University of Florida|University of Iowa	Animal Specimen Collection					
+pass1bf0494	Specimen.Collection.visitcode	visitcode	Specimen.Collection	Visit	varchar			Animal Specimen Collection					
+pass1bf0495	Specimen.Collection.formname	formname	Specimen.Collection	Form Name	varchar	Animal Specimen Collection		Animal Specimen Collection					
+pass1bf0496	Specimen.Collection.versionnbr	versionnbr	Specimen.Collection	Version Number	int	2		Animal Specimen Collection					
+pass1bf0497	Specimen.Collection.anesthesiaid	anesthesiaid	Specimen.Collection	Administrator ID	int			Animal Specimen Collection					
+pass1bf0498	Specimen.Collection.t_anesthesia	t_anesthesia	Specimen.Collection	Administration Time	varchar			Animal Specimen Collection					
+pass1bf0499	Specimen.Collection.anesthesiacomments	anesthesiacomments	Specimen.Collection	Comments/Volume	varchar(MAX)			Animal Specimen Collection					
+pass1bf0500	Specimen.Collection.bloodtype	bloodtype	Specimen.Collection	Type	varchar			Animal Specimen Collection					
+pass1bf0501	Specimen.Collection.bloodtube	bloodtube	Specimen.Collection	Tube	varchar			Animal Specimen Collection					
+pass1bf0502	Specimen.Collection.bloodcomplete	bloodcomplete	Specimen.Collection	Complete	int	|1|2|3|4	|full|partial|N/A|Not	Animal Specimen Collection					
+pass1bf0503	Specimen.Collection.bloodtechid	bloodtechid	Specimen.Collection	Collection Technician ID	int			Animal Specimen Collection					
+pass1bf0504	Specimen.Collection.t_bloodstart	t_bloodstart	Specimen.Collection	Collection Start Time	varchar			Animal Specimen Collection					
+pass1bf0505	Specimen.Collection.t_bloodstop	t_bloodstop	Specimen.Collection	Collection Stop Time	varchar			Animal Specimen Collection					
+pass1bf0506	Specimen.Collection.t_edtafill	t_edtafill	Specimen.Collection	EDTA Fill Time	varchar			Animal Specimen Collection					
+pass1bf0507	Specimen.Collection.bloodcomments	bloodcomments	Specimen.Collection	Comments/Volume	varchar(MAX)			Animal Specimen Collection					
+pass1bf0508	Specimen.Collection.uterustype	uterustype	Specimen.Collection	Type:	varchar			Animal Specimen Collection					
+pass1bf0509	Specimen.Collection.uterustechid	uterustechid	Specimen.Collection	UterusTechnician ID	int			Animal Specimen Collection					
+pass1bf0510	Specimen.Collection.uteruscomplete	uteruscomplete	Specimen.Collection	Complete	smallint	1|2|3|4	full|partial|N/A|Not	Animal Specimen Collection					
+pass1bf0511	Specimen.Collection.t_uterusstart	t_uterusstart	Specimen.Collection	Collection Start Time	varchar			Animal Specimen Collection					
+pass1bf0512	Specimen.Collection.t_uterusstop	t_uterusstop	Specimen.Collection	Collection Stop Time	varchar			Animal Specimen Collection					
+pass1bf0513	Specimen.Collection.uterusweight	uterusweight	Specimen.Collection	Weight	numeric			Animal Specimen Collection					
+pass1bf0514	Specimen.Collection.uteruscomments	uteruscomments	Specimen.Collection	Comments/Volume	varchar(MAX)			Animal Specimen Collection					
+pass1bf0515	Specimen.Collection.t_death	t_death	Specimen.Collection	Time of Death	varchar			Animal Specimen Collection					
+pass1bf0516	Specimen.Collection.deathtype	deathtype	Specimen.Collection	Type of Death	int	|1|2	|Decapitation|Heart Removal	Animal Specimen Collection					
+pass1bf0517	Specimen.Processing.versionnbr	versionnbr	Specimen.Processing	Form Version Number	int	1		Animal Sample Processing					
+pass1bf0518	Specimen.Processing.formname	formname	Specimen.Processing	Form Name	varchar	Animal Sample Processing		Animal Sample Processing					
+pass1bf0519	Specimen.Processing.visitcode	visitcode	Specimen.Processing	Visit	varchar			Animal Sample Processing					
+pass1bf0520	Specimen.Processing.siteid	siteid	Specimen.Processing	Site Numeric ID	int	|910|930|940	|Joslin Diabetes Center|University of Florida|University of Iowa	Animal Sample Processing					
+pass1bf0521	Specimen.Processing.sampletypedescription	sampletypedescription	Specimen.Processing	Sample Type:	varchar			Animal Sample Processing					
+pass1bf0522	Specimen.Processing.samplenumber	samplenumber	Specimen.Processing	Sample Nbr:	int			Animal Sample Processing					
+pass1bf0523	Specimen.Processing.timepoint	timepoint	Specimen.Processing	Timepoint	int			Animal Sample Processing					
+pass1bf0524	Specimen.Processing.aliquotdescription	aliquotdescription	Specimen.Processing	Tube:	varchar			Animal Sample Processing					
+pass1bf0525	Specimen.Processing.volume	volume	Specimen.Processing	Volume:	varchar	|Full|Partial|N/A|Not	|Full|Partial|N/A|Not	Animal Sample Processing					
+pass1bf0526	Specimen.Processing.partialamt	partialamt	Specimen.Processing	Partial Amount:	numeric			Animal Sample Processing					
+pass1bf0527	Specimen.Processing.hemolyzed	hemolyzed	Specimen.Processing	Hemolyzed:	int	|1|0	|Yes|No	Animal Sample Processing					
+pass1bf0528	Specimen.Processing.comments	comments	Specimen.Processing	Comments:	varchar			Animal Sample Processing					
+pass1bf0529	Specimen.Processing.t_collection	t_collection	Specimen.Processing	Collection Time:	varchar			Animal Sample Processing					
+pass1bf0530	Specimen.Processing.t_edtaspin	t_edtaspin	Specimen.Processing	Spin Time:	varchar			Animal Sample Processing					
+pass1bf0531	Specimen.Processing.t_freeze	t_freeze	Specimen.Processing	Freeze Time:	varchar			Animal Sample Processing					
+pass1bf0532	Specimen.Processing.techid	techid	Specimen.Processing	Tech ID:	varchar			Animal Sample Processing					
+pass1bf0533	Calculated.Variables.wgt_gain_after_train	wgt_gain_after_train	Calculated.Variables	Weight gain after training (Variable: nmr_weight [CRF: Animal VO2 Max Test (Visit 2)] - Variable: weight [CRF: Animal Registration])	varchar			Calculated.Variables	1	-62.1	73.9		
+pass1bf0534	Calculated.Variables.pct_body_fat_change	pct_body_fat_change	Calculated.Variables	Percent body fat change after training (variable: nmr_fat [CRF: Animal NMR Testing (Visit 2)] - variable: nmr_fat [CRF: Animal NMR Testing (Visit 1)])	varchar			Calculated.Variables	1	-7.8	4.5		
+pass1bf0535	Calculated.Variables.pct_body_lean_change	pct_body_lean_change	Calculated.Variables	Percent body lean change after training (variable: nmr_lean [CRF: Animal NMR Testing (Visit 2)] - variable: nmr_lean [CRF: Animal NMR Testing (Visit 1)])	varchar			Calculated.Variables	1	-5.5	6.9		
+pass1bf0536	Calculated.Variables.pct_body_fluid_change	pct_body_fluid_change	Calculated.Variables	Percent body fluid change after training (variable: nmr_fluid [CRF: Animal NMR Testing (Visit 2)] - variable: nmr_fluid [CRF: Animal NMR Testing (Visit 1)])	varchar			Calculated.Variables	1	-1.6	86.5		
+pass1bf0537	Calculated.Variables.lactate_change_dueto_train	lactate_change_dueto_train	Calculated.Variables	Lactate changes due to training:  (Variable: blactate_end [CRF: Animal VO2 Max Test (Visit 2)] - Variable: blactate_begin [CRF: Animal VO2 Max Test (Visit 1)])	varchar			Calculated.Variables	1	2.6	14.2		
+pass1bf0538	Calculated.Variables.vo2_max_change	vo2_max_change	Calculated.Variables	Change of VO2 Max after training:  (Variable: vo2_max [CRF: Animal VO2 Max Test (Visit 2)] - Variable: vo2_max [CRF: Animal VO2 Max Test (Visit 1)])	varchar			Calculated.Variables	1	-17.17	18.87		
+pass1bf0539	Calculated.Variables.edta_coll_time_train	edta_coll_time_train	Calculated.Variables	EDTA sample collection time after training (seconds):  (Variable: d_visit, t_edtafill [CRF: Animal Specimen Collection] - Variable: max date/time [CRF: Animal Training])	varchar			Calculated.Variables	1	86812	952278		
+pass1bf0540	Calculated.Variables.deathtime_after_train	deathtime_after_train	Calculated.Variables	Time of death after training (seconds):  (Variable: d_visit, t_death [CRF: Animal Specimen Collection] Variable: max date/time [CRF: Animal Training])	varchar			Calculated.Variables	1	87085	952515		
+pass1bf0541	Calculated.Variables.frozetime_after_train	frozetime_after_train	Calculated.Variables	Sample frozen time after training (seconds):  (Variable: d_visit [CRF: Animal Specimen Collection], t_freeze [CRF: Animal Specimen Processing] Variable: max date/time [CRF: Animal Training])	varchar			Calculated.Variables	1	86941	959518		
+pass1bf0542	BICLabelData.shiptositeid	shiptositeid	A code for the chemical analysis site (i.e., the omics site)		varchar	|810|820|821|822|823|830|840|841|850|860|870	|Pacific Northwest National Laboratory|Broad Institute, Inc.|Broad Sub – Duke University|Broad Sub –  Broad (Carr Lab)|Broad Sub – Broad (Clish Lab)|Stanford University|Emory University|Emory Sub – Georgia Tech|Icahn School of Medicine at Mount Sinai|The Mayo Clinic, Rochester|University of Michigan	BIC Sample Tracking Data					

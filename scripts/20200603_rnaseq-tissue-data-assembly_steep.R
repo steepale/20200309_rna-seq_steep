@@ -446,6 +446,29 @@ if(F) {
   # Generate a time-fasted variable
   col_data$calculated.variables.deathtime_after_fed <- (col_data$specimen.collection.t_death - col_data$animal_time_last_fed) %>% as.numeric()
   
+  # Generate Additional Variables
+  ##################################
+  # Generate a non-zero variable
+  # The fraction of non-zero counts (function)
+  nonzero <- function(x) sum(x != 0)
+  # Non zero counts
+  nzc <- apply(count_data,2,nonzero)
+  ginic <- apply(count_data,2,reldist::gini)
+  # Non zero fraction 
+  nzf <- nzc/nrow(count_data)
+  # Mean gene expresison
+  m <- apply(count_data,2,mean)
+  # SD gene expression
+  sd <- apply(count_data,2,sd)
+  # Coefficient of variation
+  cv <- sd/m
+  # Join the dataframe into meta data
+  nz_tis_df <- data.frame('sample_key' = colnames(count_data),
+                          'NZF' = nzf,
+                          'GINI' = ginic,
+                          'CV' = cv)
+  col_data <- left_join(col_data, nz_tis_df, by = c('sample_key'))
+  
   # Save data as an R objects
   # ################################################################################
   # To determine object size
@@ -467,6 +490,43 @@ meta_file <- paste0(WD,'/data/20200603_rnaseq-meta-pass1a-stanford-sinai-proc_st
 count_file <- paste0(WD, '/data/20200603_rnaseq-counts-pass1a-stanford-sinai-processed_steep.rds')
 #' #### Polished read counts saved as:  
 #' `r count_file`  
+
+# Gini Distribution and Outlier Status
+ALL_OUTLIERS <- c('90159016502_SN2','90023016905_SF1','90047016905_SF1','90128016905_SF1',
+                  '90040015202_SF2','90115015202_SF2','90041015202_SF2','90009015202_SF2',
+                  '90005015202_SF2','90139015202_SF2','90017016302_SN2','90031016302_SN2',
+                  '90127016302_SN2','90015016302_SN2','90129016302_SN2')
+OUTLIER_TISSUES <- c('Aorta','Brown Adipose','Hippocampus','Testes')
+mypar()
+col_data <- col_data %>%
+  mutate(Outlier_Status = factor(ifelse(sample_key %in% ALL_OUTLIERS, 'Outlier', 'Normal'),
+                                 levels = c('Outlier','Normal')))
+col_data <- col_data %>%
+  mutate(Outlier_Tissue = factor(ifelse(Tissue %in% OUTLIER_TISSUES, 'Outlier_Tissue','Normal_Tissue'),
+                                 levels = c('Outlier_Tissue','Normal_Tissue')))
+
+col_data$Outlier_Status
+mod <- lm(GINI ~ Outlier_Status + Outlier_Status:Tissue, data = col_data)
+mod <- lm(GINI ~ Outlier_Status, data = col_data %>% filter(Tissue == OUTLIER_TISSUES[8]))
+summary(mod)
+anova(mod)
+
+p <- col_data %>%
+  mutate(plot_labs = ifelse(sample_key %in% ALL_OUTLIERS, as.character(sample_key), '')) %>%
+  ggplot(aes(GINI, colour = Outlier_Status)) +
+  geom_freqpoly(alpha = 1, color = 'black') +
+  xlab('Gini Index') +
+  ylab('Frequency') +
+  ggtitle('Frequency Polyplot & Dotplot: Samples plotted by Gini Index') +
+  geom_dotplot(aes(fill = Outlier_Status), alpha = 0.6) +
+  geom_dotplot(data = col_data %>% filter(Outlier_Status == 'Outlier'), 
+               aes(x = GINI, fill = Outlier_Status)) +
+  #geom_text_repel(aes(label = sample), y = 2) 
+  #geom_text_repel(aes(label = plot_labs), box.padding = unit(2, 'lines'), y = 0) +
+  facet_wrap(~ Tissue)
+plot(p)
+
+
 
 # Set a vector for Exercise/Control Levels and Colors
 ec_levels <- c('Exercise - IPE',

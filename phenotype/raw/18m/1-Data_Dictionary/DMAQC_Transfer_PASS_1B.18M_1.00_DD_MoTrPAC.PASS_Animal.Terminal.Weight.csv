@@ -1,0 +1,8 @@
+"External Data Release (1=All, 2=Low Risk, 3=High Risk: Internal Use ONLY, 4=System Codes: Internal Use)","Data Set Variable Sequence","Data Set Name","Field Name","Alias (Field Name description)","Data Type","Categorical Values","Categorical Definitions"
+1,1,"Terminal Animal Body Muscle Weight Iowa","pid","Unique, randomly generated 8 digit numeric identifier used in linkage to phenotypic data","varchar",,
+1,2,"Terminal Animal Body Muscle Weight Iowa","BW","Terminal body Weight (g)","varchar",,
+1,3,"Terminal Animal Body Muscle Weight Iowa","LG","Terminal lateral gastrocnemius weight (mg)","varchar",,
+1,4,"Terminal Animal Body Muscle Weight Iowa","MG","Terminal medial gastrocnemius weight (mg)","varchar",,
+1,5,"Terminal Animal Body Muscle Weight Iowa","PL","Terminal plantaris weight (mg)","varchar",,
+1,6,"Terminal Animal Body Muscle Weight Iowa","SOL","Terminal soleus weight (mg)","varchar",,
+

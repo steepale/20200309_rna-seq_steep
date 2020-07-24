@@ -475,7 +475,7 @@ TISSUE <- "Kidney"
         #####     Load Annotations for R2 Plots       ##################################
         ################################################################################
         # Load the R2 values from modeling
-        models_file <- paste0(WD,'/data/20200603_rnaseq-tissue-models-residuals-r2-table_steep.txt')
+        models_file <- paste0(WD,'/data/20200603_rnaseq-tissue-models-pve-table_steep.txt')
         models_df <- read.table(file = models_file ,sep = '\t', header = T, check.names = F) %>%
                 as_tibble()
         
@@ -500,13 +500,15 @@ TISSUE <- "Kidney"
         #         mutate(BIN_TYPE = case_when(SIN1_R2 > GAM1_R2 + 0.15 ~ 'Circadian',
         #                                     GAM1_R2 > SIN1_R2 + 0.15 ~ 'Exercise',
         #                                     (((SIN1_R2 <= GAM1_R2 + 0.15) & (GAM1_R2 <= SIN1_R2 + 0.15)) & SIN1_R2 >= 0.3 & GAM1_R2 >= 0.3) ~ 'Ambiguous'))
+        #bin_df <- left_join(models_df, manova_df, by = c("TISSUE","ENSEMBL_RAT"))
         bin_df <- full_join(models_df, de_df, by = c("TISSUE","ENSEMBL_RAT")) %>%
+                models_df %>%
                 full_join(manova_df, by = c("TISSUE","ENSEMBL_RAT")) %>%
-                full_join(clusters_df, by = c("TISSUE","ENSEMBL_RAT")) %>%
-                mutate(BIN_TYPE = case_when(SIN1_R2 > GAM1_R2 + 0.15 ~ 'Circadian',
-                                    GAM1_R2 > SIN1_R2 + 0.15 ~ 'Exercise',
-                                    (((SIN1_R2 <= GAM1_R2 + 0.15) & (GAM1_R2 <= SIN1_R2 + 0.15)) & SIN1_R2 >= 0.3 & GAM1_R2 >= 0.3) ~ 'Ambiguous'))
-        
+                full_join(clusters_df, by = c("TISSUE","ENSEMBL_RAT")) #%>%
+                # mutate(BIN_TYPE = case_when(SIN1_R2 > GAM1_R2 + 0.15 ~ 'Circadian',
+                #                     GAM1_R2 > SIN1_R2 + 0.15 ~ 'Exercise',
+                #                     (((SIN1_R2 <= GAM1_R2 + 0.15) & (GAM1_R2 <= SIN1_R2 + 0.15)) & SIN1_R2 >= 0.3 & GAM1_R2 >= 0.3) ~ 'Ambiguous'))
+                # 
         
         #' ## Save the R2 Summary File
         
@@ -789,10 +791,12 @@ Differentially Expressed Genes (",comp,")")) +
         d <- bin_df %>%
                 #filter(TISSUE == TISSUE1) %>%
                 filter(MANOVA_PVAL <= 0.05)
+        
+        # PVE (between models)
         p <- ggplot() +
                 geom_point(data = d, 
-                           aes(x = GAM1_R2, y= SIN1_R2, color = BIN_TYPE), 
-                           alpha = 0.1) +
+                           aes(x = pve_e, y= pve_c, color = BIN_TYPE), 
+                           alpha = 0.8) +
                 # geom_density_2d_filled(data = d, 
                 #                        aes(x = GAM1_R2, y= SIN1_R2), alpha = 0.5) +
                 # geom_density_2d(data = d, 
@@ -802,15 +806,91 @@ Differentially Expressed Genes (",comp,")")) +
                 geom_abline(intercept = 0, slope = 1) +
                 geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
                 geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
-                xlab("R^2 Natural Spline Model (Exercise)") +
-                ylab("R^2 SIN/COS Model (Circadian)") +
-                ggtitle("Circadian vs. Exercise:\nR2 Comparisons Between Models") +
+                xlab("PVE Natural Spline Model (Exercise)") +
+                ylab("PVE SIN/COS Model (Circadian)") +
+                ggtitle("Circadian vs. Exercise:\nPVE Comparisons Between Models") +
+                theme_bw() +
+                theme(strip.text = element_text(size=18),
+                      axis.text.x = element_text(size = 16),
+                      axis.text.y = element_text(size = 14),
+                      axis.title.x = element_text(size = 20),
+                      axis.title.y = element_text(size = 20),
+                      legend.text = element_text(size = 16)) +
                 facet_wrap(vars(TISSUE)) +
-                scale_fill_manual(values = c('Ambiguous' = "green",
-                                             'Circadian' = "red",
+                scale_color_manual(values = c('Ambiguous_High' = "red",
+                                             'Ambiguous_Low' = "grey",
+                                             'Circadian' = "green",
                                              'Exercise' = 'blue')) +
                 coord_equal()
         pdf(paste0(WD,'/plots/20200628_rnaseq-all-tissues-faceted-theoretical-bins_steep.pdf'),width=26,height=14)
+        plot(p)
+        dev.off()
+        
+        # PVE (within models -- circadian first)
+        p <- ggplot() +
+                geom_point(data = d, 
+                           aes(x = pve_ce_e, y= pve_ce_c, color = BIN_TYPE), 
+                           alpha = 0.8) +
+                # geom_density_2d_filled(data = d, 
+                #                        aes(x = GAM1_R2, y= SIN1_R2), alpha = 0.5) +
+                # geom_density_2d(data = d, 
+                #                 aes(x = GAM1_R2, y= SIN1_R2), 
+                #                 size = 0.25, colour = "black") +
+                xlim(0,1) + ylim(0,1) +
+                geom_abline(intercept = 0, slope = 1) +
+                geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
+                geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
+                xlab("PVE Exercise") +
+                ylab("PVE Circadian") +
+                ggtitle("Circadian vs. Exercise:\nPVE Comparisons within Model") +
+                theme_bw() +
+                theme(strip.text = element_text(size=18),
+                      axis.text.x = element_text(size = 16),
+                      axis.text.y = element_text(size = 14),
+                      axis.title.x = element_text(size = 20),
+                      axis.title.y = element_text(size = 20),
+                      legend.text = element_text(size = 16)) +
+                facet_wrap(vars(TISSUE)) +
+                scale_color_manual(values = c('Ambiguous_High' = "red",
+                                              'Ambiguous_Low' = "grey",
+                                              'Circadian' = "green",
+                                              'Exercise' = 'blue')) +
+                coord_equal()
+        pdf(paste0(WD,'/plots/20200628_rnaseq-all-tissues-faceted-theoretical-bins-ce_steep.pdf'),width=26,height=14)
+        plot(p)
+        dev.off()
+        
+        # PVE (within models -- exercise first)
+        p <- ggplot() +
+                geom_point(data = d, 
+                           aes(x = pve_ec_e, y= pve_ec_c, color = BIN_TYPE), 
+                           alpha = 0.8) +
+                # geom_density_2d_filled(data = d, 
+                #                        aes(x = GAM1_R2, y= SIN1_R2), alpha = 0.5) +
+                # geom_density_2d(data = d, 
+                #                 aes(x = GAM1_R2, y= SIN1_R2), 
+                #                 size = 0.25, colour = "black") +
+                xlim(0,1) + ylim(0,1) +
+                geom_abline(intercept = 0, slope = 1) +
+                geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
+                geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
+                xlab("PVE Exercise") +
+                ylab("PVE Circadian") +
+                ggtitle("Circadian vs. Exercise:\nPVE Comparisons within Model") +
+                theme_bw() +
+                theme(strip.text = element_text(size=18),
+                      axis.text.x = element_text(size = 16),
+                      axis.text.y = element_text(size = 14),
+                      axis.title.x = element_text(size = 20),
+                      axis.title.y = element_text(size = 20),
+                      legend.text = element_text(size = 16)) +
+                facet_wrap(vars(TISSUE)) +
+                scale_color_manual(values = c('Ambiguous_High' = "red",
+                                              'Ambiguous_Low' = "grey",
+                                              'Circadian' = "green",
+                                              'Exercise' = 'blue')) +
+                coord_equal()
+        pdf(paste0(WD,'/plots/20200628_rnaseq-all-tissues-faceted-theoretical-bins-ec_steep.pdf'),width=26,height=14)
         plot(p)
         dev.off()
         
