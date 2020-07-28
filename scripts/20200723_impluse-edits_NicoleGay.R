@@ -3,10 +3,19 @@
 TISSUE = 'Kidney'
 numCores = as.numeric(1)
 
-BiocManager::install("darch")
-install.packages("darch")
-install.packages("darch")
-
+# if (!requireNamespace("BiocManager", quietly = TRUE))
+#         install.packages("BiocManager")
+# BiocManager::install(version = "3.11")
+BiocManager::install("log4r")
+# install.packages("darch") # Darch is n longer hosted on CRAN
+install.packages('/Users/Alec/Downloads/darch_0.9.tar.gz', 
+                 repos = NULL, type ='source')
+install.packages('/Users/Alec/Downloads/gpr_1.1.tar.gz', 
+                 repos = NULL, type ='source')
+#install.packages('gpr')
+install.packages(paste0(WD,'/packages/XML_3.99-0.5.tar.gz'), 
+                 repos = NULL, type ='source')
+#install.packages("darch")
 library(data.table)
 library(edgeR)
 library(ggplot2)
@@ -14,9 +23,10 @@ library(clusterProfiler)
 library(org.Rn.eg.db)
 library(DESeq2)
 library(darch)
+library(gpr)
+library(devtools)
 library(pracma)
 library(svMisc)
-
 library(foreach)
 library(doParallel)
 registerDoParallel(numCores)

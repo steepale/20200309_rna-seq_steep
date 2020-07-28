@@ -73,24 +73,28 @@ estimate_starting_point = function(y,t){
         timecourse = y
         names(timecourse) = t
         
-        h0_prior = 0
+        h0_prior = 0 # Consider generating a more indicitive value (ACS)
         h1_prior = y[[which.max(abs(y))]]
         h2_prior = y[length(y)]
-        t4h2_prior = 
+        t4h2_prior = t[length(y)]
         
         tmax = as.numeric(names(timecourse[which.max(abs(timecourse))]))
-        t0 = 0
+        t0 = -1 # Consider generating a more indicative value (ACS)
         
         t1_prior = (tmax - t0)/2
-        t2_prior = (48-tmax)/2 # this is pretty inaccurate
-        beta1_prior = (h1_prior - h0_prior)/tmax
+        # Adjust t2_prior to be more robust estimate
+        t2_prior = (t4h2_prior-tmax)/2 # this is pretty inaccurate
+        beta1_prior = (h1_prior - h0_prior)/(tmax - t0)
         
         # pick one of two starting points for beta2:
         # get closest time between tmax and 48h
-        t_down = (48-tmax)/2
+        t_down = (t4h2_prior-tmax)/2
+        # Consider taking the median for midval (ACS)
+        # midval literally take the counts at middle time, first in group (ACS)
         midval = timecourse[[as.character(t[which.min(abs(t-t_down))])]]
-        if(which.min(abs(midval - c(0, h1_prior/2)))==1){
-                beta2_prior = (h2_prior - h1_prior)/(48 - tmax)
+        # Conditional statement determines if there is peak or trough
+        if(which.min(abs(midval - c(h0_prior, h1_prior/2)))==1){
+                beta2_prior = (h2_prior - h1_prior)/(t4h2_prior - tmax)
         }else{
                 beta2_prior = -beta1_prior
         }
@@ -124,6 +128,7 @@ random_starting_point = function(){
         return(X)
 }
 
+#i <- 1
 single_optimization = function(i, t, y, lim=500){
         if(i == 1){
                 # always start with informed estimates since this seems to do well
@@ -132,9 +137,9 @@ single_optimization = function(i, t, y, lim=500){
         }else{
                 X = random_starting_point()
         }
-        # from Sara Mustafavi:
-        result = minimize(X,impulse_model_objective,lim,t,y)
         
+        # from Sara Mustafavi:
+        result = darch::minimize(X,impulse_model_objective,lim,t,y)
         all_res = c(X,
                     result[[1]],
                     result[[2]][length(result[[2]])], 
@@ -148,9 +153,10 @@ single_optimization = function(i, t, y, lim=500){
 
 
 
-by_gene_df <- by_gene_df_bk
+#by_gene_df <- by_gene_df_bk
 # by_gene_df <- by_gene_df %>%
 #         filter(SYMBOL_RAT == 'Arntl')
+.gene <- 'Pdk4'
 by_gene_df <- by_gene_df %>%
         filter(SYMBOL_RAT == 'Pdk4')
 colnames(by_gene_df$data[[1]])
@@ -160,16 +166,16 @@ by_gene_df$data[[1]]$specimen.collection.t_exercise_hour
 by_gene_df$data[[1]] %>%
         ggplot(aes(x = specimen.collection.t_exercise_hour, y = count)) +
         geom_point()
-
+#outdir <- paste0(WD,'/test_dir')
 maximize_single_gene = function(.gene, logfc_table, outdir, .N=100, .maxiter=1000){
         
-        # if(file.exists(sprintf('%s/%s_%s_%s.RData',outdir, .gene, .N, .maxiter))){
-        #         load(sprintf('%s/%s_%s_%s.RData',outdir, .gene, .N, .maxiter))
-        #         if(!grepl('gene',colnames(df))){
-        #                 df$gene = .gene
-        #         }
-        #         return(df)
-        # }
+        if(file.exists(sprintf('%s/%s_%s_%s.RData',outdir, .gene, .N, .maxiter))){
+                 load(sprintf('%s/%s_%s_%s.RData',outdir, .gene, .N, .maxiter))
+                 if(!grepl('gene',colnames(df))){
+                         df$gene = .gene
+                 }
+                 return(df)
+         }
         
         # # get logfc vals
         # log_vals = unlist(logfc_table[gene==.gene, .(log2FoldChange_0h, log2FoldChange_0.5h, log2FoldChange_1h,
@@ -180,11 +186,16 @@ maximize_single_gene = function(.gene, logfc_table, outdir, .N=100, .maxiter=100
         # Arrange the variables for the impulse model
         # by_gene_df
         
-        t = by_gene_df$data[[1]]$specimen.collection.t_exercise_hour %>%
+        # Create a dataframe that takes time and count data, then arrange by time
+        count_df <- data.frame(TPE = by_gene_df$data[[1]]$specimen.collection.t_exercise_hour,
+                   COUNTS = by_gene_df$data[[1]]$count) %>%
+                arrange(TPE)
+        
+        t = count_df$TPE
         # The actual normalized gene counts
         
         #y = c(0, unname(log_vals)) # logFC vals (relative to 7h control) # first value is 0 because logFC between baseline and baseline is 0
-        y =by_gene_df$data[[1]]$count
+        y = count_df$COUNTS
         # handle missing values
         # names(y) = t
         # y = y[!is.na(y)]

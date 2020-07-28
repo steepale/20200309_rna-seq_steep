@@ -39,11 +39,11 @@ WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
 
 # Load the dependencies
 #source("https://bioconductor.org/biocLite.R")
-#BiocManager::install("gapminder")
-#install.packages("tidyverse")
-
+#BiocManager::install("gam")
+#install.packages("XML")
 # Load dependencies
-pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som", "vsn","org.Mm.eg.db","VennDiagram","EBImage","reshape2","xtable","kohonen","som","caret","enrichR","gplots","tiff","splines","gam")
+
+pacs...man <- c("tidyverse","GenomicRanges","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som", "vsn","org.Mm.eg.db","VennDiagram","EBImage","reshape2","xtable","kohonen","caret","enrichR","gplots","tiff","splines","gam","DESeq2")
 lapply(pacs...man, FUN = function(X) {
         do.call("library", list(X)) })
 
@@ -512,24 +512,24 @@ count_data <- readRDS(file = count_file)
 #saveDb(Rn_TxDb, file=gf_file)
 
 # To load the annotation
-gf_file <- paste0(WD,'/data/20200603_Rnor-6.0.96-GRanges_steep.sqlite')
-Rn_TxDb <- loadDb(gf_file)
-# Define Female specific sex genes (X chromosome)
-# To examine chromosome names
-seqlevels(Rn_TxDb)[1:23]
-# Extract genes as GRanges object, then names
-X_genes_gr <- genes(Rn_TxDb, columns = 'TXCHROM', filter = list(tx_chrom=c('X')))
-# Collect ensembl gene ids for female specific genes
-X_ens_id <- names(X_genes_gr)
-# Examine the gene symbols
-X_sym <- mapIds(org.Rn.eg.db, names(X_genes_gr), 'SYMBOL', 'ENSEMBL')
-# Extract genes as GRanges object, then names
-Y_genes_gr <- genes(Rn_TxDb, columns = 'TXCHROM', filter = list(tx_chrom=c('Y')))
-# Collect ensembl gene ids for female specific genes
-Y_ens_id <- names(Y_genes_gr)
-sex_ens_id <- c(X_ens_id,Y_ens_id)
-# Examine the gene symbols
-Y_sym <- mapIds(org.Rn.eg.db, names(Y_genes_gr), 'SYMBOL', 'ENSEMBL')
+# gf_file <- paste0(WD,'/data/20200603_Rnor-6.0.96-GRanges_steep.sqlite')
+# Rn_TxDb <- loadDb(gf_file)
+# # Define Female specific sex genes (X chromosome)
+# # To examine chromosome names
+# seqlevels(Rn_TxDb)[1:23]
+# # Extract genes as GRanges object, then names
+# X_genes_gr <- genes(Rn_TxDb, columns = 'TXCHROM', filter = list(tx_chrom=c('X')))
+# # Collect ensembl gene ids for female specific genes
+# X_ens_id <- names(X_genes_gr)
+# # Examine the gene symbols
+# X_sym <- mapIds(org.Rn.eg.db, names(X_genes_gr), 'SYMBOL', 'ENSEMBL')
+# # Extract genes as GRanges object, then names
+# Y_genes_gr <- genes(Rn_TxDb, columns = 'TXCHROM', filter = list(tx_chrom=c('Y')))
+# # Collect ensembl gene ids for female specific genes
+# Y_ens_id <- names(Y_genes_gr)
+# sex_ens_id <- c(X_ens_id,Y_ens_id)
+# # Examine the gene symbols
+# Y_sym <- mapIds(org.Rn.eg.db, names(Y_genes_gr), 'SYMBOL', 'ENSEMBL')
 
 #' ## Collect Samples of Interest and Normalize
 
@@ -793,6 +793,11 @@ by_gene_df$SYMBOL_RAT = mapIds(org.Rn.eg.db, as.character(by_gene_df7$ENSEMBL_RA
 # In case you'd like to subset the data
 #by_gene_df_bk <- by_gene_df
 #by_gene_df <- by_gene_df_bk
+
+# Load in the MANOVA files (TODO add to top)
+manova_file <- paste0(WD,'/data/20200413_rnaseq-tissue-manova-table_steep.txt')
+manova_df <- read.table(file = manova_file ,sep = '\t', header = T, check.names = F) %>%
+  as_tibble()
 
 # by_gene_df <- by_gene_df %>%
 #   filter(SYMBOL_RAT == 'Arntl')
