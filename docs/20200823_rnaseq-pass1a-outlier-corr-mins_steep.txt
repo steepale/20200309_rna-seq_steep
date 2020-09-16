@@ -1,0 +1,203 @@
+Tissue	Print_Plot	Corr_Min
+Adrenal	All	0.851
+Adrenal	All	0.853
+Adrenal	All	0.92
+Adrenal	All	0.922
+Adrenal	All	0.927
+Adrenal	All	0.932
+Adrenal	All	0.934
+Adrenal	All	0.938
+Adrenal	All	0.939
+Adrenal	All	0.947
+Adrenal	All	0.963
+Adrenal	All	0.964
+Adrenal	All	0.966
+Adrenal	All	0.967
+Aorta	All	0.841
+Aorta	All	0.852
+Aorta	All	0.87
+Aorta	All	0.88
+Aorta	All	0.896
+Aorta	All	0.914
+Aorta	All	0.919
+Aorta	All	0.922
+Brown Adipose	All	0.68
+Brown Adipose	All	0.685
+Brown Adipose	All	0.69
+Brown Adipose	All	0.874
+Brown Adipose	All	0.879
+Brown Adipose	All	0.888
+Brown Adipose	All	0.891
+Brown Adipose	All	0.892
+Brown Adipose	All	0.898
+Brown Adipose	All	0.899
+Brown Adipose	All	0.902
+Brown Adipose	All	0.909
+Brown Adipose	All	0.92
+Brown Adipose	All	0.939
+Brown Adipose	All	0.94
+Brown Adipose	All	0.942
+Brown Adipose	All	0.944
+Brown Adipose	All	0.949
+Cortex	All	0.889
+Cortex	All	0.89
+Cortex	All	0.97
+Cortex	All	0.977
+Cortex	All	0.978
+Cortex	All	0.982
+Cortex	All	0.983
+Cortex	All	0.986
+Cortex	All	0.987
+Cortex	All	0.989
+Cortex	All	0.99
+Cortex	All	0.991
+Cortex	All	0.992
+Cortex	All	0.993
+Cortex	All	0.994
+Gastrocnemius	All	0.761
+Gastrocnemius	All	0.763
+Gastrocnemius	All	0.94
+Gastrocnemius	All	0.943
+Gastrocnemius	All	0.946
+Gastrocnemius	All	0.947
+Gastrocnemius	All	0.955
+Gastrocnemius	All	0.957
+Gastrocnemius	All	0.963
+Gastrocnemius	All	0.964
+Gastrocnemius	All	0.969
+Gastrocnemius	All	0.972
+Gastrocnemius	All	0.974
+Gastrocnemius	All	0.975
+Gastrocnemius	All	0.977
+Gastrocnemius	All	0.978
+Gastrocnemius	All	0.981
+Heart	All	0.735
+Heart	All	0.741
+Heart	All	0.913
+Heart	All	0.929
+Heart	All	0.933
+Heart	All	0.95
+Heart	All	0.951
+Heart	All	0.953
+Heart	All	0.958
+Heart	All	0.962
+Heart	All	0.964
+Heart	All	0.965
+Heart	All	0.976
+Hippocampus	All	0.845
+Hippocampus	All	0.851
+Hippocampus	All	0.857
+Hippocampus	All	0.866
+Hippocampus	All	0.887
+Hippocampus	All	0.903
+Hippocampus	All	0.91
+Hippocampus	All	0.911
+Hypothalamus	All	0.877
+Hypothalamus	All	0.88
+Hypothalamus	All	0.961
+Hypothalamus	All	0.962
+Hypothalamus	All	0.964
+Hypothalamus	All	0.965
+Hypothalamus	All	0.966
+Hypothalamus	All	0.968
+Hypothalamus	All	0.97
+Hypothalamus	All	0.971
+Hypothalamus	All	0.973
+Hypothalamus	All	0.98
+Hypothalamus	All	0.982
+Hypothalamus	All	0.983
+Hypothalamus	All	0.984
+Kidney	All	0.832
+Kidney	All	0.834
+Kidney	All	0.942
+Kidney	All	0.95
+Kidney	All	0.952
+Kidney	All	0.953
+Kidney	All	0.961
+Kidney	All	0.962
+Kidney	All	0.967
+Kidney	All	0.971
+Kidney	All	0.972
+Kidney	All	0.973
+Kidney	All	0.977
+Kidney	All	0.978
+Kidney	All	0.98
+Kidney	All	0.981
+Kidney	All	0.987
+Liver	All	0.74
+Liver	All	0.742
+Liver	All	0.889
+Liver	All	0.9
+Liver	All	0.917
+Liver	All	0.928
+Liver	All	0.93
+Liver	All	0.939
+Liver	All	0.941
+Liver	All	0.943
+Liver	All	0.955
+Liver	All	0.958
+Liver	All	0.966
+Liver	All	0.969
+Liver	All	0.97
+Lung	All	0.832
+Lung	All	0.834
+Lung	All	0.93
+Lung	All	0.934
+Lung	All	0.94
+Lung	All	0.944
+Lung	All	0.95
+Lung	All	0.966
+Lung	All	0.968
+Lung	All	0.969
+Lung	All	0.97
+Lung	All	0.972
+Lung	All	0.98
+Lung	All	0.982
+Ovaries	All	0.937
+Ovaries	All	0.946
+Ovaries	All	0.956
+Ovaries	All	0.958
+Ovaries	All	0.969
+Ovaries	All	0.972
+Ovaries	All	0.974
+Spleen	All	0.854
+Spleen	All	0.855
+Spleen	All	0.953
+Spleen	All	0.958
+Spleen	All	0.959
+Spleen	All	0.961
+Spleen	All	0.962
+Spleen	All	0.963
+Spleen	All	0.964
+Spleen	All	0.966
+Spleen	All	0.968
+Spleen	All	0.979
+Spleen	All	0.98
+Spleen	All	0.982
+Spleen	All	0.984
+Testes	All	0.7
+Testes	All	0.714
+Testes	All	0.715
+Testes	All	0.717
+Testes	All	0.807
+Testes	All	0.832
+Testes	All	0.839
+White Adipose	All	0.752
+White Adipose	All	0.754
+White Adipose	All	0.757
+White Adipose	All	0.85
+White Adipose	All	0.852
+White Adipose	All	0.86
+White Adipose	All	0.862
+White Adipose	All	0.87
+White Adipose	All	0.873
+White Adipose	All	0.874
+White Adipose	All	0.876
+White Adipose	All	0.879
+White Adipose	All	0.908
+White Adipose	All	0.926
+White Adipose	All	0.927
+White Adipose	All	0.931
+White Adipose	All	0.936
+White Adipose	All	0.94
+White Adipose	All	0.942

@@ -304,6 +304,7 @@ count_data <- readRDS(file = count_file)
 ################################################################################
 # Generate an empty dataframe for final output
 tissue_de_df <- data.frame()
+# TISSUE <- 'Hypothalamus'
 for(TISSUE in c('Hypothalamus', 'Liver', 'Kidney', 'Aorta', 'Adrenal', 'Brown Adipose', 'Cortex','Gastrocnemius', 'Heart', 'Hippocampus','Lung','Ovaries','Spleen','Testes', 'White Adipose')){
         print(TISSUE)
         #TISSUE <- 'Lung'
@@ -324,8 +325,10 @@ for(TISSUE in c('Hypothalamus', 'Liver', 'Kidney', 'Aorta', 'Adrenal', 'Brown Ad
                 unlist() %>% as.character()
         
         de_df <- data.frame()
-for(G1G2 in c('C0C7','C0E0','C0E0.5','C0E1','C0E4','C0E7','C0E24','C0E48',
-              'C7E0','C7E0.5','C7E1','C7E4','C7E7','C7E24','C7E48')){
+        #G1G2 <- 'C0C7'
+# for(G1G2 in c('C0C7','C0E0','C0E0.5','C0E1','C0E4','C0E7','C0E24','C0E48',
+#               'C7E0','C7E0.5','C7E1','C7E4','C7E7','C7E24','C7E48')){
+for(G1G2 in c('C0C7','C7E7','C0E0')){
         if(G1G2 == 'C0C7'){
                 cohorts <- c('Control - IPE', 'Control - 7 hr')
         }else if(G1G2 == 'C0E0'){

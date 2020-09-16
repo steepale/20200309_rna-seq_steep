@@ -33,9 +33,15 @@ WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
 #source("https://bioconductor.org/biocLite.R")
 #BiocManager::install("gam")
 #install.packages("XML")
-# Load dependencies
+# for(p in packages){
+#         if(!require(p, character.only = T)){
+#                 install.packages(p)
+#         }
+#         library(p, character.only = T)
+# }
 
-pacs...man <- c("tidyverse","GenomicRanges","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som", "vsn","org.Mm.eg.db","VennDiagram","EBImage","reshape2","xtable","kohonen","caret","enrichR","gplots","tiff","splines","gam","DESeq2")
+# Load dependencies
+pacs...man <- c("tidyverse","GenomicRanges","devtools","rafalib","GO.db","vsn","hexbin","ggplot2", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som", "vsn","org.Mm.eg.db","VennDiagram","EBImage","reshape2","xtable","kohonen","caret","enrichR","gplots","tiff","splines","gam","DESeq2","car","KEGGREST")
 lapply(pacs...man, FUN = function(X) {
         do.call("library", list(X)) })
 
@@ -45,8 +51,10 @@ lapply(pacs...man, FUN = function(X) {
 
 # Set select
 select <- dplyr::select
+slice <- dplyr::slice
 counts <- DESeq2::counts
 map <- purrr::map
+seq_range <- modelr::seq_range
 
 # Global options
 options(dplyr.print_max = 100)
@@ -61,6 +69,7 @@ source(paste0(WD,'/functions/elbow_finder.R'))
 source(paste0(WD,'/functions/cor_outlier2.R'))
 source(paste0(WD,'/functions/sin.R'))
 source(paste0(WD,'/functions/cos.R'))
+source(paste0(WD,'/functions/circleFun.R'))
 
 # A function to collect the non-parametric p-value
 ################################################################################
@@ -148,10 +157,10 @@ PVE_e2 <- function(df){
 PVE_c <- function(df){
         # Collect the sum of squares from each model term
         ss_sin <- df %>% 
-                filter(term == 'SIN(specimen.collection.t_death_hour)') %>%
+                filter(term == 'SIN(specimen.collection.t_death_hour_mc)') %>%
                 select(sumsq) %>% as.numeric()
         ss_cos <- df %>% 
-                filter(term == 'COS(specimen.collection.t_death_hour)') %>%
+                filter(term == 'COS(specimen.collection.t_death_hour_mc)') %>%
                 select(sumsq) %>% as.numeric()
         ss_res <- df %>% 
                 filter(term == 'Residuals') %>%
@@ -170,10 +179,10 @@ PVE_c <- function(df){
 PVE_comb_e <- function(df){
         # Collect the sum of squares from each model term
         ss_sin <- df %>% 
-                filter(term == 'SIN(specimen.collection.t_death_hour)') %>%
+                filter(term == 'SIN(specimen.collection.t_death_hour_mc)') %>%
                 select(sumsq) %>% as.numeric()
         ss_cos <- df %>% 
-                filter(term == 'COS(specimen.collection.t_death_hour)') %>%
+                filter(term == 'COS(specimen.collection.t_death_hour_mc)') %>%
                 select(sumsq) %>% as.numeric()
         ss_ns <- df %>% 
                 filter(term == 'ns(specimen.collection.t_exercise_hour_sqrt, df = 4)') %>%
@@ -196,10 +205,10 @@ PVE_comb_e <- function(df){
 PVE_comb2_e <- function(df){
         # Collect the sum of squares from each model term
         ss_sin <- df %>% 
-                filter(term == 'SIN(specimen.collection.t_death_hour)') %>%
+                filter(term == 'SIN(specimen.collection.t_death_hour_mc)') %>%
                 select(sumsq) %>% as.numeric()
         ss_cos <- df %>% 
-                filter(term == 'COS(specimen.collection.t_death_hour)') %>%
+                filter(term == 'COS(specimen.collection.t_death_hour_mc)') %>%
                 select(sumsq) %>% as.numeric()
         ss_ns <- df %>% 
                 filter(term == 'poly(specimen.collection.t_exercise_hour_sqrt, df = 4)') %>%
@@ -222,10 +231,10 @@ PVE_comb2_e <- function(df){
 PVE_comb_c <- function(df){
         # Collect the sum of squares from each model term
         ss_sin <- df %>% 
-                filter(term == 'SIN(specimen.collection.t_death_hour)') %>%
+                filter(term == 'SIN(specimen.collection.t_death_hour_mc)') %>%
                 select(sumsq) %>% as.numeric()
         ss_cos <- df %>% 
-                filter(term == 'COS(specimen.collection.t_death_hour)') %>%
+                filter(term == 'COS(specimen.collection.t_death_hour_mc)') %>%
                 select(sumsq) %>% as.numeric()
         ss_ns <- df %>% 
                 filter(term == 'ns(specimen.collection.t_exercise_hour_sqrt, df = 4)') %>%
@@ -249,10 +258,10 @@ PVE_comb_c <- function(df){
 PVE_comb2_c <- function(df){
         # Collect the sum of squares from each model term
         ss_sin <- df %>% 
-                filter(term == 'SIN(specimen.collection.t_death_hour)') %>%
+                filter(term == 'SIN(specimen.collection.t_death_hour_mc)') %>%
                 select(sumsq) %>% as.numeric()
         ss_cos <- df %>% 
-                filter(term == 'COS(specimen.collection.t_death_hour)') %>%
+                filter(term == 'COS(specimen.collection.t_death_hour_mc)') %>%
                 select(sumsq) %>% as.numeric()
         ss_ns <- df %>% 
                 filter(term == 'poly(specimen.collection.t_exercise_hour_sqrt, df = 4)') %>%
@@ -298,9 +307,11 @@ PVE_comb2_c <- function(df){
 table_file <- paste0(WD,'/data/20200603_rnaseq-tissue-data-assambly-table_steep.txt')
 df_tbl <- read.table(file = table_file,sep = '\t', header = T, check.names = F)
 
+by_gene_by_tissue_df <- tibble()
 models_df <- data.frame()
 #TISSUE <- "Kidney"
 for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Brown Adipose', 'Cortex','Gastrocnemius', 'Heart', 'Hippocampus','Ovaries','Spleen','Testes', 'White Adipose')){
+
         print(TISSUE)
         TISSUE1 <- TISSUE
         # # Collect the formula
@@ -329,7 +340,6 @@ for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Bro
                 select(Formula) %>% unique() %>% 
                 unlist() %>% as.character() %>% as.formula()
         
-        
         #' ## Load & Clean Data
         #' ##### Data files to load:
         #' * Count Matrix and Metadata Table from:
@@ -343,7 +353,8 @@ for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Bro
         #####     Load & Clean Data      ###############################################
         ################################################################################
         
-        # Files last saved in: 20200309_exploration-rna-seq-phase1_steep.R
+        # TODO: Take this if statement from this script and incorporate it into the bollinger script
+        # Files last saved in: 20200603_rnaseq-tissue-data-assembly_steep.R
         
         if(F) {
                 # Count matrix
@@ -488,6 +499,75 @@ for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Bro
                         filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
                         ggplot(aes(x=specimen.collection.t_exercise_hour_sqrt)) +
                         geom_histogram(bins = 68)
+                
+                # Determine the median values by which to center
+                median_c0 <- col_data %>%
+                        filter(Tissue == 'Kidney') %>%
+                        filter(animal.key.anirandgroup == 'Control - IPE') %>%
+                        select(specimen.collection.t_death_hour) %>%
+                        unlist() %>% as.numeric() %>% median()
+                median_e24 <- col_data %>%
+                        filter(Tissue == 'Kidney') %>%
+                        filter(animal.key.anirandgroup == 'Exercise - 24 hr') %>%
+                        select(specimen.collection.t_death_hour) %>%
+                        unlist() %>% as.numeric() %>% median()
+                median_e48 <- col_data %>%
+                        filter(Tissue == 'Kidney') %>%
+                        filter(animal.key.anirandgroup == 'Exercise - 48 hr') %>%
+                        select(specimen.collection.t_death_hour) %>%
+                        unlist() %>% as.numeric() %>% median()
+                median_e0.5 <- col_data %>%
+                        filter(Tissue == 'Kidney') %>%
+                        filter(animal.key.anirandgroup == 'Exercise - 0.5 hr') %>%
+                        select(specimen.collection.t_death_hour) %>%
+                        unlist() %>% as.numeric() %>% median()
+                median_e0 <- col_data %>%
+                        filter(Tissue == 'Kidney') %>%
+                        filter(animal.key.anirandgroup == 'Exercise - IPE') %>%
+                        select(specimen.collection.t_death_hour) %>%
+                        unlist() %>% as.numeric() %>% median()
+                median_e1 <- col_data %>%
+                        filter(Tissue == 'Kidney') %>%
+                        filter(animal.key.anirandgroup == 'Exercise - 1 hr') %>%
+                        select(specimen.collection.t_death_hour) %>%
+                        unlist() %>% as.numeric() %>% median()
+                median_e4 <- col_data %>%
+                        filter(Tissue == 'Kidney') %>%
+                        filter(animal.key.anirandgroup == 'Exercise - 4 hr') %>%
+                        select(specimen.collection.t_death_hour) %>%
+                        unlist() %>% as.numeric() %>% median()
+                median_c7 <- col_data %>%
+                        filter(Tissue == 'Kidney') %>%
+                        filter(animal.key.anirandgroup == 'Control - 7 hr') %>%
+                        select(specimen.collection.t_death_hour) %>%
+                        unlist() %>% as.numeric() %>% median()
+                median_e7 <- col_data %>%
+                        filter(Tissue == 'Kidney') %>%
+                        filter(animal.key.anirandgroup == 'Exercise - 7 hr') %>%
+                        select(specimen.collection.t_death_hour) %>%
+                        unlist() %>% as.numeric() %>% median()
+                
+                # Apply the median centered groups to time of death (modeling purposes)
+                col_data <- col_data %>%
+                        mutate(specimen.collection.t_death_hour_mc = 
+                                       case_when(animal.key.anirandgroup == 'Control - IPE' ~
+                                                         median_c0,
+                                                 animal.key.anirandgroup == 'Control - 7 hr' ~
+                                                         median_c7,
+                                                 animal.key.anirandgroup == 'Exercise - IPE' ~
+                                                         median_e0,
+                                                 animal.key.anirandgroup == 'Exercise - 0.5 hr' ~
+                                                         median_e0.5,
+                                                 animal.key.anirandgroup == 'Exercise - 1 hr' ~
+                                                         median_e1,
+                                                 animal.key.anirandgroup == 'Exercise - 4 hr' ~
+                                                         median_e4,
+                                                 animal.key.anirandgroup == 'Exercise - 7 hr' ~
+                                                         median_e7,
+                                                 animal.key.anirandgroup == 'Exercise - 24 hr' ~
+                                                         median_e24,
+                                                 animal.key.anirandgroup == 'Exercise - 48 hr' ~
+                                                         median_e48))
                 
                 # Save data as an R objects
                 # ################################################################################
@@ -637,16 +717,16 @@ for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Bro
         
         # Take the absolute value of the square root of seconds post exercise (consider negative numbers)
         # Make sure to Subtract 1 hour (3600s) from "Control - IPE" groups to account for exercise effect
-        tod_cols <- tod_cols %>%
-                mutate(calculated.variables.deathtime_after_acute =
-                               ifelse(animal.key.anirandgroup == 'Control - IPE', 
-                                      calculated.variables.deathtime_after_acute - 3600,
-                                      calculated.variables.deathtime_after_acute))
-        tod_cols <- tod_cols %>%
-                mutate(specimen.collection.t_exercise_hour_sqrt = ifelse(
-                        calculated.variables.deathtime_after_acute < 0, 
-                        (sqrt(abs(calculated.variables.deathtime_after_acute))/60/60)*(-1), 
-                        (sqrt(abs(calculated.variables.deathtime_after_acute))/60/60)))
+        # tod_cols <- tod_cols %>%
+        #         mutate(calculated.variables.deathtime_after_acute =
+        #                        ifelse(animal.key.anirandgroup == 'Control - IPE', 
+        #                               calculated.variables.deathtime_after_acute - 3600,
+        #                               calculated.variables.deathtime_after_acute))
+        # tod_cols <- tod_cols %>%
+        #         mutate(specimen.collection.t_exercise_hour_sqrt = ifelse(
+        #                 calculated.variables.deathtime_after_acute < 0, 
+        #                 (sqrt(abs(calculated.variables.deathtime_after_acute))/60/60)*(-1), 
+        #                 (sqrt(abs(calculated.variables.deathtime_after_acute))/60/60)))
         
         row.names(tod_cols) <- tod_cols$sample_key
         # # Examine histograms
@@ -662,7 +742,7 @@ for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Bro
         # Collect samples without NA values in TOD
         nona_sams <- tod_cols %>%
                 filter(!is.na(specimen.collection.t_death_hour)) %>%
-                filter(sample_key != OUTLIERS) %>%
+                filter(sample_key %!in% OUTLIERS) %>%
                 filter(!is.na(animal.registration.sex)) %>%
                 select(sample_key) %>% unlist() %>% as.character()
         # Collect tissue specific counts
@@ -683,21 +763,22 @@ for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Bro
         #dds
         #' #### We remove genes with an average sequencing depth of 10 or less
         #' Before Filtering
-        # dds1
+        dds1
         zero_n <- dds1[(rowSums(counts(dds1))/ncol(dds1) < 1), ] %>% 
-                nrow() %>% as.character()
+                 nrow() %>% as.character()
+         print(paste0('genes removed with < 1 count on average across samples: ',zero_n))
         reads_n <- 1
         keep <- rowSums(counts(dds1))/ncol(dds1) >= reads_n
         dds2 <- dds1[keep,]
         #' #### Summary of counts and annotation data in a DESeqDataSet after filtering out genes with low sequencing depth
         #' TODO: Critic from Jun: Here we are removing features that have a low average expression. This may be removing important features that might have zero counts in some samples and higher counts in specific groups. Consider developing an algorithm that will account for features with expression in n or more samples.
-        dds2
-        filter_n <- nrow(dds1) - nrow(dds2) - as.numeric(zero_n)
-        filter_p <- filter_n/(nrow(dds1) - as.numeric(zero_n))
-        total_n <- nrow(dds1) - nrow(dds2)
-        
-        #' ##### Note: Number of genes with average counts between zero and 1 is `r zero_n` but removing reads with less than or equal to `r reads_n` removes an additional `r filter_n` features or removes `r filter_p*100`% of the non-zero reads (total of `r total_n` features removed).
+        #' dds2
+        #' filter_n <- nrow(dds1) - nrow(dds2) - as.numeric(zero_n)
+        #' filter_p <- filter_n/(nrow(dds1) - as.numeric(zero_n))
+        #' total_n <- nrow(dds1) - nrow(dds2)
+        #' #' ##### Note: Number of genes with average counts between zero and 1 is `r zero_n` but removing reads with less than or equal to `r reads_n` removes an additional `r filter_n` features or removes `r filter_p*100`% of the non-zero reads (total of `r total_n` features removed).
         dds <- dds2
+        #dds <- dds1
         #' To see the reads per million for each sample
         sort(colSums(assay(dds)))/1e6
         
@@ -716,6 +797,8 @@ for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Bro
         ################################################################################
         ########### Adjust Variance  #######################################
         ################################################################################
+        #adj_var <- 'animal.key.batch'
+        #adj_var <- 'animal.registration.sex'
         if(ADJ_VAR != 'None'){
                 for(adj_var in ADJ_VAR){
                         # Duplicate the rld object
@@ -747,8 +830,15 @@ for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Bro
         percentVar <- round(100 * attr(pcaData, "percentVar"))
         #pdf(paste0(WD,"/plots/20200426_rnaseq-",TIS,"-PCA-sexmod-modeling_steep.pdf"),
         # width = 6, height = 4)
-        p <- ggplot(pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registration.sex)) +
-                geom_point(size=3) +
+        
+        pca_centroid_df <- pcaData %>% 
+                filter(animal.key.anirandgroup %in% 
+                               c('Exercise - IPE','Control - IPE','Exercise - 7 hr', 'Control - 7 hr'))
+        centroids <- aggregate(cbind(PC1,PC2)~animal.key.anirandgroup,pca_centroid_df,mean)
+        p <- ggplot() +
+                geom_point(data = pcaData, aes(PC1, PC2, color=animal.key.anirandgroup,shape=animal.registration.sex, size=3)) +
+                geom_point(data=centroids,
+                           aes(PC1, PC2, color = animal.key.anirandgroup), size=10) +
                 #geom_label_repel(aes(label=sample_key),hjust=0, vjust=0) +
                 xlab(paste0("PC1: ",percentVar[1],"% variance")) +
                 ylab(paste0("PC2: ",percentVar[2],"% variance")) + 
@@ -759,7 +849,7 @@ for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Bro
                 theme(legend.title=element_blank())
         plot(p)
         #dev.off()
-        
+}
         #' #### Annotate Data for Modeling By Cluster
         
         #+ Annotate Data for Modeling By Cluster
@@ -785,6 +875,7 @@ for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Bro
         # Add Cluster and Circ Status
         # by_gene_df <- by_gene_df %>%
         #         mutate(CIRC = ifelse(ENSEMBL_RAT %in% circ_df$ENSEMBL_RAT, 'CIRC', 'NON-CIRC'))
+        
         # Add the gene symbol
         by_gene_df$SYMBOL_RAT = mapIds(org.Rn.eg.db, as.character(by_gene_df$ENSEMBL_RAT), "SYMBOL", "ENSEMBL")
         
@@ -824,32 +915,32 @@ for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Bro
         
         # Generate a model function for the dataframes
         sin_mod <- function(df) {
-                lm(count ~ SIN(specimen.collection.t_death_hour) + 
-                           COS(specimen.collection.t_death_hour),
+                lm(count ~ SIN(specimen.collection.t_death_hour_mc) + 
+                           COS(specimen.collection.t_death_hour_mc),
                    data = df)
         }
         
         # Generate a model that combines circadian with exercise (circadian first)
         ce_mod <- function(df) {
-                lm(count ~ SIN(specimen.collection.t_death_hour) + 
-                           COS(specimen.collection.t_death_hour) +
+                lm(count ~ SIN(specimen.collection.t_death_hour_mc) + 
+                           COS(specimen.collection.t_death_hour_mc) +
                            ns(specimen.collection.t_exercise_hour_sqrt, df = 4), data = df)
         }
         ce2_mod <- function(df) {
-                lm(count ~ SIN(specimen.collection.t_death_hour) + 
-                           COS(specimen.collection.t_death_hour) +
+                lm(count ~ SIN(specimen.collection.t_death_hour_mc) + 
+                           COS(specimen.collection.t_death_hour_mc) +
                            poly(specimen.collection.t_exercise_hour_sqrt, df = 4), data = df)
         }
         # Generate a model that combines circadian with exercise (exercise first)
         ec_mod <- function(df) {
                 lm(count ~ ns(specimen.collection.t_exercise_hour_sqrt, df = 4) +
-                           SIN(specimen.collection.t_death_hour) + 
-                           COS(specimen.collection.t_death_hour), data = df)
+                           SIN(specimen.collection.t_death_hour_mc) + 
+                           COS(specimen.collection.t_death_hour_mc), data = df)
         }
         ec2_mod <- function(df) {
                 lm(count ~ poly(specimen.collection.t_exercise_hour_sqrt, df = 4) +
-                           SIN(specimen.collection.t_death_hour) + 
-                           COS(specimen.collection.t_death_hour), data = df)
+                           SIN(specimen.collection.t_death_hour_mc) + 
+                           COS(specimen.collection.t_death_hour_mc), data = df)
         }
         
         # Add the gene symbol
@@ -860,26 +951,49 @@ for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Bro
         #by_gene_df_bk <- by_gene_df
         #by_gene_df <- by_gene_df_bk
         
-        # Load in the MANOVA files (TODO add to top)
-        manova_file <- paste0(WD,'/data/20200413_rnaseq-tissue-manova-table_steep.txt')
-        manova_df <- read.table(file = manova_file ,sep = '\t', header = T, check.names = F) %>%
-                as_tibble()
-        
-        # by_gene_df <- by_gene_df %>% filter(SYMBOL_RAT == 'Arntl')
-        keepers <- manova_df %>% 
-                filter(TISSUE == 'Kidney') %>%
-                filter(MANOVA_PVAL <= 0.05) %>%
-                select(ENSEMBL_RAT) %>% unlist() %>% as.character()
+        # # Load in the MANOVA files (TODO add to top)
+        # manova_file <- paste0(WD,'/data/20200413_rnaseq-tissue-manova-table_steep.txt')
+        # manova_df <- read.table(file = manova_file ,sep = '\t', header = T, check.names = F) %>%
+        #         as_tibble()
+        # 
+        # 
+        # keepers <- manova_df %>% 
+        #         filter(TISSUE == 'Kidney') %>%
+        #         filter(MANOVA_PVAL <= 0.05) %>%
+        #         select(ENSEMBL_RAT) %>% unlist() %>% as.character()
         by_gene_df <- by_gene_df %>%
                 ungroup() %>%
-                filter(ENSEMBL_RAT %in% keepers) %>%
-                dplyr::sample_n(size = 1000)
+                filter(SYMBOL_RAT %in% c('Arntl','Pdk4')) #%>%
+        by_gene_df7 <- by_gene_df7 %>%
+                ungroup() %>%
+                filter(SYMBOL_RAT %in% c('Arntl','Pdk4'))
+                #dplyr::sample_n(size = 1000)
+        # Arntl, Tbx10
+        # by_gene_df
+        # bin_df %>%
+        #         filter(TISSUE == 'Kidney') %>%
+        #         arrange(desc(pve_ce2_e))
+        
+        # by_gene_df <- by_gene_df %>% filter(SYMBOL_RAT == 'Nr4a2')
+        # by_gene_df <- by_gene_df %>% filter(SYMBOL_RAT == 'Hsp90aa1')
+        # by_gene_df <- by_gene_df %>% filter(SYMBOL_RAT == 'Arntl')
+        # by_gene_df <- by_gene_df %>% filter(SYMBOL_RAT == 'Pdk4')
+        # by_gene_df <- by_gene_df %>% filter(SYMBOL_RAT %in% kps)
+        
+        # kps <- d %>%
+        #          filter(GNAME != '') %>%
+        #          select(SYMBOL_RAT, BIN_TYPE, GROUP_ce_n,pve_ce2_e,pve_ce2_c, pve_e2, pve_c) %>%
+        #          arrange(desc(pve_ce2_e)) %>% select(SYMBOL_RAT) %>% head(n = 20) %>%
+        #         unlist() %>% as.character()
         
         # Perform a series of analyses for each model
-        for(mdl in c('gam', 'sin', 'ce', 'ec','poly4','ce2','ec2')){
+        i <- 1
+        for(mdl in c('sin','poly4','ce2')){
                 # circadian with exercise Model (circadian first)
                 ################################################################################
                 # Collect variables
+                print(i)
+                i <- i + 1
                 ( model_col <- as.symbol(paste0(mdl,'_model')) )
                 anova_int <- as.symbol(paste0(mdl,'_anova_int'))
                 anova_col <- as.symbol(paste0(mdl,'_anova'))
@@ -891,8 +1005,9 @@ for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Bro
                 by_gene_df <- by_gene_df %>%
                         mutate(!!model_col := map(data, MODEL))
                 # Examine the ANOVA report on models
+                #car::Anova defaults to type 2
                 by_gene_df <- by_gene_df %>%
-                        mutate(!!anova_int := map(!!model_col, anova)) %>%
+                        mutate(!!anova_int := map(!!model_col, car::Anova)) %>%
                         mutate(!!anova_col := map(!!anova_int, broom::tidy)) %>%
                         select(-all_of(anova_int))
                 # Add the residuals
@@ -902,69 +1017,601 @@ for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Bro
                 by_gene_df <- by_gene_df %>%
                    mutate(!!metrics_col := map(!!model_col, broom::glance))
                 # # Examine some model summaries
-                # by_gene_df <- by_gene_df %>%
-                #   mutate(!!summary_col := map(!!model_col, summary))
+                by_gene_df <- by_gene_df %>%
+                   mutate(!!summary_col := map(!!model_col, summary))
         }
-        
-        (by_gene_df %>%
-                        filter(SYMBOL_RAT == 'Bcl10') %>%
-                        ungroup() %>%
-                        select(sin_anova))[[1]]
-        (by_gene_df %>%
-                        filter(SYMBOL_RAT == 'Bcl10') %>%
-                        ungroup() %>%
-                        select(gam_anova))[[1]]
-        (by_gene_df %>%
-                        filter(SYMBOL_RAT == 'Bcl10') %>%
-                        ungroup() %>%
-                        select(ce_anova))[[1]]
-        (by_gene_df %>%
-                        filter(SYMBOL_RAT == 'Bcl10') %>%
-                        ungroup() %>%
-                        select(ec_anova))[[1]]
-        
-        by_gene_df %>% filter(BIN_TYPE == 'Ambiguous_High') %>% select(SYMBOL_RAT)
         
         # Collect all the PVEs
         pve_df <- by_gene_df %>%
-                select(ENSEMBL_RAT, SYMBOL_RAT,gam_anova,sin_anova,ce_anova,ec_anova,poly4_anova,ec2_anova,ce2_anova)
+                # select(ENSEMBL_RAT, SYMBOL_RAT,gam_anova,sin_anova,ce_anova,ec_anova,poly4_anova,ec2_anova,ce2_anova)
+                select(ENSEMBL_RAT, SYMBOL_RAT,sin_anova,poly4_anova,ce2_anova)
         # Collect the PVE from models and different aspects of combined models
         pve_df <- pve_df %>%
-                mutate(pve_e = map_dbl(gam_anova, PVE_e)) %>%
+                # mutate(pve_e = map_dbl(gam_anova, PVE_e)) %>%
                 mutate(pve_e2 = map_dbl(poly4_anova, PVE_e2)) %>%
                 mutate(pve_c = map_dbl(sin_anova, PVE_c)) %>%
-                mutate(pve_ec_c = map_dbl(ec_anova, PVE_comb_c)) %>%
-                mutate(pve_ec_e = map_dbl(ec_anova, PVE_comb_e)) %>%
-                mutate(pve_ce_c = map_dbl(ce_anova, PVE_comb_c)) %>%
-                mutate(pve_ce_e = map_dbl(ce_anova, PVE_comb_e)) %>%
-                mutate(pve_ec2_c = map_dbl(ec2_anova, PVE_comb2_c)) %>%
-                mutate(pve_ec2_e = map_dbl(ec2_anova, PVE_comb2_e)) %>%
+                # mutate(pve_ec_c = map_dbl(ec_anova, PVE_comb_c)) %>%
+                # mutate(pve_ec_e = map_dbl(ec_anova, PVE_comb_e)) %>%
+                # mutate(pve_ce_c = map_dbl(ce_anova, PVE_comb_c)) %>%
+                # mutate(pve_ce_e = map_dbl(ce_anova, PVE_comb_e)) %>%
+                # mutate(pve_ec2_c = map_dbl(ec2_anova, PVE_comb2_c)) %>%
+                # mutate(pve_ec2_e = map_dbl(ec2_anova, PVE_comb2_e)) %>%
                 mutate(pve_ce2_c = map_dbl(ce2_anova, PVE_comb2_c)) %>%
                 mutate(pve_ce2_e = map_dbl(ce2_anova, PVE_comb2_e)) %>%
-                select(-gam_anova,-sin_anova,-ce_anova,-ec_anova,
-                       -poly4_anova,-ce2_anova,-ec2_anova) %>%
-                #filter(pve_e >= 0.3 | pve_c >= 0.3) %>%
-                mutate(LINEARITY = ifelse((pve_ec_c == pve_ce_c & pve_ec_e == pve_ce_e),
-                                          'Orthogonal','Colinear')) %>%
-                mutate(BIN_TYPE = case_when(pve_c > pve_e + 0.15 ~ 'Circadian',
-                                            pve_e > pve_c + 0.15 ~ 'Exercise',
-                                            (((pve_c <= pve_e + 0.15) & (pve_e <= pve_c + 0.15)) & pve_c >= 0.3 & pve_e >= 0.3) ~ 'Ambiguous_High',
-                                            (((pve_c <= pve_e + 0.15) & (pve_e <= pve_c + 0.15)) & (pve_c < 0.3 | pve_e < 0.3)) ~ 'Ambiguous_Low')) %>%
-                mutate(BIN_TYPE_ce = case_when(pve_ce_c > pve_ce_e + 0.15 ~ 'Circadian',
-                                               pve_ce_e > pve_ce_c + 0.15 ~ 'Exercise',
-                                               (((pve_ce_c <= pve_ce_e + 0.15) & (pve_ce_e <= pve_ce_c + 0.15)) & pve_ce_c >= 0.3 & pve_ce_e >= 0.3) ~ 'Ambiguous_High',
-                                               (((pve_ce_c <= pve_ce_e + 0.15) & (pve_ce_e <= pve_ce_c + 0.15)) & (pve_ce_c < 0.3 | pve_ce_e < 0.3)) ~ 'Ambiguous_Low')) %>%
-                mutate(BIN_TYPE_ec = case_when(pve_ec_c > pve_ec_e + 0.15 ~ 'Circadian',
-                                               pve_ec_e > pve_ec_c + 0.15 ~ 'Exercise',
-                                               (((pve_ec_c <= pve_ec_e + 0.15) & (pve_ec_e <= pve_ec_c + 0.15)) & pve_ec_c >= 0.3 & pve_ec_e >= 0.3) ~ 'Ambiguous_High',
-                                               (((pve_ec_c <= pve_ec_e + 0.15) & (pve_ec_e <= pve_ec_c + 0.15)) & (pve_ec_c < 0.3 | pve_ec_e < 0.3)) ~ 'Ambiguous_Low')) %>%
+                # select(-gam_anova,-sin_anova,-ce_anova,-ec_anova,
+                #        -poly4_anova,-ce2_anova,-ec2_anova) %>%
+                select(-sin_anova,-poly4_anova,-ce2_anova) %>%
                 mutate(TISSUE = TISSUE1)
         # Concatenate the dataframes
+        #models_df <- pve_df
         models_df <- rbind(models_df, pve_df)
+        # Save dfs
+        by_gene_df$TISSUE <- TISSUE1
+        # by_gene_by_tissue_df <- rbind(by_gene_by_tissue_df, by_gene_df)
+        by_gene_by_tissue_df_file <- paste0(WD,'/data/20200727_rnaseq-',TISSUE1,'-models-data_steep.rds')
+        # saveRDS(by_gene_df, file = by_gene_by_tissue_df_file)
         # Save the final output table
-        models_file <- paste0(WD,'/data/20200603_rnaseq-tissue-models-pve-table_steep.txt')
-        #write.table(models_df, file = models_file,sep = '\t',row.names = F,quote = F)
+        models_file <- paste0(WD,'/data/20200603_rnaseq-',TISSUE1,'-models-pve-table2_steep.txt')
+        write.table(models_df, file = models_file,sep = '\t',row.names = F,quote = F)
 }
+
+
+# Visualize models on single gene
+################################################################################
+#################   Visualize models on single gene  ###########################
+################################################################################
+
+# hr7_df2 <- by_gene_df7 %>%
+#         filter(ENSEMBL_RAT == g) %>%
+#         select(ENSEMBL_RAT, SYMBOL_RAT, data) %>%
+#         ungroup() %>%
+#         unnest(data) %>%
+#         filter(animal.key.anirandgroup == "Control - 7 hr") %>%
+#         select(ENSEMBL_RAT, SYMBOL_RAT, specimen.collection.t_exercise_hour, 
+#                specimen.collection.t_death_hour_mc, count)
+# sub_data2 <- sub_data %>%
+#         mutate(specimen.collection.t_exercise_hour = 
+#         ifelse(animal.key.anirandgroup == "Control - IPE", 0, specimen.collection.t_exercise_hour))
+# sub_data2$specimen.collection.t_exercise_hour %>% table()
+
+# ggplot() +
+#         geom_point(data = sub_data2,
+#                    aes(x = specimen.collection.t_exercise_hour, y = count,
+#                        color = animal.key.anirandgroup)) +
+#         geom_point(data = hr7_df2,
+#                    mapping = aes(specimen.collection.t_exercise_hour, count),
+#                    color = ec_colors[9]) +
+#         geom_line(data = sub_data2, 
+#                   aes(x = specimen.collection.t_exercise_hour, count), 
+#                   size = 1, alpha = 0.6, color = 'blue',
+#                   stat = "smooth", method = "lm", formula = y ~ ns(x, 5), se = F) +
+#         scale_color_manual(values=ec_colors, drop = F) +
+#         theme(legend.title = element_blank()) +
+#         ggtitle(
+#                 paste0(unique(model_pred_df$SYMBOL_RAT),
+#                        " in ",TISSUE)) +
+#         ylab("Counts (Normalized)") +
+#         xlab("Hours Post Exercise")
+# 
+# ggplot() +
+#         geom_point(data = sub_data2,
+#                    aes(x = specimen.collection.t_death_hour_mc, y = count,
+#                        color = animal.key.anirandgroup)) +
+#         geom_point(data = hr7_df2,
+#                    mapping = aes(specimen.collection.t_death_hour_mc, count),
+#                    color = ec_colors[9]) +
+#         scale_color_manual(values=ec_colors, drop = F) +
+#         theme(legend.title = element_blank()) +
+#         ggtitle(
+#                 paste0(unique(model_pred_df$SYMBOL_RAT),
+#                        " in ",TISSUE)) +
+#         ylab("Counts (Normalized)") +
+#         xlab("Hour of Death")
+
+
+#bk <- by_gene_df
+#by_gene_df <- bk
+by_gene_df <- by_gene_df %>%
+        filter(SYMBOL_RAT == 'Pdk4')
+
+# Visualize Genes in Single models
+poly4_title <- "Counts ~ B0 + (B1...B4)*poly(sqrt(HPE),4)"
+sin_title <- "Counts ~ B0 + B1*SIN(TOD) + B2*COS(TOD)"
+ce2_title <- "Counts ~ B0 + (B1...B4)*poly(sqrt(HPE),4) +\nB5*SIN(TOD) + B6*COS(TOD)"
+# mdl <- 'poly4'
+summary(mod)
+by_gene_df$sin_anova
+bin_df %>%
+        filter(TISSUE == 'Kidney') %>%
+        filter(SYMBOL_RAT == 'Arntl')
+for(mdl in c('sin','poly4','ce2')){
+        print(mdl)
+        # Collect variables
+        ###########################
+        # 1. Add the predictions
+        ######################################################
+        genes <- by_gene_df$ENSEMBL_RAT %>% as.character() %>% unique()
+        # Must be true
+        all(genes == by_gene_df$ENSEMBL_RAT)
+        ( model_pred <- as.symbol(paste0(mdl,'_pred')) )
+        ( model_col <- as.symbol(paste0(mdl,'_model')) )
+        ( model_pred_df <- as.symbol(paste0(mdl,'_pred_df')) )
+        pred_list <- list()
+        grid <- data.frame()
+        
+        for( g in genes){
+                # Subset the original counts from the gene (Y original)
+                sub_data <- (by_gene_df %>% 
+                                     filter(ENSEMBL_RAT == g) %>%
+                                     ungroup() %>%
+                                     select(data))[[1]] %>% as.data.frame() %>% 
+                        arrange(specimen.collection.t_death_hour_mc)
+                # Generate a grid of x values (grid X values) that are within the same range as actual x values
+                if( mdl %in% c('gam', 'poly4')){
+                        grid <- data.frame(
+                        specimen.collection.t_exercise_hour_sqrt = 
+                        seq_range(sub_data$specimen.collection.t_exercise_hour_sqrt, 
+                        n = length(sub_data$specimen.collection.t_exercise_hour_sqrt)))
+                }else if( mdl %in% c('sin')){
+                        grid <- data.frame(specimen.collection.t_death_hour_mc = 
+                        seq_range(sub_data$specimen.collection.t_death_hour_mc, 
+                        n = length(sub_data$specimen.collection.t_death_hour_mc)))
+                }else if( mdl %in% c('ce2')){
+                        # sort(sub_data$specimen.collection.t_death_hour_mc) %>% table()
+                        grid <- data.frame()
+                        for (tod_int in c('10.00-10.75','10.75-11.6','11.60-12.10','12.10-13.50',
+                                          '13.50-14.10','14.10-14.80','14.80-17.80')){
+                                if(tod_int %in% c('10.00-10.75')){
+                                        n_int = 16
+                                }else if(tod_int %in% c('11.60-12.10','12.10-13.50',
+                                                        '13.50-14.10','14.10-14.80')){
+                                        n_int = 10
+                                }else if(tod_int %in% c('10.75-11.6','14.80-17.80')){
+                                        n_int = 6
+                                }
+                                tod_int_s <- (strsplit(tod_int,'-') %>% unlist())[1] %>% as.numeric()
+                                tod_int_e <- (strsplit(tod_int,'-') %>% unlist())[2] %>% as.numeric()
+                                tod_int_m <- median(c(tod_int_s,tod_int_e))
+                                data_int <- sub_data %>%
+                                        filter(specimen.collection.t_death_hour_mc >= tod_int_s &
+                                                       specimen.collection.t_death_hour_mc < tod_int_e)
+                                grid_int <- data.frame(specimen.collection.t_exercise_hour_sqrt = 
+                                        rep(median(data_int$specimen.collection.t_exercise_hour_sqrt), 
+                                        n_int),
+                                        specimen.collection.t_death_hour_mc = 
+                                        rep(median(data_int$specimen.collection.t_death_hour_mc), 
+                                        n_int))
+                                grid <- rbind(grid, grid_int)
+                        }
+                }
+                # Collect the actual model
+                mod <- (by_gene_df %>% 
+                                filter(ENSEMBL_RAT == g) %>% ungroup() %>% 
+                                select(model_col))[[1]][[1]]
+                if( mdl %in% c('ce2')){
+                        # Collect the coefficients
+                        res_co <- (mod$coefficients %>%
+                                           as.data.frame())['(Intercept)',]
+                        sin_co <- (mod$coefficients %>%
+                                as.data.frame())['SIN(specimen.collection.t_death_hour_mc)',]
+                        cos_co <- (mod$coefficients %>%
+                                           as.data.frame())['COS(specimen.collection.t_death_hour_mc)',]
+                        poly4_co1 <- (mod$coefficients %>%
+                                as.data.frame())['poly(specimen.collection.t_exercise_hour_sqrt, df = 4)1',]
+                        poly4_co2 <- (mod$coefficients %>%
+                                as.data.frame())['poly(specimen.collection.t_exercise_hour_sqrt, df = 4)2',]
+                        poly4_co3 <- (mod$coefficients %>%
+                                as.data.frame())['poly(specimen.collection.t_exercise_hour_sqrt, df = 4)3',]
+                        poly4_co4 <- (mod$coefficients %>%
+                                as.data.frame())['poly(specimen.collection.t_exercise_hour_sqrt, df = 4)4',]
+                        mod_c <- (by_gene_df %>% 
+                                        filter(ENSEMBL_RAT == g) %>% ungroup() %>% 
+                                        select(sin_model))[[1]][[1]]
+                        mod_c$coefficients[[1]] <- res_co
+                        mod_c$coefficients[[2]] <- sin_co
+                        mod_c$coefficients[[3]] <- cos_co
+                        mod_e <- (by_gene_df %>% 
+                                          filter(ENSEMBL_RAT == g) %>% ungroup() %>% 
+                                          select(poly4_model))[[1]][[1]]
+                        mod_e$coefficients[[1]] <- res_co
+                        mod_e$coefficients[[2]] <- poly4_co1
+                        mod_e$coefficients[[3]] <- poly4_co2
+                        mod_e$coefficients[[4]] <- poly4_co3
+                        mod_e$coefficients[[5]] <- poly4_co4
+                        # Add the residual to the grid
+                        grid$res_co <- res_co
+                }
+                # Add the predictions (YTotal) to the grid (from grid X values) using the model
+                grid <- modelr::add_predictions(grid, mod, "pred") %>% as_tibble()
+                # Rename the grid X values
+                if( mdl %in% c('gam', 'poly4')){
+                        names(grid)[1] <- "grid_t_exercise_hour_sqrt"
+                        # Add the observed x values to the grid dataframe
+                        grid$specimen.collection.t_exercise_hour_sqrt <- 
+                                 sub_data$specimen.collection.t_exercise_hour_sqrt
+                }else if( mdl %in% c('sin')){
+                        names(grid)[1] <- "grid_t_death_hour"
+                        # Add the observed x values to the grid dataframe
+                        grid$grid_t_death_hour <- round(grid$grid_t_death_hour, digits = 1)
+                        grid$specimen.collection.t_death_hour_mc <- 
+                                sub_data$specimen.collection.t_death_hour_mc
+                }else if( mdl %in% c('ce2')){
+                        # Add additional predictions
+                        grid <- modelr::add_predictions(grid, mod_c, "pred_c") %>% as_tibble()
+                        grid <- modelr::add_predictions(grid, mod_e, "pred_e") %>% as_tibble()
+                        names(grid)[1] <- 'grid_t_exercise_hour_sqrt'
+                        names(grid)[2] <- 'grid_t_death_hour'
+                        # Add the observed x values to the grid dataframe
+                        grid$specimen.collection.t_exercise_hour_sqrt <- 
+                                sub_data$specimen.collection.t_exercise_hour_sqrt
+                        grid$grid_t_death_hour <- round(grid$grid_t_death_hour, digits = 1)
+                        grid$specimen.collection.t_death_hour_mc <- 
+                                sub_data$specimen.collection.t_death_hour_mc
+                }
+                # Add the observed count values to the grid dataframe
+                grid$count <- sub_data$count
+                # Add additional annotation
+                grid$animal.key.anirandgroup <- factor(sub_data$animal.key.anirandgroup, 
+                                                       levels = ec_levels)
+                grid$animal.registration.sex <- sub_data$animal.registration.sex
+                # ggplot() +
+                #         geom_point(data = grid,
+                #                    aes(x = specimen.collection.t_exercise_hour_sqrt, y = count)) +
+                #         geom_point(data = grid,
+                #                    aes(x = grid_t_exercise_hour_sqrt, y = pred), 
+                #                        color = 'blue')
+                        # geom_point(data = grid,
+                        #            aes(x = grid_t_exercise_hour_sqrt, y = pred_c, 
+                        #                color = 'red')) +
+                        # geom_point(data = grid,
+                        #         aes(x = grid_t_exercise_hour_sqrt, y = pred_e, 
+                        #                 color = 'green'))
+                # ggplot() +
+                #         geom_point(data = grid,
+                #                    aes(x = specimen.collection.t_death_hour_mc, y = count)) +
+                #         geom_point(data = grid,
+                #                    aes(x = grid_t_death_hour, y = pred),
+                #                        color = 'blue') +
+                #         geom_point(data = grid,
+                #                    aes(x = grid_t_death_hour, y = pred_c),
+                #                        color = 'red') +
+                #         geom_point(data = grid,
+                #                    aes(x = grid_t_death_hour, y = pred_e),
+                #                    color = 'green')
+                pred_list[[model_pred]][[g]] <- grid
+        }
+        #Add the predictions from the model to an object in the top tibble
+        by_gene_df <- by_gene_df %>%
+                mutate(!!model_pred := pred_list[[model_pred]])
+        # Per gene visualization
+        for( g in genes){
+                # Visualize the GAM model by gene
+                model_pred_df <- by_gene_df %>%
+                        select(ENSEMBL_RAT, SYMBOL_RAT, !!model_pred) %>%
+                        ungroup() %>%
+                        filter(ENSEMBL_RAT == g) %>%
+                        unnest(!!model_pred)
+                # Collect the Control 7 hr data points
+                hr7_df <- by_gene_df7 %>%
+                        filter(ENSEMBL_RAT == g) %>%
+                        select(ENSEMBL_RAT, SYMBOL_RAT, data) %>%
+                        ungroup() %>%
+                        unnest(data) %>%
+                        filter(animal.key.anirandgroup == "Control - 7 hr") %>%
+                        select(ENSEMBL_RAT, SYMBOL_RAT, specimen.collection.t_exercise_hour_sqrt, 
+                       specimen.collection.t_death_hour_mc, count)
+                # Visualize the models
+                if(mdl %in% c('poly4')){
+                        # Raw counts with line
+                        ggplot() +
+                                geom_point(data = model_pred_df,
+                                           aes(x = specimen.collection.t_exercise_hour_sqrt, y = count,
+                                               color = animal.key.anirandgroup)) +
+                                scale_color_manual(values=ec_colors) +
+                                geom_line(data = model_pred_df,
+                                          aes(x = grid_t_exercise_hour_sqrt, pred),
+                                          size = 1, alpha = 0.6, color = "firebrick") +
+                                theme(legend.title = element_blank()) +
+                                ggtitle(
+                                        paste0(unique(model_pred_df$SYMBOL_RAT),
+                                               " in ",TISSUE,"\n",poly4_title)) +
+                                ylab("Counts (Normalized)") + 
+                                xlab("Square Root of Hours Post Exercise")
+                        # Raw counts with Line with control 7
+                        ggplot() +
+                                geom_point(data = model_pred_df,
+                                   aes(x = specimen.collection.t_exercise_hour_sqrt, y = count,
+                                   color = animal.key.anirandgroup)) +
+                        geom_point(data = hr7_df, 
+                                   mapping = aes(specimen.collection.t_exercise_hour_sqrt, count),
+                                   color = ec_colors[9]) +
+                        scale_color_manual(values=ec_colors, drop = FALSE) +
+                        geom_line(data = model_pred_df, 
+                                   aes(x = grid_t_exercise_hour_sqrt, pred), 
+                                   size = 1, alpha = 0.6, color = "firebrick") +
+                        theme(legend.title = element_blank()) +
+                                ggtitle(
+                                        paste0(unique(model_pred_df$SYMBOL_RAT),
+                                               " in ",TISSUE,"\n",poly4_title)) +
+                        ylab("Counts (Normalized)") + 
+                        xlab("Square Root of Hours Post Exercise")
+                       
+                        }else if(mdl %in% c('sin')){
+                                # Raw counts with line
+                                ggplot() +
+                                        geom_point(data = model_pred_df,
+                                           aes(x = specimen.collection.t_death_hour_mc, y = count,
+                                               color = animal.key.anirandgroup)) +
+                                        scale_color_manual(values=ec_colors) +
+                                        geom_line(data = model_pred_df, 
+                                          aes(x = grid_t_death_hour, pred), 
+                                          size = 1, alpha = 0.6, color = 'darkblue') +
+                                        theme(legend.title = element_blank()) +
+                                                ggtitle(
+                                                paste0(unique(model_pred_df$SYMBOL_RAT),
+                                                       " in ",TISSUE,"\n",sin_title)) +
+                                        ylab("Counts (Normalized)") + 
+                                        xlab("Hour of Death")
+                                        # Raw counts with Line with control 7
+                                        ggplot() +
+                                                geom_point(data = model_pred_df,
+                                                aes(x = specimen.collection.t_death_hour_mc, y = count,
+                                                    color = animal.key.anirandgroup)) +
+                                                geom_point(data = hr7_df, 
+                                                mapping = aes(specimen.collection.t_death_hour_mc, count),
+                                                color = ec_colors[9]) +
+                                                scale_color_manual(values=ec_colors, drop = F) +
+                                                geom_line(data = model_pred_df, 
+                                                aes(x = grid_t_death_hour, pred), 
+                                                size = 1, alpha = 0.6, color = 'darkblue') +
+                                                theme(legend.title = element_blank()) +
+                                                ggtitle(paste0(unique(model_pred_df$SYMBOL_RAT),
+                                                       " in ",TISSUE,"\n",sin_title)) +
+                                                ylab("Counts (Normalized)") + 
+                                                xlab("Hour of Death")
+                        }else if(mdl %in% c('ce2')){
+                                # Raw counts with line (TOD on x-axis)
+                                # ggplot() +
+                                #         geom_point(data = model_pred_df,
+                                #                    aes(x = specimen.collection.t_death_hour_mc, y = count,
+                                #                        color = animal.key.anirandgroup)) +
+                                #         geom_line(data = model_pred_df, 
+                                #                   aes(x = grid_t_death_hour, pred), 
+                                #                   size = 1, alpha = 0.6, color = 'blue') +
+                                #         theme(legend.title = element_blank()) +
+                                #         ggtitle(
+                                #                 paste0(unique(model_pred_df$SYMBOL_RAT),
+                                #                        " in ",TISSUE,"\n",ce2_title)) +
+                                #         ylab("Counts (Normalized)") + 
+                                #         xlab("Hour of Death")
+                                # # Raw counts with Line with control 7 (TOD on x-axis)
+                                # ggplot() +
+                                #         geom_point(data = model_pred_df,
+                                #                    aes(x = specimen.collection.t_death_hour_mc, y = count,
+                                #                        color = animal.key.anirandgroup)) +
+                                #         geom_point(data = hr7_df, 
+                                #         mapping = aes(specimen.collection.t_death_hour_mc, count),
+                                #         color = ec_colors[9]) +
+                                #         scale_color_manual(values=ec_colors, drop = F) +
+                                #         geom_line(data = model_pred_df, 
+                                #                   aes(x = grid_t_death_hour, pred), 
+                                #                   size = 1, alpha = 0.6, color = 'blue') +
+                                #         theme(legend.title = element_blank()) +
+                                #         ggtitle(
+                                #                 paste0(unique(model_pred_df$SYMBOL_RAT),
+                                #                        " in ",TISSUE,"\n",ce2_title)) +
+                                #         ylab("Counts (Normalized)") + 
+                                #         xlab("Hour of Death")
+                                # Ys from different model parts visualized (TOD on x-axis)
+                                rb_df_e <- data.frame(x = 10.8, y=11.1)
+                                ggplot() +
+                                        geom_point(data = model_pred_df,
+                                                   aes(x = specimen.collection.t_death_hour_mc, y = count,
+                                                       color = animal.key.anirandgroup)) +
+                                        geom_point(data = hr7_df, 
+                                                   mapping = aes(specimen.collection.t_death_hour_mc, 
+                                                                 count),color = ec_colors[9]) +
+                                        geom_line(data = model_pred_df, 
+                                                  aes(x = grid_t_death_hour, pred_c), 
+                                                  size = 1, alpha = 0.6, color = 'blue',
+                                                  stat = "smooth", method = "loess", se = F) +
+                                        geom_point(data = model_pred_df, 
+                                                  aes(x = grid_t_death_hour, pred_e), 
+                                                  size = 2, alpha = 1, color = "firebrick") +
+                                        geom_point(data = rb_df_e, 
+                                                   aes(x = x, y =y), 
+                                                   size = 2, alpha = 1, color = "firebrick") +
+                                        geom_abline(intercept = res_co, slope = 0, 
+                                                    linetype = "dashed", alpha = 0.8) +
+                                        scale_color_manual(values=ec_colors, drop = F) +
+                                        theme(legend.title = element_blank()) +
+                                        ggtitle(
+                                                paste0(unique(model_pred_df$SYMBOL_RAT),
+                                                       " in ",TISSUE,"\n",ce2_title)) +
+                                        ylab("Counts (Normalized)") + 
+                                        xlab("Hour of Death")
+                                
+                                # Raw counts with line (HPE on x-axis)
+                                # ggplot() +
+                                #         geom_point(data = model_pred_df,
+                                #                    aes(x = specimen.collection.t_exercise_hour_sqrt, 
+                                #                        y = count, color = animal.key.anirandgroup)) +
+                                #         geom_line(data = model_pred_df, 
+                                #                   aes(x = grid_t_exercise_hour_sqrt, pred), 
+                                #                   size = 1, alpha = 0.6, color = 'blue',
+                                #                   stat = "smooth", method = "loess", se = F) +
+                                #         theme(legend.title = element_blank()) +
+                                #         ggtitle(
+                                #                 paste0(unique(model_pred_df$SYMBOL_RAT),
+                                #                        " in ",TISSUE,"\n",ce2_title)) +
+                                #         ylab("Counts (Normalized)") + 
+                                #         xlab("Square Root of Hours Post Exercise")
+                                # # Raw counts with Line with control 7 (HPE on x-axis)
+                                # ggplot() +
+                                #         geom_point(data = model_pred_df,
+                                #                    aes(x = specimen.collection.t_exercise_hour_sqrt, 
+                                #                        y = count,color = animal.key.anirandgroup)) +
+                                #         geom_point(data = hr7_df, 
+                                #                    mapping = aes(specimen.collection.t_exercise_hour_sqrt,
+                                #                                  y = count), color = ec_colors[9]) +
+                                #         scale_color_manual(values=ec_colors, drop = F) +
+                                #         geom_line(data = model_pred_df, 
+                                #                   aes(x = grid_t_exercise_hour_sqrt, pred), 
+                                #                   size = 1, alpha = 0.6, color = 'blue',
+                                #                   stat = "smooth", method = "loess", se = F) +
+                                #         theme(legend.title = element_blank()) +
+                                #         ggtitle(
+                                #                 paste0(unique(model_pred_df$SYMBOL_RAT),
+                                #                        " in ",TISSUE,"\n",ce2_title)) +
+                                #         ylab("Counts (Normalized)") + 
+                                #         xlab("Square Root of Hours Post Exercise")
+                                # Ys from different model parts visualized (HPE on x-axis)
+                                rb_df_c <- data.frame(x = 0.0817, y=11.8)
+                                summary(mod)
+                                ggplot() +
+                                        geom_point(data = model_pred_df,
+                                                   aes(x = specimen.collection.t_exercise_hour_sqrt, 
+                                                       y = count,color = animal.key.anirandgroup)) +
+                                        geom_point(data = hr7_df, 
+                                                   mapping = aes(specimen.collection.t_exercise_hour_sqrt,
+                                                                 y = count), color = ec_colors[9]) +
+                                        scale_color_manual(values=ec_colors, drop = F) +
+                                        geom_point(data = rb_df_c,
+                                                   aes(x = x, y =y),
+                                                   size = 2, alpha = 1, color = "blue") +
+                                        geom_point(data = model_pred_df, 
+                                                  aes(x = grid_t_exercise_hour_sqrt, pred_c), 
+                                                  size = 2, alpha = 0.6, color = 'blue') +
+                                        geom_line(data = model_pred_df, 
+                                                  aes(x = grid_t_exercise_hour_sqrt, pred_e), 
+                                                  size = 1, alpha = 0.6, color = 'firebrick',
+                                                  stat = "smooth", method = "loess", se = F) +
+                                        geom_abline(intercept = res_co, slope = 0, 
+                                                    linetype = "dashed", alpha = 0.8) +
+                                        theme(legend.title = element_blank()) +
+                                        ggtitle(
+                                                paste0(unique(model_pred_df$SYMBOL_RAT),
+                                                       " in ",TISSUE,"\n",ce2_title)) +
+                                        ylab("Counts (Normalized)") + 
+                                        xlab("Square Root of Hours Post Exercise")
+                        }
+        }
+
+
+
+
+# Raw counts with Line with control 7
+ec_pred_df %>%
+        ggplot(aes(specimen.collection.t_exercise_hour_sqrt, count), 
+               color = ENSEMBL_RAT) +
+        geom_point() +
+        geom_line(data = ec_pred_df, 
+                  aes(grid_t_exercise_hour_sqrt_jit, pred), 
+                  size = 1, alpha = 0.8, color = "blue") +
+        geom_point(data = ec_hr7_df, 
+                   mapping = aes(specimen.collection.t_exercise_hour_sqrt, count),
+                   color = "red") +
+        theme(legend.position = "none") +
+        ggtitle(
+                paste0("Expression of ",
+                       unique(ec_pred_df$SYMBOL_RAT),
+                       ":\nExercise Groups & Control IPE (",TISSUE,")")) +
+        ylab("Expression (Transformed/Normalized)") + 
+        xlab("Hours Post Acute Exercise (Transformed)") +
+        geom_vline(xintercept = 0, linetype = "dashed", alpha = 0.5)
+ec_mod
+# Raw counts with Line with control 7
+ec_pred_df %>%
+        ggplot(aes(specimen.collection.t_death_hour_mc, count), 
+               color = ENSEMBL_RAT) +
+        geom_point() +
+        geom_line(data = ec_pred_df, 
+                  aes(grid_t_death_hour, pred), 
+                  size = 1, alpha = 0.8, color = "orange") +
+        geom_point(data = ec_hr7_df, 
+                   mapping = aes(specimen.collection.t_death_hour_mc, count),
+                   color = "red") +
+        theme(legend.position = "none") +
+        ggtitle(
+                paste0("Expression of ",
+                       unique(ec_pred_df$SYMBOL_RAT),
+                       ":\nExercise Groups & Control IPE (",TISSUE,")")) +
+        ylab("Expression (Transformed/Normalized)") + 
+        xlab("Time of Death (Hour)")
+
+# Combined Model (CE)
+########################
+# Visualize the raw counts, model predictions, and control 7 counts (x=Hours Post Exercise)
+# Collect the Control 7 hr data points
+ce_hr7_df <- by_gene_df7 %>%
+        filter(ENSEMBL_RAT == ce_gene) %>%
+        select(ENSEMBL_RAT, SYMBOL_RAT, data) %>%
+        ungroup() %>%
+        unnest(data) %>%
+        select(ENSEMBL_RAT, SYMBOL_RAT, 
+               specimen.collection.t_exercise_hour_sqrt,
+               specimen.collection.t_death_hour_mc, count)
+# Collect the Control 0 hr data points
+ce_hr1_df <- by_gene_df %>%
+        filter(ENSEMBL_RAT == ce_gene) %>%
+        select(ENSEMBL_RAT, SYMBOL_RAT, data) %>%
+        ungroup() %>%
+        unnest(data) %>% 
+        filter(animal.key.anirandgroup == "Control - IPE") %>%
+        select(ENSEMBL_RAT, SYMBOL_RAT, 
+               specimen.collection.t_exercise_hour_sqrt,
+               specimen.collection.t_death_hour_mc, count)
+
+# Raw counts with Line with control 7
+ce_pred_df %>%
+        ggplot(aes(specimen.collection.t_exercise_hour_sqrt, count), 
+               color = ENSEMBL_RAT) +
+        geom_point() +
+        geom_line(data = ce_pred_df, 
+                  aes(grid_t_exercise_hour_sqrt_jit, pred), 
+                  size = 1, alpha = 0.8, color = "blue") +
+        geom_point(data = ce_hr7_df, 
+                   mapping = aes(specimen.collection.t_exercise_hour_sqrt, count),
+                   color = "red") +
+        theme(legend.position = "none") +
+        ggtitle(
+                paste0("Expression of ",
+                       unique(ce_pred_df$SYMBOL_RAT),
+                       ":\nExercise Groups & Control IPE (",TISSUE,")")) +
+        ylab("Expression (Transformed/Normalized)") + 
+        xlab("Hours Post Acute Exercise (Transformed)") +
+        geom_vline(xintercept = 0, linetype = "dashed", alpha = 0.5)
+ce_mod
+# Raw counts with Line with control 7
+ce_pred_df %>%
+        ggplot(aes(specimen.collection.t_death_hour_mc, count), 
+               color = ENSEMBL_RAT) +
+        geom_point() +
+        geom_line(data = ce_pred_df, 
+                  aes(grid_t_death_hour, pred), 
+                  size = 1, alpha = 0.8, color = "orange") +
+        geom_point(data = ce_hr7_df, 
+                   mapping = aes(specimen.collection.t_death_hour_mc, count),
+                   color = "red") +
+        theme(legend.position = "none") +
+        ggtitle(
+                paste0("Expression of ",
+                       unique(ce_pred_df$SYMBOL_RAT),
+                       ":\nExercise Groups & Control IPE (",TISSUE,")")) +
+        ylab("Expression (Transformed/Normalized)") + 
+        xlab("Time of Death (Hour)")
+
+
+
+################################################################################
+
+
+
+
+
+
+
+
 
 # View(pve_df %>% select(pve_ce2_e,pve_ec2_e))
 # Load and join the Manova file
@@ -981,7 +1628,7 @@ d <- bin_df %>%
 # PVE (between models)
 p <- ggplot() +
         geom_point(data = d, 
-                   aes(x = pve_e, y= pve_c, color = BIN_TYPE), 
+                   aes(x = pve_e2, y= pve_c, color = BIN_TYPE), 
                    alpha = 0.5) +
         # geom_density_2d_filled(data = d, 
         #                        aes(x = GAM1_R2, y= SIN1_R2), alpha = 0.5) +
@@ -992,7 +1639,7 @@ p <- ggplot() +
         geom_abline(intercept = 0, slope = 1) +
         geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
         geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
-        xlab("PVE Natural Spline Model (Exercise)") +
+        xlab("PVE Polynomial (degree 4) Model (Exercise)") +
         ylab("PVE SIN/COS Model (Circadian)") +
         ggtitle("Circadian vs. Exercise:\nPVE Comparisons Between Models") +
         theme_bw() +
@@ -1014,25 +1661,105 @@ dev.off()
 
 
 
+s<- d %>%
+        filter(BIN_TYPE_ce == 'Exercise') %>%
+        select(SYMBOL_RAT)
+write.table(s, file = '~/test.txt', quote = F, sep = '\n', row.names = F)
+
+#packages = c('ggtern', 'plotly', 'readr', 'dplyr', 'tidyr')
+#Building the static ternary plot
+ggtern(data=d,aes(x=pve_ce2_e,y=pve_ce2_c, z=pve_ce2_r)) +
+        geom_point() +
+        labs(title="Percent Variance Explained") +
+        theme_rgbw()
+
+dt <- d %>%
+        arrange(xx) %>%
+        data.table(val = dt$pve_ce2_e)
+setattr(dt, "sorted", "pve_ce2_e")
+
+d <- d %>% arrange(pve_ce2_e)
+yn <- d$xx[1003]
+d$xx_c <- 1000
+f <- d
+length(symbol_count)
+symbol_count <- c()
+for(yn in d$xx){
+        f <- d %>% filter(ENSEMBL_RAT %!in% symbol_count)
+        ( symbol <- f[abs(f$pve_ce2_e-yn)==min(abs(f$pve_ce2_e-yn)),]$ENSEMBL_RAT )
+        yn
+        d <- d %>% 
+                mutate(xx_c = ifelse(ENSEMBL_RAT == symbol, yn, xx_c))
+        symbol_count <- c(symbol_count, symbol)
+}
+d <- d %>% arrange(pve_ce2_c)
+for(yn in d$yy){
+        rn <- which(abs(d$pve_ce2_c-yn)==min(abs(d$pve_ce2_c-yn)))
+        # matched_pve <- max(d[rn,]$pve_ce2_c)
+        # oldnum <- max(d[rn,]$yy)
+        d[rn,]$yy <- yn
+}
+d %>% slice(1000:1010) %>% select(pve_ce2_e, xx_c)
+
+
+d <- d %>%
+        mutate(tt = (seq(0,0.5*pi,length.out = nrow(d)))) %>%
+        mutate(xx = 0 + 0.2 * cos(tt)) %>%
+        mutate(yy = 0 + 0.2 * sin(tt)) %>%
+        mutate(BIN_TYPE_ce = ifelse((pve_ce2_e < xx & pve_ce2_c < yy), 'Ambiguous_Low', 'Other'))
+
+d %>%
+        select(pve_ce2_e, xx, pve_ce2_c, yy)
+
+
+#Get the list of numbers, gene symbols and gene description
+names <- keggGet("rno04710")[[1]]$GENE
+#Delete the gene number by deleting every other line
+namesodd <-  names[seq(0,length(names),2)]
+#Create a substring deleting everything after the ; on each line (this deletes the gene description).
+circ_kegg <- gsub("\\;.*","",namesodd)
+circ_kegg[31] <- 'LOC100363500'
+#Annotate genes in kegg list
+d <- d %>%
+        mutate(rno04710 = factor(ifelse(SYMBOL_RAT %in% circ_kegg, '1', '0'),
+                                 levels = c('1','0'))) 
+# Circadian Genes 
+in_file <- paste0(WD,'/data/20200503_rnaseq-circadian-',TIS,'-mouse-rat-ortho_steep-yan.txt')
+circ_df <- read.table(file=in_file, sep = '\t', header = TRUE)
+circ_yan <- circ_df %>%
+        filter(NUM.TISSUE >= 4) %>%
+        select(SYMBOL_RAT) %>% unlist() %>% as.character()
+d <- d %>%
+        mutate(yan_circ = factor(ifelse(SYMBOL_RAT %in% circ_yan, '1', '0'),
+                                 levels = c('1','0'))) 
 
 # PVE (within models -- circadian first)
 p <- ggplot() +
         geom_point(data = d, 
-                   aes(x = pve_ce_e, y= pve_ce_c, color = BIN_TYPE), 
-                   alpha = 0.8) +
+                   aes(x = pve_ce2_e, y= pve_ce2_c, color = BIN_TYPE_ce), 
+                   alpha = 0.1) +
+        # geom_point(data = filter(d, circ_yan == '1'), 
+        #            aes(x = pve_ce2_e, y= pve_ce2_c), 
+        #            alpha = 1) +
+        # geom_text_repel(data = filter(d, circ_yan == '1'),
+        #                 aes(x = pve_ce2_e, y= pve_ce2_c, label = SYMBOL_RAT),
+        #                 hjust=0, vjust=0) +
+        geom_path(data = circleFun(c(0,0),0.40,npoints = 1000), aes(x,y)) +
         # geom_density_2d_filled(data = d, 
         #                        aes(x = GAM1_R2, y= SIN1_R2), alpha = 0.5) +
         # geom_density_2d(data = d, 
         #                 aes(x = GAM1_R2, y= SIN1_R2), 
         #                 size = 0.25, colour = "black") +
         xlim(0,1) + ylim(0,1) +
-        geom_abline(intercept = 0, slope = 1) +
-        geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
-        geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
+        geom_abline(intercept = 0, slope = 2, linetype = 'dashed') +
+        geom_abline(intercept = 0, slope = 1, linetype = 'dashed') +
+        geom_abline(intercept = 0, slope = 0.5, linetype = 'dashed') +
+        # geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
+        # geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
         xlab("PVE Exercise") +
         ylab("PVE Circadian") +
         ggtitle("Circadian vs. Exercise:\nPVE Comparisons within Model") +
-        theme_bw() +
+        # theme_bw() +
         theme(strip.text = element_text(size=18),
               axis.text.x = element_text(size = 16),
               axis.text.y = element_text(size = 14),
@@ -1040,19 +1767,19 @@ p <- ggplot() +
               axis.title.y = element_text(size = 20),
               legend.text = element_text(size = 16)) +
         facet_wrap(vars(TISSUE)) +
-        scale_color_manual(values = c('Ambiguous_High' = "red",
-                                      'Ambiguous_Low' = "grey",
-                                      'Circadian' = "green",
-                                      'Exercise' = 'blue')) +
+        # scale_color_manual(values = c('Ambiguous_High' = "red",
+        #                               'Ambiguous_Low' = "grey",
+        #                               'Circadian' = "green",
+        #                               'Exercise' = 'blue')) +
         coord_equal()
-pdf(paste0(WD,'/plots/20200628_rnaseq-kidney-faceted-theoretical-bins-ce_steep.pdf'),width=26,height=14)
+# pdf(paste0(WD,'/plots/20200628_rnaseq-kidney-faceted-theoretical-bins-ce_steep.pdf'),width=26,height=14)
 plot(p)
-dev.off()
+# dev.off()
 
 # PVE (within models -- exercise first)
 p <- ggplot() +
         geom_point(data = d, 
-                   aes(x = pve_ec_e, y= pve_ec_c, color = BIN_TYPE), 
+                   aes(x = pve_ec2_e, y= pve_ec2_c, color = BIN_TYPE), 
                    alpha = 0.8) +
         # geom_density_2d_filled(data = d, 
         #                        aes(x = GAM1_R2, y= SIN1_R2), alpha = 0.5) +
@@ -1212,592 +1939,6 @@ bin_df %>%
 
 
 
-# Visualize models on single gene
-################################################################################
-#################   Visualize models on single gene  ###########################
-################################################################################
-
-# Arrange the dataframe by model R2
-row_order <- by_gene_df %>%
-        unnest(sin_metrics) %>%
-        arrange(desc(adj.r.squared)) %>%
-        select(ENSEMBL_RAT) %>% 
-        unlist() %>% as.character()
-by_gene_df <- by_gene_df %>%
-        ungroup() %>%
-        arrange(factor(ENSEMBL_RAT, levels = row_order))
-
-# Add the predictions (GAM model)
-genes <- by_gene_df$ENSEMBL_RAT %>% as.character() %>% unique()
-# Must be true
-all(genes == by_gene_df$ENSEMBL_RAT)
-gam_pred <- list()
-i <- 1
-for( g in genes){
-        # Subset the dataframe by gene
-        sub_data <- (by_gene_df %>% 
-                             filter(ENSEMBL_RAT == g) %>%
-                             ungroup() %>%
-                             select(data))[[1]] %>% as.data.frame()
-        # Generate a grid
-        grid <- data.frame(specimen.collection.t_exercise_hour_sqrt = 
-                                   modelr::seq_range(
-                                           sub_data$specimen.collection.t_exercise_hour_sqrt, n = length(sub_data$specimen.collection.t_exercise_hour_sqrt)))
-        #grid$ENSEMBL_RAT <- g
-        mod <- (by_gene_df %>% 
-                        filter(ENSEMBL_RAT == g) %>% ungroup() %>% 
-                        select(gam_model))[[1]][[1]]
-        summary(mod)
-        grid <- modelr::add_predictions(grid, mod, "pred") %>% as_tibble()
-        names(grid)[1] <- "grid_t_exercise_hour_sqrt_jit"
-        grid$specimen.collection.t_exercise_hour_sqrt <- 
-                sub_data$specimen.collection.t_exercise_hour_sqrt
-        grid$count <- sub_data$count
-        gam_pred[[i]] <- grid
-        i <- i + 1
-}
-by_gene_df$gam_pred <- gam_pred
-
-# Add the predictions (poly model)
-genes <- by_gene_df$ENSEMBL_RAT %>% as.character() %>% unique()
-# Must be true
-all(genes == by_gene_df$ENSEMBL_RAT)
-poly4_pred <- list()
-i <- 1
-for( g in genes){
-        # Subset the dataframe by gene
-        sub_data <- (by_gene_df %>% 
-                             filter(ENSEMBL_RAT == g) %>%
-                             ungroup() %>%
-                             select(data))[[1]] %>% as.data.frame()
-        # Generate a grid
-        grid <- data.frame(specimen.collection.t_exercise_hour_sqrt = 
-                                   modelr::seq_range(
-                                           sub_data$specimen.collection.t_exercise_hour_sqrt, n = length(sub_data$specimen.collection.t_exercise_hour_sqrt)))
-        #grid$ENSEMBL_RAT <- g
-        mod <- (by_gene_df %>% 
-                        filter(ENSEMBL_RAT == g) %>% ungroup() %>% 
-                        select(poly4_model))[[1]][[1]]
-        summary(mod)
-        grid <- modelr::add_predictions(grid, mod, "pred") %>% as_tibble()
-        names(grid)[1] <- "grid_t_exercise_hour_sqrt_jit"
-        grid$specimen.collection.t_exercise_hour_sqrt <- 
-                sub_data$specimen.collection.t_exercise_hour_sqrt
-        grid$count <- sub_data$count
-        poly4_pred[[i]] <- grid
-        i <- i + 1
-}
-by_gene_df$poly4_pred <- poly4_pred
-
-# Add the predictions (SIN Model)
-genes <- by_gene_df$ENSEMBL_RAT %>% as.character() %>% unique()
-# Must be true
-all(genes == by_gene_df$ENSEMBL_RAT)
-sin_pred <- list()
-i <- 1
-for( g in genes){
-        # Subset the dataframe by gene
-        sub_data <- (by_gene_df %>% 
-                             filter(ENSEMBL_RAT == g) %>%
-                             ungroup() %>%
-                             select(data))[[1]] %>% as.data.frame()
-        # Generate a grid
-        grid <- data.frame(specimen.collection.t_death_hour = 
-                                   modelr::seq_range(
-                                           sub_data$specimen.collection.t_death_hour, 
-                                           n = length(sub_data$specimen.collection.t_exercise_hour_sqrt)))
-        #grid$ENSEMBL_RAT <- g
-        mod <- (by_gene_df %>% 
-                        filter(ENSEMBL_RAT == g) %>% ungroup() %>% 
-                        select(sin_model))[[1]][[1]]
-        summary(mod)
-        grid <- modelr::add_predictions(grid, mod, "pred") %>% as_tibble()
-        names(grid)[1] <- "grid_t_death_hour"
-        grid$grid_t_death_hour <- round(grid$grid_t_death_hour, digits = 1)
-        grid$specimen.collection.t_death_hour <- 
-                sub_data$specimen.collection.t_death_hour
-        grid$count <- sub_data$count
-        sin_pred[[i]] <- grid
-        i <- i + 1
-}
-by_gene_df$sin_pred <- sin_pred
-
-# Add the predictions (EC Model)
-genes <- by_gene_df$ENSEMBL_RAT %>% as.character() %>% unique()
-# Must be true
-all(genes == by_gene_df$ENSEMBL_RAT)
-ec_pred <- list()
-i <- 1
-for( g in genes){
-        # Subset the dataframe by gene
-        sub_data <- (by_gene_df %>% 
-                             filter(ENSEMBL_RAT == g) %>%
-                             ungroup() %>%
-                             select(data))[[1]] %>% as.data.frame()
-        # Generate a grid
-        # Generate a grid
-        grid <- data.frame(specimen.collection.t_exercise_hour_sqrt = 
-                                   modelr::seq_range(
-                                           sub_data$specimen.collection.t_exercise_hour_sqrt, n = length(sub_data$specimen.collection.t_exercise_hour_sqrt)),
-                            specimen.collection.t_death_hour = 
-                                    modelr::seq_range(
-                                            sub_data$specimen.collection.t_death_hour, 
-                                            n = length(sub_data$specimen.collection.t_exercise_hour_sqrt)))
-        
-        #grid$ENSEMBL_RAT <- g
-        mod <- (by_gene_df %>% 
-                        filter(ENSEMBL_RAT == g) %>% ungroup() %>% 
-                        select(ec_model))[[1]][[1]]
-        summary(mod)
-        grid <- modelr::add_predictions(grid, mod, "pred") %>% as_tibble()
-        names(grid) <- c('grid_t_exercise_hour_sqrt_jit',
-                         'grid_t_death_hour','pred')
-        grid$specimen.collection.t_exercise_hour_sqrt <- 
-                sub_data$specimen.collection.t_exercise_hour_sqrt
-        grid$grid_t_death_hour <- round(grid$grid_t_death_hour, digits = 1)
-        grid$specimen.collection.t_death_hour <- 
-                sub_data$specimen.collection.t_death_hour
-        grid$count <- sub_data$count
-        ec_pred[[i]] <- grid
-        i <- i + 1
-}
-by_gene_df$ec_pred <- ec_pred
-
-# Add the predictions (EC Model)
-genes <- by_gene_df$ENSEMBL_RAT %>% as.character() %>% unique()
-# Must be true
-all(genes == by_gene_df$ENSEMBL_RAT)
-ce_pred <- list()
-i <- 1
-for( g in genes){
-        # Subset the dataframe by gene
-        sub_data <- (by_gene_df %>% 
-                             filter(ENSEMBL_RAT == g) %>%
-                             ungroup() %>%
-                             select(data))[[1]] %>% as.data.frame()
-        # Generate a grid
-        # Generate a grid
-        grid <- data.frame(specimen.collection.t_exercise_hour_sqrt = 
-                                   modelr::seq_range(
-                                           sub_data$specimen.collection.t_exercise_hour_sqrt, n = length(sub_data$specimen.collection.t_exercise_hour_sqrt)),
-                           specimen.collection.t_death_hour = 
-                                   modelr::seq_range(
-                                           sub_data$specimen.collection.t_death_hour, 
-                                           n = length(sub_data$specimen.collection.t_exercise_hour_sqrt)))
-        
-        #grid$ENSEMBL_RAT <- g
-        mod <- (by_gene_df %>% 
-                        filter(ENSEMBL_RAT == g) %>% ungroup() %>% 
-                        select(ce_model))[[1]][[1]]
-        summary(mod)
-        grid <- modelr::add_predictions(grid, mod, "pred") %>% as_tibble()
-        names(grid) <- c('grid_t_exercise_hour_sqrt_jit',
-                         'grid_t_death_hour','pred')
-        grid$specimen.collection.t_exercise_hour_sqrt <- 
-                sub_data$specimen.collection.t_exercise_hour_sqrt
-        grid$grid_t_death_hour <- round(grid$grid_t_death_hour, digits = 1)
-        grid$specimen.collection.t_death_hour <- 
-                sub_data$specimen.collection.t_death_hour
-        grid$count <- sub_data$count
-        ce_pred[[i]] <- grid
-        i <- i + 1
-}
-by_gene_df$ce_pred <- ce_pred
-
-gene_n <- 1
-# Visualize the GAM model by gene
-gam_pred_df <- by_gene_df %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, data, gam_model, gam_pred) %>%
-        ungroup() %>%
-        filter(row_number() == gene_n) %>%
-        unnest(gam_pred)
-gam_gene <- unique(gam_pred_df$ENSEMBL_RAT) %>% as.character()
-# Visualize the Poly model by gene
-poly4_pred_df <- by_gene_df %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, data, poly4_model, poly4_pred) %>%
-        ungroup() %>%
-        filter(row_number() == gene_n) %>%
-        unnest(poly4_pred)
-poly4_gene <- unique(poly4_pred_df$ENSEMBL_RAT) %>% as.character()
-# Visualize the SIN model by gene
-sin_pred_df <- by_gene_df %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, data, sin_model, sin_pred) %>%
-        ungroup() %>%
-        filter(row_number() == gene_n) %>%
-        unnest(sin_pred)
-sin_gene <- unique(sin_pred_df$ENSEMBL_RAT) %>% as.character()
-# Visualize the EC model by gene
-ec_pred_df <- by_gene_df %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, data, ec_model, ec_pred) %>%
-        ungroup() %>%
-        filter(row_number() == gene_n) %>%
-        unnest(ec_pred)
-ec_gene <- unique(ec_pred_df$ENSEMBL_RAT) %>% as.character()
-# Visualize the CE model by gene
-ce_pred_df <- by_gene_df %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, data, ce_model, ce_pred) %>%
-        ungroup() %>%
-        filter(row_number() == gene_n) %>%
-        unnest(ce_pred)
-ce_gene <- unique(ce_pred_df$ENSEMBL_RAT) %>% as.character()
-
-# Must be true
-gam_gene == sin_gene
-
-# Collect the Control 7 hr data points
-gam_hr7_df <- by_gene_df7 %>%
-        filter(ENSEMBL_RAT == gam_gene) %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, data) %>%
-        ungroup() %>%
-        unnest(data) %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, specimen.collection.t_exercise_hour_sqrt, count)
-# Collect the Control 0 hr data points
-gam_hr1_df <- by_gene_df %>%
-        filter(ENSEMBL_RAT == gam_gene) %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, data) %>%
-        ungroup() %>%
-        unnest(data) %>% 
-        filter(animal.key.anirandgroup == "Control - IPE") %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, specimen.collection.t_exercise_hour_sqrt, count)
-
-# Collect the hours of death that occur for each exercise group
-sac_hrs <- sort(unique(round(tod_cols$specimen.collection.t_death_hour, digits = 1)))
-#names(tod_cols)
-#e_df <- tod_cols %>%
-#        select(specimen.collection.t_death_hour, specimen.collection.t_exercise_hour_sqrt) %>%
-#        arrange(specimen.collection.t_death_hour)
-#e_df$specimen.collection.t_death_hour <- round(e_df$specimen.collection.t_death_hour, digits = 1)
-
-# Perform a second prediction (for hour post exercise -- predictions from SIN Model)
-sin_pred_hour <- sin_pred_df %>%
-        filter(round(grid_t_death_hour, digits = 1) %in% sac_hrs) %>%
-        mutate(grid_t_exercise_hour = case_when(grid_t_death_hour == 9.9 ~ -0.01666667,
-                                                grid_t_death_hour == 10.0 ~ -0.01666667,
-                                                grid_t_death_hour == 10.2 ~ -0.01666667,
-                                                grid_t_death_hour == 10.3 ~ -0.01666667,
-                                                grid_t_death_hour == 10.6 ~ 0.08164966,
-                                                grid_t_death_hour == 10.9 ~ 0.08164966,
-                                                grid_t_death_hour == 11.2 ~ 0.11547005,
-                                                grid_t_death_hour == 11.6 ~ 0.11547005,
-                                                grid_t_death_hour == 11.9 ~ 0.01178511,
-                                                grid_t_death_hour == 12.2 ~ 0.01178511,
-                                                grid_t_death_hour == 12.3 ~ 0.01178511,
-                                                grid_t_death_hour == 13.2 ~ 0.00000000,
-                                                grid_t_death_hour == 13.3 ~ 0.00000000,
-                                                grid_t_death_hour == 13.6 ~ 0.00000000,
-                                                grid_t_death_hour == 13.9 ~ 0.01666667,
-                                                grid_t_death_hour == 14.2 ~ 0.01666667,
-                                                grid_t_death_hour == 14.3 ~ 0.01666667,
-                                                grid_t_death_hour == 14.6 ~ 0.03333333,
-                                                grid_t_death_hour == 14.9 ~ 0.03333333,
-                                                grid_t_death_hour == 16.9 ~ 0.04409586,
-                                                grid_t_death_hour == 17.2 ~ 0.04409586,
-                                                grid_t_death_hour == 17.3 ~ 0.04409586,
-                                                grid_t_death_hour == 17.6 ~ 0.04409586,
-                                                grid_t_death_hour == 17.9 ~ 0.04409586))
-
-# ns4 Model
-##############################
-# Visualize the raw counts, model predictions, and control 7 counts (x=Hours Post Exercise)
-# Raw counts
-gam_pred_df %>%
-        ggplot(aes(specimen.collection.t_exercise_hour_sqrt, count), 
-               color = ENSEMBL_RAT) +
-        geom_point() +
-        theme(legend.position = "none") +
-        ggtitle(
-                paste0("Expression of ",
-                       unique(gam_pred_df$SYMBOL_RAT),
-                       ":\nExercise Groups & Control IPE (",TISSUE,")")) +
-        ylab("Expression (Transformed/Normalized)") + 
-        xlab("Hours Post Acute Exercise (Transformed)") +
-        geom_vline(xintercept = 0, linetype = "dashed", alpha = 0.5)
-# Raw counts with Line
-gam_pred_df %>%
-        ggplot(aes(specimen.collection.t_exercise_hour_sqrt, count), 
-               color = ENSEMBL_RAT) +
-        geom_point() +
-        geom_line(data = gam_pred_df, 
-                  aes(grid_t_exercise_hour_sqrt_jit, pred), 
-                  size = 1, alpha = 0.8, color = "blue") +
-        theme(legend.position = "none") +
-        ggtitle(
-                paste0("Expression of ",
-                       unique(gam_pred_df$SYMBOL_RAT),
-                       ":\nExercise Groups & Control IPE (",TISSUE,")")) +
-        ylab("Expression (Transformed/Normalized)") + 
-        xlab("Hours Post Acute Exercise (Transformed)") +
-        geom_vline(xintercept = 0, linetype = "dashed", alpha = 0.5)
-# Raw counts with Line with control 7
-gam_pred_df %>%
-        ggplot(aes(specimen.collection.t_exercise_hour_sqrt, count), 
-               color = ENSEMBL_RAT) +
-        geom_point() +
-        geom_line(data = gam_pred_df, 
-                  aes(grid_t_exercise_hour_sqrt_jit, pred), 
-                  size = 1, alpha = 0.8, color = "blue") +
-        geom_point(data = gam_hr7_df, 
-                   mapping = aes(specimen.collection.t_exercise_hour_sqrt, count),
-                   color = "red") +
-        theme(legend.position = "none") +
-        ggtitle(
-                paste0("Expression of ",
-                       unique(gam_pred_df$SYMBOL_RAT),
-                       ":\nExercise Groups & Control IPE (",TISSUE,")")) +
-        ylab("Expression (Transformed/Normalized)") + 
-        xlab("Hours Post Acute Exercise (Transformed)") +
-        geom_vline(xintercept = 0, linetype = "dashed", alpha = 0.5)
-# Raw counts with Line with control 7 and control 0
-gam_pred_df %>%
-        ggplot(aes(specimen.collection.t_exercise_hour_sqrt, count), 
-               color = ENSEMBL_RAT) +
-        geom_point(color = "red", alpha = 1) +
-        geom_line(data = gam_pred_df, 
-                  aes(grid_t_exercise_hour_sqrt_jit, pred), 
-                  size = 1, alpha = 0.8, color = "blue") +
-        geom_point(data = gam_hr7_df, 
-                   mapping = aes(specimen.collection.t_exercise_hour_sqrt, count),
-                   color = "blue") +
-        geom_point(data = gam_hr1_df, 
-                   mapping = aes(specimen.collection.t_exercise_hour_sqrt, count),
-                   color = "blue") +
-        theme(legend.position = "none") +
-        ggtitle(
-                paste0("Expression of ",
-                       unique(gam_pred_df$SYMBOL_RAT),
-                       ":\nExercise Groups & Control IPE (",TISSUE,")")) +
-        ylab("Expression (Transformed/Normalized)") + 
-        xlab("Hours Post Acute Exercise (Transformed)") +
-        geom_vline(xintercept = 0, linetype = "dashed", alpha = 0.5)
-
-# Polynomial Model
-########################
-# Visualize the raw counts, model predictions, and control 7 counts (x=Hours Post Exercise)
-# Collect the Control 7 hr data points
-poly4_hr7_df <- by_gene_df7 %>%
-        filter(ENSEMBL_RAT == poly4_gene) %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, data) %>%
-        ungroup() %>%
-        unnest(data) %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, specimen.collection.t_exercise_hour_sqrt, count)
-# Collect the Control 0 hr data points
-poly4_hr1_df <- by_gene_df %>%
-        filter(ENSEMBL_RAT == poly4_gene) %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, data) %>%
-        ungroup() %>%
-        unnest(data) %>% 
-        filter(animal.key.anirandgroup == "Control - IPE") %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, specimen.collection.t_exercise_hour_sqrt, count)
-
-# Raw counts with Line with control 7
-poly4_pred_df %>%
-        ggplot(aes(specimen.collection.t_exercise_hour_sqrt, count), 
-               color = ENSEMBL_RAT) +
-        geom_point() +
-        geom_line(data = poly4_pred_df, 
-                  aes(grid_t_exercise_hour_sqrt_jit, pred), 
-                  size = 1, alpha = 0.8, color = "blue") +
-        geom_point(data = poly4_hr7_df, 
-                   mapping = aes(specimen.collection.t_exercise_hour_sqrt, count),
-                   color = "red") +
-        theme(legend.position = "none") +
-        ggtitle(
-                paste0("Expression of ",
-                       unique(poly4_pred_df$SYMBOL_RAT),
-                       ":\nExercise Groups & Control IPE (",TISSUE,")")) +
-        ylab("Expression (Transformed/Normalized)") + 
-        xlab("Hours Post Acute Exercise (Transformed)") +
-        geom_vline(xintercept = 0, linetype = "dashed", alpha = 0.5)
-
-# Combined Model (EC)
-########################
-# Visualize the raw counts, model predictions, and control 7 counts (x=Hours Post Exercise)
-# Collect the Control 7 hr data points
-ec_hr7_df <- by_gene_df7 %>%
-        filter(ENSEMBL_RAT == ec_gene) %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, data) %>%
-        ungroup() %>%
-        unnest(data) %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, 
-               specimen.collection.t_exercise_hour_sqrt,
-               specimen.collection.t_death_hour, count)
-# Collect the Control 0 hr data points
-ec_hr1_df <- by_gene_df %>%
-        filter(ENSEMBL_RAT == ec_gene) %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, data) %>%
-        ungroup() %>%
-        unnest(data) %>% 
-        filter(animal.key.anirandgroup == "Control - IPE") %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, 
-               specimen.collection.t_exercise_hour_sqrt,
-               specimen.collection.t_death_hour, count)
-
-# Raw counts with Line with control 7
-ec_pred_df %>%
-        ggplot(aes(specimen.collection.t_exercise_hour_sqrt, count), 
-               color = ENSEMBL_RAT) +
-        geom_point() +
-        geom_line(data = ec_pred_df, 
-                  aes(grid_t_exercise_hour_sqrt_jit, pred), 
-                  size = 1, alpha = 0.8, color = "blue") +
-        geom_point(data = ec_hr7_df, 
-                   mapping = aes(specimen.collection.t_exercise_hour_sqrt, count),
-                   color = "red") +
-        theme(legend.position = "none") +
-        ggtitle(
-                paste0("Expression of ",
-                       unique(ec_pred_df$SYMBOL_RAT),
-                       ":\nExercise Groups & Control IPE (",TISSUE,")")) +
-        ylab("Expression (Transformed/Normalized)") + 
-        xlab("Hours Post Acute Exercise (Transformed)") +
-        geom_vline(xintercept = 0, linetype = "dashed", alpha = 0.5)
-ec_mod
-# Raw counts with Line with control 7
-ec_pred_df %>%
-        ggplot(aes(specimen.collection.t_death_hour, count), 
-               color = ENSEMBL_RAT) +
-        geom_point() +
-        geom_line(data = ec_pred_df, 
-                  aes(grid_t_death_hour, pred), 
-                  size = 1, alpha = 0.8, color = "orange") +
-        geom_point(data = ec_hr7_df, 
-                   mapping = aes(specimen.collection.t_death_hour, count),
-                   color = "red") +
-        theme(legend.position = "none") +
-        ggtitle(
-                paste0("Expression of ",
-                       unique(ec_pred_df$SYMBOL_RAT),
-                       ":\nExercise Groups & Control IPE (",TISSUE,")")) +
-        ylab("Expression (Transformed/Normalized)") + 
-        xlab("Time of Death (Hour)")
-
-# Combined Model (CE)
-########################
-# Visualize the raw counts, model predictions, and control 7 counts (x=Hours Post Exercise)
-# Collect the Control 7 hr data points
-ce_hr7_df <- by_gene_df7 %>%
-        filter(ENSEMBL_RAT == ce_gene) %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, data) %>%
-        ungroup() %>%
-        unnest(data) %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, 
-               specimen.collection.t_exercise_hour_sqrt,
-               specimen.collection.t_death_hour, count)
-# Collect the Control 0 hr data points
-ce_hr1_df <- by_gene_df %>%
-        filter(ENSEMBL_RAT == ce_gene) %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, data) %>%
-        ungroup() %>%
-        unnest(data) %>% 
-        filter(animal.key.anirandgroup == "Control - IPE") %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, 
-               specimen.collection.t_exercise_hour_sqrt,
-               specimen.collection.t_death_hour, count)
-
-# Raw counts with Line with control 7
-ce_pred_df %>%
-        ggplot(aes(specimen.collection.t_exercise_hour_sqrt, count), 
-               color = ENSEMBL_RAT) +
-        geom_point() +
-        geom_line(data = ce_pred_df, 
-                  aes(grid_t_exercise_hour_sqrt_jit, pred), 
-                  size = 1, alpha = 0.8, color = "blue") +
-        geom_point(data = ce_hr7_df, 
-                   mapping = aes(specimen.collection.t_exercise_hour_sqrt, count),
-                   color = "red") +
-        theme(legend.position = "none") +
-        ggtitle(
-                paste0("Expression of ",
-                       unique(ce_pred_df$SYMBOL_RAT),
-                       ":\nExercise Groups & Control IPE (",TISSUE,")")) +
-        ylab("Expression (Transformed/Normalized)") + 
-        xlab("Hours Post Acute Exercise (Transformed)") +
-        geom_vline(xintercept = 0, linetype = "dashed", alpha = 0.5)
-ce_mod
-# Raw counts with Line with control 7
-ce_pred_df %>%
-        ggplot(aes(specimen.collection.t_death_hour, count), 
-               color = ENSEMBL_RAT) +
-        geom_point() +
-        geom_line(data = ce_pred_df, 
-                  aes(grid_t_death_hour, pred), 
-                  size = 1, alpha = 0.8, color = "orange") +
-        geom_point(data = ce_hr7_df, 
-                   mapping = aes(specimen.collection.t_death_hour, count),
-                   color = "red") +
-        theme(legend.position = "none") +
-        ggtitle(
-                paste0("Expression of ",
-                       unique(ce_pred_df$SYMBOL_RAT),
-                       ":\nExercise Groups & Control IPE (",TISSUE,")")) +
-        ylab("Expression (Transformed/Normalized)") + 
-        xlab("Time of Death (Hour)")
-
-# SIN Model
-#######################
-# Visualize the raw counts, model predictions, and control 7 counts (x=Hours Post Exercise)
-# Collect the Control 7 hr data points
-sin_hr7_df <- by_gene_df7 %>%
-        filter(ENSEMBL_RAT == sin_gene) %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, data) %>%
-        ungroup() %>%
-        unnest(data) %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, specimen.collection.t_death_hour, count)
-
-# Collect the Control 1 hr data points
-sin_hr1_df <- by_gene_df %>%
-        filter(ENSEMBL_RAT == sin_gene) %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, data) %>%
-        ungroup() %>%
-        unnest(data) %>%
-        filter(animal.key.anirandgroup == "Control - IPE") %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, specimen.collection.t_death_hour, count)
-# Visualize the raw counts, model predictions, and control 7 counts (x=Hours Post Exercise)
-# Raw Counts
-sin_pred_df %>%
-        ggplot(aes(specimen.collection.t_death_hour, count), 
-               color = ENSEMBL_RAT) +
-        geom_point() +
-        theme(legend.position = "none") +
-        ggtitle(
-                paste0("Expression of ",
-                       unique(sin_pred_df$SYMBOL_RAT),
-                       ":\nExercise Groups & Control IPE (",TISSUE,")")) +
-        ylab("Expression (Transformed/Normalized)") + 
-        xlab("Time of Death (Hour)")
-# Raw Counts + model
-sin_pred_df %>%
-        ggplot(aes(specimen.collection.t_death_hour, count), 
-               color = ENSEMBL_RAT) +
-        geom_point() +
-        geom_line(data = sin_pred_df, 
-                  aes(grid_t_death_hour, pred), 
-                  size = 1, alpha = 0.8, color = "orange") +
-        theme(legend.position = "none") +
-        ggtitle(
-                paste0("Expression of ",
-                       unique(sin_pred_df$SYMBOL_RAT),
-                       ":\nExercise Groups & Control IPE (",TISSUE,")")) +
-        ylab("Expression (Transformed/Normalized)") + 
-        xlab("Time of Death (Hour)")
-# Counts, Model, C7 Counts
-sin_pred_df %>%
-        ggplot(aes(specimen.collection.t_death_hour, count), 
-               color = ENSEMBL_RAT) +
-        geom_point() +
-        geom_line(data = sin_pred_df, 
-                  aes(grid_t_death_hour, pred), 
-                  size = 1, alpha = 0.8, color = "orange") +
-        geom_point(data = sin_hr7_df, 
-                   mapping = aes(specimen.collection.t_death_hour, count),
-                   color = "red") +
-        theme(legend.position = "none") +
-        ggtitle(
-                paste0("Expression of ",
-                       unique(sin_pred_df$SYMBOL_RAT),
-                       ":\nExercise Groups & Control IPE (",TISSUE,")")) +
-        ylab("Expression (Transformed/Normalized)") + 
-        xlab("Time of Death (Hour)")
 
 
 
@@ -2350,7 +2491,7 @@ for( g in genes){
                              select(data))[[1]] %>% as.data.frame()
         # Generate a grid
         grid <- data.frame(specimen.collection.t_exercise_hour_sqrt = 
-                                   modelr::seq_range(
+                                   seq_range(
                                            sub_data$specimen.collection.t_exercise_hour_sqrt, n = length(sub_data$specimen.collection.t_exercise_hour_sqrt)))
         #grid$ENSEMBL_RAT <- g
         mod <- (by_gene_df %>% 
@@ -2380,9 +2521,9 @@ for( g in genes){
                              ungroup() %>%
                              select(data))[[1]] %>% as.data.frame()
         # Generate a grid
-        grid <- data.frame(specimen.collection.t_death_hour = 
-                                   modelr::seq_range(
-                                           sub_data$specimen.collection.t_death_hour, 
+        grid <- data.frame(specimen.collection.t_death_hour_mc = 
+                                   seq_range(
+                                           sub_data$specimen.collection.t_death_hour_mc, 
                                            n = length(sub_data$specimen.collection.t_exercise_hour_sqrt)))
         #grid$ENSEMBL_RAT <- g
         mod <- (by_gene_df %>% 
@@ -2392,8 +2533,8 @@ for( g in genes){
         grid <- modelr::add_predictions(grid, mod, "pred") %>% as_tibble()
         names(grid)[1] <- "grid_t_death_hour"
         grid$grid_t_death_hour <- round(grid$grid_t_death_hour, digits = 1)
-        grid$specimen.collection.t_death_hour <- 
-                sub_data$specimen.collection.t_death_hour
+        grid$specimen.collection.t_death_hour_mc <- 
+                sub_data$specimen.collection.t_death_hour_mc
         grid$count <- sub_data$count
         sin_pred[[i]] <- grid
         i <- i + 1
@@ -2435,12 +2576,12 @@ gam_hr1_df <- by_gene_df %>%
         select(ENSEMBL_RAT, SYMBOL_RAT, specimen.collection.t_exercise_hour_sqrt, count)
 
 # Collect the hours of death that occur for each exercise group
-sac_hrs <- sort(unique(round(tod_cols$specimen.collection.t_death_hour, digits = 1)))
+sac_hrs <- sort(unique(round(tod_cols$specimen.collection.t_death_hour_mc, digits = 1)))
 #names(tod_cols)
 #e_df <- tod_cols %>%
-#        select(specimen.collection.t_death_hour, specimen.collection.t_exercise_hour_sqrt) %>%
-#        arrange(specimen.collection.t_death_hour)
-#e_df$specimen.collection.t_death_hour <- round(e_df$specimen.collection.t_death_hour, digits = 1)
+#        select(specimen.collection.t_death_hour_mc, specimen.collection.t_exercise_hour_sqrt) %>%
+#        arrange(specimen.collection.t_death_hour_mc)
+#e_df$specimen.collection.t_death_hour_mc <- round(e_df$specimen.collection.t_death_hour_mc, digits = 1)
 
 # Perform a second prediction (for hour post exercise -- predictions from SIN Model)
 sin_pred_hour <- sin_pred_df %>%
@@ -2571,7 +2712,7 @@ sin_hr7_df <- by_gene_df7 %>%
         select(ENSEMBL_RAT, SYMBOL_RAT, data) %>%
         ungroup() %>%
         unnest(data) %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, specimen.collection.t_death_hour, count)
+        select(ENSEMBL_RAT, SYMBOL_RAT, specimen.collection.t_death_hour_mc, count)
 
 # Collect the Control 1 hr data points
 sin_hr1_df <- by_gene_df %>%
@@ -2580,11 +2721,11 @@ sin_hr1_df <- by_gene_df %>%
         ungroup() %>%
         unnest(data) %>%
         filter(animal.key.anirandgroup == "Control - IPE") %>%
-        select(ENSEMBL_RAT, SYMBOL_RAT, specimen.collection.t_death_hour, count)
+        select(ENSEMBL_RAT, SYMBOL_RAT, specimen.collection.t_death_hour_mc, count)
 # Visualize the raw counts, model predictions, and control 7 counts (x=Hours Post Exercise)
 # Raw Counts
 sin_pred_df %>%
-        ggplot(aes(specimen.collection.t_death_hour, count), 
+        ggplot(aes(specimen.collection.t_death_hour_mc, count), 
                color = ENSEMBL_RAT) +
         geom_point() +
         theme(legend.position = "none") +
@@ -2596,7 +2737,7 @@ sin_pred_df %>%
         xlab("Time of Death (Hour)")
 # Raw Counts + model
 sin_pred_df %>%
-        ggplot(aes(specimen.collection.t_death_hour, count), 
+        ggplot(aes(specimen.collection.t_death_hour_mc, count), 
                color = ENSEMBL_RAT) +
         geom_point() +
         geom_line(data = sin_pred_df, 
@@ -2611,14 +2752,14 @@ sin_pred_df %>%
         xlab("Time of Death (Hour)")
 # Counts, Model, C7 Counts
 sin_pred_df %>%
-        ggplot(aes(specimen.collection.t_death_hour, count), 
+        ggplot(aes(specimen.collection.t_death_hour_mc, count), 
                color = ENSEMBL_RAT) +
         geom_point() +
         geom_line(data = sin_pred_df, 
                   aes(grid_t_death_hour, pred), 
                   size = 1, alpha = 0.8, color = "orange") +
         geom_point(data = sin_hr7_df, 
-                   mapping = aes(specimen.collection.t_death_hour, count),
+                   mapping = aes(specimen.collection.t_death_hour_mc, count),
                    color = "red") +
         theme(legend.position = "none") +
         ggtitle(
@@ -2629,17 +2770,17 @@ sin_pred_df %>%
         xlab("Time of Death (Hour)")
 # Counts, Model, C7 Counts, C1 Counts
 sin_pred_df %>%
-        ggplot(aes(specimen.collection.t_death_hour, count), 
+        ggplot(aes(specimen.collection.t_death_hour_mc, count), 
                color = ENSEMBL_RAT) +
         geom_point(color = "red") +
         geom_line(data = sin_pred_df, 
                   aes(grid_t_death_hour, pred), 
                   size = 1, alpha = 0.8, color = "orange") +
         geom_point(data = sin_hr7_df, 
-                   mapping = aes(specimen.collection.t_death_hour, count),
+                   mapping = aes(specimen.collection.t_death_hour_mc, count),
                    color = "blue") +
         geom_point(data = sin_hr1_df, 
-                   mapping = aes(specimen.collection.t_death_hour, count),
+                   mapping = aes(specimen.collection.t_death_hour_mc, count),
                    color = "blue") +
         theme(legend.position = "none") +
         ggtitle(
@@ -2895,6 +3036,41 @@ modelsr2_df <- data.frame(TISSUE = TISSUE,
 #####################
 
 
+# Collect the hours of death that occur for each exercise group
+sac_hrs <- sort(unique(round(tod_cols$specimen.collection.t_death_hour_mc, digits = 1)))
+#names(tod_cols)
+#e_df <- tod_cols %>%
+#        select(specimen.collection.t_death_hour_mc, specimen.collection.t_exercise_hour_sqrt) %>%
+#        arrange(specimen.collection.t_death_hour_mc)
+#e_df$specimen.collection.t_death_hour_mc <- round(e_df$specimen.collection.t_death_hour_mc, digits = 1)
+
+# Perform a second prediction (for hour post exercise -- predictions from SIN Model)
+sin_pred_hour <- sin_pred_df %>%
+        filter(round(grid_t_death_hour, digits = 1) %in% sac_hrs) %>%
+        mutate(grid_t_exercise_hour = case_when(grid_t_death_hour == 9.9 ~ -0.01666667,
+                                                grid_t_death_hour == 10.0 ~ -0.01666667,
+                                                grid_t_death_hour == 10.2 ~ -0.01666667,
+                                                grid_t_death_hour == 10.3 ~ -0.01666667,
+                                                grid_t_death_hour == 10.6 ~ 0.08164966,
+                                                grid_t_death_hour == 10.9 ~ 0.08164966,
+                                                grid_t_death_hour == 11.2 ~ 0.11547005,
+                                                grid_t_death_hour == 11.6 ~ 0.11547005,
+                                                grid_t_death_hour == 11.9 ~ 0.01178511,
+                                                grid_t_death_hour == 12.2 ~ 0.01178511,
+                                                grid_t_death_hour == 12.3 ~ 0.01178511,
+                                                grid_t_death_hour == 13.2 ~ 0.00000000,
+                                                grid_t_death_hour == 13.3 ~ 0.00000000,
+                                                grid_t_death_hour == 13.6 ~ 0.00000000,
+                                                grid_t_death_hour == 13.9 ~ 0.01666667,
+                                                grid_t_death_hour == 14.2 ~ 0.01666667,
+                                                grid_t_death_hour == 14.3 ~ 0.01666667,
+                                                grid_t_death_hour == 14.6 ~ 0.03333333,
+                                                grid_t_death_hour == 14.9 ~ 0.03333333,
+                                                grid_t_death_hour == 16.9 ~ 0.04409586,
+                                                grid_t_death_hour == 17.2 ~ 0.04409586,
+                                                grid_t_death_hour == 17.3 ~ 0.04409586,
+                                                grid_t_death_hour == 17.6 ~ 0.04409586,
+                                                grid_t_death_hour == 17.9 ~ 0.04409586))
 
 
 

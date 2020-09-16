@@ -513,6 +513,7 @@ bin_df <- bin_df %>%
         mutate(ENSEMBL_RAT = as.character(ENSEMBL_RAT)) %>%
         mutate(SYMBOL_RAT = mapIds(org.Rn.eg.db, ENSEMBL_RAT, "SYMBOL", "ENSEMBL"))
 
+
 # Find mouse orthologs for enrichr
 orth_df <- bin_df %>%
         select(ENSEMBL_RAT) %>% 

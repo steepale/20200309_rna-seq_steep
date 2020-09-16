@@ -36,10 +36,10 @@ WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
 
 # Load the dependencies
 #source("https://bioconductor.org/biocLite.R")
-#BiocManager::install("gapminder")
+#BiocManager::install("ggplot2")
 
 # Load dependencies
-pacs...man <- c("tidyverse",'ggplot2',"GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som", "vsn","org.Mm.eg.db","VennDiagram","EBImage","reshape2","xtable","kohonen","som","caret","enrichR","gplots","tiff","splines","gam")
+pacs...man <- c("tidyverse","GenomicRanges", "DESeq2","devtools","rafalib","GO.db","vsn","hexbin", "GenomicFeatures","Biostrings","BSgenome","AnnotationHub","plyr","dplyr", "org.Rn.eg.db","pheatmap","sva","formula.tools","pathview","biomaRt", "PROPER","SeqGSEA",'purrr','BioInstaller','RColorBrewer','lubridate', "hms","ggpubr", "ggrepel","genefilter","qvalue","ggfortify","som", "vsn","org.Mm.eg.db","VennDiagram","EBImage","reshape2","xtable","kohonen","som","caret","enrichR","gplots","tiff","splines","gam",'ggplot2')
 lapply(pacs...man, FUN = function(X) {
         do.call("library", list(X)) })
 
@@ -49,104 +49,16 @@ lapply(pacs...man, FUN = function(X) {
 
 # Set select
 select <- dplyr::select
+slice <- dplyr::slice
 counts <- DESeq2::counts
 map <- purrr::map
 
-# Make the 'not in' operator
-################################################################################
-'%!in%' <- function(x,y) {
-        !('%in%'(x,y))
-}
-################################################################################
-
-# Capture the Date and Author
-################################################################################
-date <- format.Date( Sys.Date(), '%Y%m%d' )
-auth <- "steep"
-################################################################################
-
-## explicit gc, then execute `expr` `n` times w/o explicit gc, return timings
-################################################################################
-benchmark <- function(n = 1, expr, envir = parent.frame()) {
-        expr <- substitute(expr)
-        gc()
-        map(seq_len(n), ~ system.time(eval(expr, envir), gcFirst = FALSE))
-}
-################################################################################
-
-# Function to speed up making rows into lists for interation with lapply
-################################################################################
-f_pmap_aslist <- function(df) {
-        purrr::pmap(as.list(df), list)
-}
-################################################################################
-
-# Function to relabel RNASeq read names to orthologs
-###############################################################################################
-# mmusculus_gene_ensembl: Mouse genes (GRCm38.p6)
-# rnorvegicus_gene_ensembl: Rat genes (Rnor_6.0)
-mouse2rat_ortho <- function(x) {
-        # Ensure 'x' is a data.frame
-        if ( class(x) != "data.frame" ) {
-                stop("'x' must be a data frame", class.= FALSE)
-        }
-        
-        # Load requirements
-        library(biomaRt)
-        library(purrr)
-        library(dplyr)
-        # Load in annotations
-        mart_mm_ens = useMart("ensembl", dataset="mmusculus_gene_ensembl")
-        mart_rn_ens = useMart("ensembl", dataset="rnorvegicus_gene_ensembl")
-        # Create ortholog table
-        ortho_df <- getLDS(attributes=c("ensembl_gene_id","rnorvegicus_homolog_orthology_confidence"),
-                           filters="ensembl_gene_id", 
-                           values = x$ENSEMBL_MOUSE, 
-                           mart=mart_mm_ens,
-                           attributesL=c("ensembl_gene_id"), 
-                           martL=mart_rn_ens) # Use biomart to get orthologs
-        # Filter out any low confidence orthologs and any genes that are not one-to-one orthologs in both directions
-        ortho_df <- ortho_df[ortho_df$Rat.orthology.confidence..0.low..1.high. == '1',]
-        ortho_df <- ortho_df[!duplicated(ortho_df[,1]),]
-        ortho_df <- ortho_df[!duplicated(ortho_df[,3]),]
-        names(ortho_df) <- c('ENSEMBL_MOUSE','CONFIDENCE','ENSEMBL_RAT') 
-        ortho_df <- ortho_df %>%
-                select(-CONFIDENCE)
-        
-        # Assumes that 'x' has ensembl chicken gene ID's as rownames
-        # Ensure that only chicken genes appear in the matrix
-        #x <- x[startsWith(rownames(x), "ENSGALG"),]
-        # Assign the HUGO symbols to a new column
-        x <- left_join(x, ortho_df, by = "ENSEMBL_MOUSE") %>%
-                filter(!is.na(ENSEMBL_RAT)) %>%
-                mutate(SYMBOL_RAT = mapIds(org.Rn.eg.db, ENSEMBL_RAT, "SYMBOL", "ENSEMBL"))
-        x
-}
-#########################################################################################
-
-# Function to take lowercase strings and convert the first letter to uppercase
-################################################################################
-firstup <- function(x) {
-        substr(x, 1, 1) <- toupper(substr(x, 1, 1))
-        x
-}
-################################################################################
-
-# Sine and cosine functions
-################################################################################
-SIN <- function(t) sin(2*pi*t/24)
-COS <- function(t) cos(2*pi*t/24)
-################################################################################
-# Extract p-value from linear model TODO: Adjust this code to generate permutation based p-value
-################################################################################
-lmp <- function (modelobject) {
-        if ("lm" %!in% class(modelobject)) stop("Not an object of class 'lm' ")
-        f <- summary(modelobject)$fstatistic
-        p <- pf(f[1],f[2],f[3],lower.tail=F)
-        attributes(p) <- NULL
-        return(p)
-}
-################################################################################
+source(paste0(WD,'/functions/not_in.R'))
+source(paste0(WD,'/functions/mouse2rat_ortho.R'))
+source(paste0(WD,'/functions/sin.R'))
+source(paste0(WD,'/functions/cos.R'))
+source(paste0(WD,'/functions/circleFun.R'))
+source(paste0(WD,'/functions/rat_mouse_ortho.R'))
 
 #' ## Declare Variables
 
@@ -219,161 +131,7 @@ TISSUE <- "Kidney"
         # Files last saved in: 20200309_exploration-rna-seq-phase1_steep.R
         
         if(F) {
-                # Count matrix
-                in_file <- paste0(WD,'/data/20200309_rnaseq-countmatrix-pass1a-stanford-sinai_steep.csv')
-                count_data <- read.table(in_file,sep = ',', header = TRUE,row.names = 1,check.names = FALSE)
-                
-                # Meatdata table
-                in_file <- paste0(WD,'/data/20200309_rnaseq-meta-pass1a-stanford-sinai_steep.txt')
-                col_data <- read.table(in_file, header = TRUE, check.names = FALSE, sep = '\t')
-                row.names(col_data) <- col_data$sample_key
-                
-                # Adjust column objects
-                ########################
-                # To factors
-                factor_cols <- c('labelid',
-                                 'vial_label',
-                                 'animal.registration.sex',
-                                 'animal.key.exlt4',
-                                 'X2D_barcode',
-                                 'BID',
-                                 'Seq_flowcell_lane',
-                                 'Seq_flowcell_run',
-                                 'Seq_end_type',
-                                 'Lib_UMI_cycle_num',
-                                 'pid',
-                                 'acute.test.staffid',
-                                 'acute.test.siteid',
-                                 'acute.test.versionnbr',
-                                 'acute.test.contactshock',
-                                 'animal.familiarization.staffid',
-                                 'animal.familiarization.siteid',
-                                 'animal.familiarization.versionnbr',
-                                 'animal.familiarization.compliant',
-                                 'animal.key.protocol',
-                                 'animal.key.agegroup',
-                                 'animal.key.batch',
-                                 'animal.key.intervention',
-                                 'animal.key.sitename',
-                                 'animal.registration.staffid',
-                                 'animal.registration.siteid',
-                                 'animal.registration.versionnbr',
-                                 'animal.registration.ratid',
-                                 'animal.registration.batchnumber',
-                                 'specimen.collection.bloodcomplete',
-                                 'specimen.collection.bloodtechid',
-                                 'specimen.collection.uterustype',
-                                 'specimen.collection.uterustechid',
-                                 'specimen.collection.deathtype',
-                                 'specimen.processing.versionnbr',
-                                 'specimen.processing.siteid',
-                                 'bid',
-                                 'specimen.processing.samplenumber',
-                                 'specimen.processing.techid',
-                                 'barcode',
-                                 'shiptositeid',
-                                 'receivedcas',
-                                 'receivestatuscas')
-                for(fc in factor_cols){
-                        col_data[[fc]] <- as.factor(col_data[[fc]])
-                }
-                
-                # To Dates: 03JUL2018
-                date_cols <- c('acute.test.d_visit',
-                               'acute.test.d_start',
-                               'animal.familiarization.d_visit',
-                               'animal.familiarization.d_treadmillbegin',
-                               'animal.familiarization.d_treadmillcomplete',
-                               'animal.registration.d_visit',
-                               'animal.registration.d_arrive',
-                               'animal.registration.d_reverselight',
-                               'specimen.collection.d_visit',
-                               'animal.registration.d_birth',
-                               'Seq_date')
-                for(dc in date_cols){
-                        col_data[[dc]] <- ymd(col_data[[dc]])
-                }
-                
-                # From Dates: 2/14/2019
-                date_cols <- c('RNA_extr_date',
-                               'Lib_prep_date')
-                for(dc in date_cols){
-                        col_data[[dc]] <- mdy(col_data[[dc]])
-                }
-                
-                # To Times: 10:30:00
-                time_cols <- c('acute.test.t_complete',
-                               'specimen.collection.t_anesthesia',
-                               'specimen.collection.t_bloodstart',
-                               'specimen.collection.t_bloodstop',
-                               'specimen.collection.t_edtafill',
-                               'specimen.collection.uteruscomplete',
-                               'specimen.collection.t_uterusstart',
-                               'specimen.collection.t_uterusstop',
-                               'specimen.collection.t_death',
-                               'specimen.processing.t_collection',
-                               'specimen.processing.t_edtaspin',
-                               'specimen.processing.t_freeze',
-                               'acute.test.howlongshock',
-                               'acute.test.t_start')
-                for(tc in time_cols){
-                        col_data[[tc]] <- col_data[[tc]] %>% as.character() %>% parse_time()
-                }
-                
-                # Releveling factors
-                col_data$animal.key.anirandgroup <- as.character(col_data$animal.key.anirandgroup)
-                col_data$animal.key.anirandgroup <- factor(col_data$animal.key.anirandgroup,
-                                                           levels = ec_levels)
-                
-                # Create a variable for time post exercise
-                col_data <- col_data %>%
-                        mutate(specimen.collection.t_exercise_hour = case_when(
-                                animal.key.anirandgroup == 'Control - IPE' ~ -1,
-                                animal.key.anirandgroup == 'Control - 7 hr' ~ 7,
-                                animal.key.anirandgroup == 'Exercise - IPE' ~ 0,
-                                animal.key.anirandgroup == 'Exercise - 0.5 hr' ~ 0.5,
-                                animal.key.anirandgroup == 'Exercise - 1 hr' ~ 1,
-                                animal.key.anirandgroup == 'Exercise - 4 hr' ~ 4,
-                                animal.key.anirandgroup == 'Exercise - 7 hr' ~ 7,
-                                animal.key.anirandgroup == 'Exercise - 24 hr' ~ 24,
-                                animal.key.anirandgroup == 'Exercise - 48 hr' ~ 48))
-                
-                # Take the absolute value of the square root of seconds post exercise (consider negative numbers)
-                # Make sure to Subtract 1 hour (3600s) from 'Control - IPE' groups to account for exercise effect
-                col_data <- col_data %>%
-                        mutate(calculated.variables.deathtime_after_acute =
-                                       ifelse(animal.key.anirandgroup == 'Control - IPE',
-                                              calculated.variables.deathtime_after_acute - 3600,
-                                              calculated.variables.deathtime_after_acute))
-                col_data <- col_data %>%
-                        mutate(specimen.collection.t_exercise_hour_sqrt = ifelse(
-                                calculated.variables.deathtime_after_acute < 0,
-                                (sqrt(abs(calculated.variables.deathtime_after_acute))/60/60)*(-1),
-                                (sqrt(abs(calculated.variables.deathtime_after_acute))/60/60)))
-                row.names(col_data) <- col_data$sample_key
-                
-                # Examine histograms
-                col_data %>%
-                        filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
-                        ggplot(aes(x=calculated.variables.deathtime_after_acute)) +
-                        geom_histogram(bins = 68)
-                col_data %>%
-                        filter(animal.key.anirandgroup != 'Control - 7 hr') %>%
-                        ggplot(aes(x=specimen.collection.t_exercise_hour_sqrt)) +
-                        geom_histogram(bins = 68)
-                
-                # Save data as an R objects
-                # ################################################################################
-                # To determine object size
-                sl <- object.size(count_data)
-                print(sl, units = 'auto')
-                # Meta Data
-                meta_file <- paste0(WD,'/data/20200603_rnaseq-meta-pass1a-stanford-sinai-proc_steep.rds')
-                saveRDS(col_data, file = meta_file)
-                
-                # Count Data
-                count_file <- paste0(WD, '/data/20200603_rnaseq-counts-pass1a-stanford-sinai-processed_steep.rds')
-                saveRDS(count_data, file = count_file)
+        # TODO: Needs updating
         }
         
         # Set a vector for Exercise/Control Levels and Colors
@@ -404,7 +162,6 @@ TISSUE <- "Kidney"
         # Restore the count object
         count_file <- paste0(WD, '/data/20200603_rnaseq-counts-pass1a-stanford-sinai-processed_steep.rds')
         count_data <- readRDS(file = count_file)
-        
         
         #' #### Retrieve Circadian Genes Associated with Tissue
         #' Data from Supplementary Table 2 from 1. Yan, J., Wang, H., Liu, Y. & Shao, C. Analysis of gene regulatory networks in the mammalian circadian rhythm. PLoS Comput. Biol. 4, (2008).
@@ -448,34 +205,34 @@ TISSUE <- "Kidney"
         #gf_file <- paste0(WD,'/data/20200603_Rnor-6.0.96-GRanges_steep.sqlite')
         #saveDb(Rn_TxDb, file=gf_file)
         
-        # To load the annotation
-        gf_file <- paste0(WD,'/data/20200603_Rnor-6.0.96-GRanges_steep.sqlite')
-        Rn_TxDb <- loadDb(gf_file)
-        # Define Female specific sex genes (X chromosome)
-        # To examine chromosome names
-        seqlevels(Rn_TxDb)[1:23]
-        # Extract genes as GRanges object, then names
-        X_genes_gr <- genes(Rn_TxDb, columns = 'TXCHROM', filter = list(tx_chrom=c('X')))
-        # Collect ensembl gene ids for female specific genes
-        X_ens_id <- names(X_genes_gr)
-        # Examine the gene symbols
-        X_sym <- mapIds(org.Rn.eg.db, names(X_genes_gr), 'SYMBOL', 'ENSEMBL')
-        # Extract genes as GRanges object, then names
-        Y_genes_gr <- genes(Rn_TxDb, columns = 'TXCHROM', filter = list(tx_chrom=c('Y')))
-        # Collect ensembl gene ids for female specific genes
-        Y_ens_id <- names(Y_genes_gr)
-        sex_ens_id <- c(X_ens_id,Y_ens_id)
-        # Examine the gene symbols
-        Y_sym <- mapIds(org.Rn.eg.db, names(Y_genes_gr), 'SYMBOL', 'ENSEMBL')
+        # # To load the annotation
+        # gf_file <- paste0(WD,'/data/20200603_Rnor-6.0.96-GRanges_steep.sqlite')
+        # Rn_TxDb <- loadDb(gf_file)
+        # # Define Female specific sex genes (X chromosome)
+        # # To examine chromosome names
+        # seqlevels(Rn_TxDb)[1:23]
+        # # Extract genes as GRanges object, then names
+        # X_genes_gr <- genes(Rn_TxDb, columns = 'TXCHROM', filter = list(tx_chrom=c('X')))
+        # # Collect ensembl gene ids for female specific genes
+        # X_ens_id <- names(X_genes_gr)
+        # # Examine the gene symbols
+        # X_sym <- mapIds(org.Rn.eg.db, names(X_genes_gr), 'SYMBOL', 'ENSEMBL')
+        # # Extract genes as GRanges object, then names
+        # Y_genes_gr <- genes(Rn_TxDb, columns = 'TXCHROM', filter = list(tx_chrom=c('Y')))
+        # # Collect ensembl gene ids for female specific genes
+        # Y_ens_id <- names(Y_genes_gr)
+        # sex_ens_id <- c(X_ens_id,Y_ens_id)
+        # # Examine the gene symbols
+        # Y_sym <- mapIds(org.Rn.eg.db, names(Y_genes_gr), 'SYMBOL', 'ENSEMBL')
         
-        #' ## Load Annotations for R2 Plots
+        #' ## Load Annotations for PVE Plots
         
-        #+ Load Annotations for R2 Plots
+        #+ Load Annotations for PVE Plots
         ################################################################################
-        #####     Load Annotations for R2 Plots       ##################################
+        #####     Load Annotations for PVE Plots       ##################################
         ################################################################################
-        # Load the R2 values from modeling
-        models_file <- paste0(WD,'/data/20200603_rnaseq-tissue-models-pve-table_steep.txt')
+        # Load the PVE values from modeling
+        models_file <- paste0(WD,'/data/test/20200603_rnaseq-tissue-models-pve-table_steep.txt')
         models_df <- read.table(file = models_file ,sep = '\t', header = T, check.names = F) %>%
                 as_tibble()
         
@@ -484,10 +241,22 @@ TISSUE <- "Kidney"
         de_df <- read.table(file = de_file ,sep = '\t', header = T, check.names = F) %>%
                 as_tibble()
         
+        # Load the KEGG circadian genes TODO: Come back and calucalte orthologs, for now, manually done
+        kegg_file <- paste0(WD,'/data/KEGG-04710-mouse-genes_steep.csv')
+        kegg_df <- read.table(file = kegg_file ,sep = ',', header = F) %>%
+          as_tibble()
+        names(kegg_df) <- c('ENSEMBL_MOUSE', 'SYMBOL_MOUSE')
+        # Skp1a is mouse ortholog to Skp1 in rat 1:1 high confidence
+        gs <- models_df$SYMBOL_RAT %>% unique() %>% unlist() %>% as.character()
+        kegg_df$SYMBOL_MOUSE[kegg_df$SYMBOL_MOUSE %!in% gs]
+        kegg_df <- kegg_df %>%
+          mutate(SYMBOL_RAT = ifelse(SYMBOL_MOUSE == 'Skp1a', 'Skp1', SYMBOL_MOUSE))
+        keggs <- kegg_df$SYMBOL_RAT %>% unlist() %>% as.character()
+        
         # Load the Manova file
-        manova_file <- paste0(WD,'/data/20200413_rnaseq-tissue-manova-table_steep.txt')
-        manova_df <- read.table(file = manova_file ,sep = '\t', header = T, check.names = F) %>%
-                as_tibble()
+        # manova_file <- paste0(WD,'/data/20200413_rnaseq-tissue-manova-table_steep.txt')
+        # manova_df <- read.table(file = manova_file ,sep = '\t', header = T, check.names = F) %>%
+        #         as_tibble()
         
         # Load the SOM and K-means cluster file
         clusters_file <- paste0(WD,'/data/20200413_rnaseq-tissue-cluster-table_steep.txt')
@@ -501,20 +270,223 @@ TISSUE <- "Kidney"
         #                                     GAM1_R2 > SIN1_R2 + 0.15 ~ 'Exercise',
         #                                     (((SIN1_R2 <= GAM1_R2 + 0.15) & (GAM1_R2 <= SIN1_R2 + 0.15)) & SIN1_R2 >= 0.3 & GAM1_R2 >= 0.3) ~ 'Ambiguous'))
         #bin_df <- left_join(models_df, manova_df, by = c("TISSUE","ENSEMBL_RAT"))
-        bin_df <- full_join(models_df, de_df, by = c("TISSUE","ENSEMBL_RAT")) %>%
-                models_df %>%
-                full_join(manova_df, by = c("TISSUE","ENSEMBL_RAT")) %>%
-                full_join(clusters_df, by = c("TISSUE","ENSEMBL_RAT")) #%>%
-                # mutate(BIN_TYPE = case_when(SIN1_R2 > GAM1_R2 + 0.15 ~ 'Circadian',
-                #                     GAM1_R2 > SIN1_R2 + 0.15 ~ 'Exercise',
-                #                     (((SIN1_R2 <= GAM1_R2 + 0.15) & (GAM1_R2 <= SIN1_R2 + 0.15)) & SIN1_R2 >= 0.3 & GAM1_R2 >= 0.3) ~ 'Ambiguous'))
-                # 
+        bin_df <- full_join(models_df, de_df, by = c("TISSUE","ENSEMBL_RAT")) 
         
-        #' ## Save the R2 Summary File
+                # full_join(manova_df, by = c("TISSUE","ENSEMBL_RAT")) %>%
+                # full_join(clusters_df, by = c("TISSUE","ENSEMBL_RAT"))
         
-        #+ Save the R2 Summary File
+        # Adjust the bintype
+        ######################
+        # Calculate the angle from x y coordinates
+        bin_df <- bin_df %>%
+                mutate(c_ce = sqrt( (pve_ce2_e^2) + (pve_ce2_c^2) )) %>%
+                mutate(rad = atan(pve_ce2_c/pve_ce2_e)) %>%
+                mutate(GROUP_ce = case_when(
+                       c_ce <= 0.2 ~ '0',
+                       (c_ce > 0.2 & rad <= (1/2*pi) & rad > atan(1/0.5)) ~ '1',
+                       (c_ce > 0.2 & rad <= atan(1/0.5) & rad > (1/4*pi)) ~ '2',
+                       (c_ce > 0.2 & rad <= (1/4*pi) & rad > atan(0.5/1)) ~ '3',
+                       (c_ce > 0.2 & rad <= atan(0.5/1) & rad > 0) ~ '4')) %>%
+                mutate(GROUP_ce_n = as.numeric(GROUP_ce))
+      
+        # bin_df %>%
+        #   filter(SYMBOL_RAT == 'Egr1') %>%
+        #   select(TISSUE, SYMBOL_RAT,GROUP_ce,pve_e2, pve_c, pve_ce2_c, pve_ce2_e)
+        
+        
+        # Collect the top 500 DE genes for each comparison 
+        for(G1G2 in c('C0C7','C7E7','C0E0','E7E0')){
+          lfc <- paste0(G1G2, '_log2FoldChange')
+          padj <- paste0(G1G2, '_padj')
+          sig <- paste0(G1G2, '_SIG')
+          bin_df <- bin_df %>%
+            mutate(!!sym(sig) := ifelse(((!!sym(lfc) >= 0.25 | !!sym(lfc) <= -0.25) 
+                                         & !!sym(padj) <= 0.05),'SIG','NON-SIG'))
+        }
+# Collect top 500 E7E0 genes in Lung
+bin_df$C0C7_TOP500 <- '0'
+bin_df$C7E7_TOP500 <- '0'
+bin_df$C0E0_TOP500 <- '0'
+bin_df$E7E0_TOP500 <- '0'
+names(bin_df)
+
+for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Brown Adipose', 'Cortex','Gastrocnemius', 'Heart', 'Hippocampus','Ovaries','Spleen','Testes', 'White Adipose')){
+    (TISSUE1 <- TISSUE)
+  print(TISSUE)
+    for(G1G2 in c('C0C7','C7E7','C0E0')){
+      print(G1G2)
+      lfc <- paste0(G1G2, '_log2FoldChange')
+      padj <- paste0(G1G2, '_padj')
+      sig <- paste0(G1G2, '_SIG')
+      t500 <- paste0(G1G2, '_TOP500')
+      top500 <- c()
+      top500 <- bin_df %>%
+        filter(TISSUE == TISSUE1) %>%
+        filter(!!sym(padj) <= 0.05) %>%
+        filter(!!sym(lfc) >= 0.25) %>%
+        dplyr::arrange(desc(abs(!!sym(lfc)))) %>%
+        head(n =500) %>%
+          select(ENSEMBL_RAT) %>% unlist() %>% as.character()
+      bin_df <- bin_df %>%
+        mutate(!!sym(t500) := ifelse((TISSUE == TISSUE1 & ENSEMBL_RAT %in% top500),'1',!!sym(t500)))
+}  
+}
+
+# Add the KEGG annotation
+bin_df <- bin_df %>% 
+  mutate(KEGG_04710 = ifelse(SYMBOL_RAT %in% keggs, '1', '0'))
+
+#' ## Tallied Genes by Bin Type
+
+#+ Tallied Genes by Bin Type
+################################################################################
+#####     Tallied Genes by Bin Type       ######################################
+################################################################################
+
+# Gene Groups
+########################################################
+# Tally Genes by Bin Type
+bin_counts_df <- bin_df %>%
+  group_by(TISSUE, GROUP_ce) %>% 
+  mutate(GROUP_N = n()) %>%
+  mutate(GROUP_GENE_N = n_distinct(ENSEMBL_RAT))
+
+tissue_counts_df <- bin_df %>%
+  group_by(TISSUE) %>% 
+  mutate(TISSUE_N = n()) %>%
+  mutate(TISSUE_GENE_N = n_distinct(ENSEMBL_RAT)) %>% 
+  select(TISSUE, TISSUE_N, TISSUE_GENE_N) %>%
+  unique()
+bin_counts_df <- left_join(bin_counts_df, tissue_counts_df, by = "TISSUE")
+
+# Tally the genes and proportions
+bin_tally_df <- bin_counts_df %>%
+  select(TISSUE, GROUP_ce, GROUP_GENE_N, TISSUE_GENE_N) %>%
+  group_by(TISSUE) %>% 
+  mutate(TISSUE_N = n()) %>%
+  mutate(GROUP_TYPE_FREQ = round(GROUP_GENE_N/TISSUE_GENE_N,3)) %>%
+  arrange(TISSUE, GROUP_ce) %>%
+  select(-TISSUE_N) %>%
+  unique()
+
+bin_tally_df %>% filter(TISSUE == TISSUE1)
+
+View(bin_tally_df %>% arrange(GROUP_ce))
+
+# Kegg Genes
+########################################################
+# Tallt genes by Tissue, gene group, and kegg status
+kegg_counts_df <- bin_df %>%
+    group_by(TISSUE, GROUP_ce, KEGG_04710) %>% 
+    mutate(TIS_GG_KEGG_N = n()) %>%
+    mutate(TIS_GG_GENE_N = n_distinct(ENSEMBL_RAT)) %>%
+    select(TIS_GG_KEGG_N, TIS_GG_GENE_N) %>%
+    unique() %>% 
+    ungroup()
+
+gg_counts_df <- bin_df %>%
+  group_by(TISSUE, GROUP_ce) %>% 
+  mutate(GROUP_N = n()) %>%
+  mutate(GROUP_GENE_N = n_distinct(ENSEMBL_RAT)) %>%
+  select(GROUP_N) %>%
+  unique() %>%
+  ungroup()
+
+kegg_counts_df <- left_join(gg_counts_df, kegg_counts_df, by = c('TISSUE', 'GROUP_ce')) %>%
+  filter(KEGG_04710 == '1') %>%
+  select(-TIS_GG_GENE_N) %>%
+  mutate(TIS_GG_KEGG_FREQ = TIS_GG_KEGG_N/GROUP_N)
+
+# Save file and load into excel to visualize
+kegg_counts_file <- paste0(WD,'/data/20200628_kegg-counts-gene-groups_steep.txt')
+write.table(kegg_counts_df,kegg_counts_file,
+            sep = '\t', quote = FALSE, row.names = FALSE)
+
+# DE Genes (C0C7) 
+########################################################
+# Tally genes by Tissue, gene group, and kegg status
+C0C7_counts_df <- bin_df %>%
+  group_by(TISSUE, GROUP_ce, C0C7_TOP500) %>% 
+  mutate(TIS_GG_C0C7_N = n()) %>%
+  select(TIS_GG_C0C7_N) %>%
+  unique() %>% 
+  ungroup()
+
+C0C7_counts_df <- left_join(gg_counts_df, C0C7_counts_df, by = c('TISSUE', 'GROUP_ce')) %>%
+  filter(C0C7_TOP500 == '1') %>%
+  mutate(TIS_GG_C0C7_FREQ = TIS_GG_C0C7_N/GROUP_N) %>%
+  select(TISSUE, GROUP_ce, TIS_GG_C0C7_FREQ, GROUP_N, C0C7_TOP500, TIS_GG_C0C7_N)
+
+# Save file and load into excel to visualize
+C0C7_counts_file <- paste0(WD,'/data/20200628_C0C7-counts-gene-groups_steep.txt')
+write.table(C0C7_counts_df,C0C7_counts_file,
+            sep = '\t', quote = FALSE, row.names = FALSE)
+
+# DE Genes (C7E7)
+########################################################
+# Tally genes by Tissue, gene group, and kegg status
+C7E7_counts_df <- bin_df %>%
+  group_by(TISSUE, GROUP_ce, C7E7_TOP500) %>% 
+  mutate(TIS_GG_C7E7_N = n()) %>%
+  select(TIS_GG_C7E7_N) %>%
+  unique() %>% 
+  ungroup()
+
+C7E7_counts_df <- left_join(gg_counts_df, C7E7_counts_df, by = c('TISSUE', 'GROUP_ce')) %>%
+  filter(C7E7_TOP500 == '1') %>%
+  mutate(TIS_GG_C7E7_FREQ = TIS_GG_C7E7_N/GROUP_N)
+
+# Save file and load into excel to visualize
+C7E7_counts_file <- paste0(WD,'/data/20200628_C7E7-counts-gene-groups_steep.txt')
+write.table(C7E7_counts_df,C7E7_counts_file,
+            sep = '\t', quote = FALSE, row.names = FALSE)
+
+# DE Genes (C0E0) 
+#'E7E0')
+########################################################
+# Tally genes by Tissue, gene group, and kegg status
+C0E0_counts_df <- bin_df %>%
+  group_by(TISSUE, GROUP_ce, C0E0_TOP500) %>% 
+  mutate(TIS_GG_C0E0_N = n()) %>%
+  select(TIS_GG_C0E0_N) %>%
+  unique() %>% 
+  ungroup()
+
+C0E0_counts_df <- left_join(gg_counts_df, C0E0_counts_df, by = c('TISSUE', 'GROUP_ce')) %>%
+  filter(C0E0_TOP500 == '1') %>%
+  mutate(TIS_GG_C0E0_FREQ = TIS_GG_C0E0_N/GROUP_N)
+
+# Save file and load into excel to visualize
+C0E0_counts_file <- paste0(WD,'/data/20200628_C0E0-counts-gene-groups_steep.txt')
+write.table(C0E0_counts_df,C0E0_counts_file,
+            sep = '\t', quote = FALSE, row.names = FALSE)
+
+# DE Genes (E7E0) 
+########################################################
+# Tally genes by Tissue, gene group, and kegg status
+E7E0_counts_df <- bin_df %>%
+  group_by(TISSUE, GROUP_ce, E7E0_TOP500) %>% 
+  mutate(TIS_GG_E7E0_N = n()) %>%
+  select(TIS_GG_E7E0_N) %>%
+  unique() %>% 
+  ungroup()
+
+E7E0_counts_df <- left_join(gg_counts_df, E7E0_counts_df, by = c('TISSUE', 'GROUP_ce')) %>%
+  filter(E7E0_TOP500 == '1') %>%
+  mutate(TIS_GG_E7E0_FREQ = TIS_GG_E7E0_N/GROUP_N)
+
+# Save file and load into excel to visualize
+E7E0_counts_file <- paste0(WD,'/data/20200628_E7E0-counts-gene-groups_steep.txt')
+write.table(E7E0_counts_df,E7E0_counts_file,
+            sep = '\t', quote = FALSE, row.names = FALSE)
+
+
+
+        #' ## Save the PVE Summary File
+        
+        #+ Save the PVE Summary File
         ################################################################################
-        #####     Save the R2 Summary File       #######################################
+        #####     Save the PVE Summary File       #######################################
         ################################################################################
         # Label the gene symbols
         bin_out <- bin_df %>%
@@ -533,30 +505,178 @@ TISSUE <- "Kidney"
         write.table(bin_out, file=r2_file,
                     sep = '\t', quote = FALSE, row.names = FALSE)
         
+        #' ## Visualize PVE Plots: Bin Type
         
-        
-        #' ## Visualize R2 Plots: Plane Jane Heroine
-        
-        #+ Visualize R2 Plots: Plane Jane Heroine
+        #+ Visualize PVE Plots: Bin Type
         ################################################################################
-        #####     Visualize R2 Plots: Plane Jane Heroine       ##############################
+        #####     Visualize PVE Plots: Bin Type       ###################################
         ################################################################################
+        # Visualize Bin Type
+        TISSUE1 <- 'Kidney'
+        # Visualize the clusters (Tissue-specific)
+        d <- bin_df %>%
+                unique()
         
+        p <- ggplot() +
+                geom_point(data = d, aes(x = pve_ce2_e, y=pve_ce2_c, 
+                                         color = GROUP_ce_n) ,alpha = 0.3) +
+                xlim(0,1) + ylim(0,1) +
+                # geom_abline(intercept = 0, slope = 1) +
+                # geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
+                # geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
+                geom_abline(intercept = 0, slope = 2, linetype = 'dashed') +
+                geom_abline(intercept = 0, slope = 1, linetype = 'dashed') +
+                geom_abline(intercept = 0, slope = 0.5, linetype = 'dashed') +
+                geom_path(data = circleFun(c(0,0),0.40,npoints = 1000), aes(x,y)) +
+                xlab("PVE Exercise") +
+                ylab("PVE Circadian") +
+                ggtitle("PVE Comparisons within Joint Model (Exercise + Circadian)") +
+                # theme(strip.text = element_text(size=18),
+                #       axis.text.x = element_text(size = 16),
+                #       axis.text.y = element_text(size = 14),
+                #       axis.title.x = element_text(size = 20),
+                #       axis.title.y = element_text(size = 20),
+                #       legend.text = element_text(size = 16)) +
+                facet_wrap(vars(TISSUE)) +
+                # scale_color_manual(values = c('0' = 'grey',
+                #                               '1' = 'orange',
+                #                               '2' = 'gold',
+                #                               '3' = 'steelblue1',
+                #                               '4' = 'steelblue4')) +
+                scale_color_continuous(high = "#56B1F7", low = "#132B43",
+                                       name = "Group") +
+                coord_equal()
+        pdf(paste0(WD,'/plots/20200628_rnaseq-',TISSUE1,'-theoretical-bins-anova2_steep.pdf'),
+            width=26,height=14)
+        plot(p)
+        dev.off()
+        ec_colors
+        # Visualize the clusters across tissues
+        d <- bin_df %>%
+                filter(TISSUE == TISSUE1)
+        #filter(MANOVA_PVAL <= 0.05)
+        
+        # PVE (between models)
+        p <- ggplot() +
+                geom_point(data = bin_df, 
+                           aes(x = pve_ce2_e, y= pve_ce2_c, color = BIN_TYPE_ce), 
+                           alpha = 0.8) +
+                xlim(0,1) + 
+                ylim(0,1) +
+                scale_x_continuous() +
+                geom_abline(intercept = 0, slope = 1) +
+                geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
+                geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
+                xlab("PVE Polynomial Model (Exercise)") +
+                ylab("PVE SIN/COS Model (Circadian)") +
+                ggtitle("Circadian vs. Exercise:\nPVE Comparisons Between Models") +
+                theme_bw() +
+                theme(strip.text = element_text(size=18),
+                      axis.text.x = element_text(size = 16),
+                      axis.text.y = element_text(size = 14),
+                      axis.title.x = element_text(size = 20),
+                      axis.title.y = element_text(size = 20),
+                      legend.text = element_text(size = 16)) +
+                facet_wrap(vars(TISSUE)) +
+                scale_color_manual(values = c('Ambiguous_High' = "red",
+                                              'Ambiguous_Low' = "grey",
+                                              'Circadian' = "green",
+                                              'Exercise' = 'blue')) +
+                coord_equal()
+        pdf(paste0(WD,'/plots/20200628_rnaseq-all-tissues-faceted-theoretical-bins_steep.pdf'),width=26,height=14)
+        plot(p)
+        dev.off()
+        
+        # PVE (within models -- circadian first)
+        p <- ggplot() +
+                geom_point(data = d, 
+                           aes(x = pve_ce_e, y= pve_ce_c, color = BIN_TYPE), 
+                           alpha = 0.8) +
+                # geom_density_2d_filled(data = d, 
+                #                        aes(x = GAM1_R2, y= SIN1_R2), alpha = 0.5) +
+                # geom_density_2d(data = d, 
+                #                 aes(x = GAM1_R2, y= SIN1_R2), 
+                #                 size = 0.25, colour = "black") +
+                xlim(0,1) + ylim(0,1) +
+                geom_abline(intercept = 0, slope = 1) +
+                geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
+                geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
+                xlab("PVE Exercise") +
+                ylab("PVE Circadian") +
+                ggtitle("Circadian vs. Exercise:\nPVE Comparisons within Model") +
+                theme_bw() +
+                theme(strip.text = element_text(size=18),
+                      axis.text.x = element_text(size = 16),
+                      axis.text.y = element_text(size = 14),
+                      axis.title.x = element_text(size = 20),
+                      axis.title.y = element_text(size = 20),
+                      legend.text = element_text(size = 16)) +
+                facet_wrap(vars(TISSUE)) +
+                scale_color_manual(values = c('Ambiguous_High' = "red",
+                                              'Ambiguous_Low' = "grey",
+                                              'Circadian' = "green",
+                                              'Exercise' = 'blue')) +
+                coord_equal()
+        pdf(paste0(WD,'/plots/20200628_rnaseq-all-tissues-faceted-theoretical-bins-ce_steep.pdf'),width=26,height=14)
+        plot(p)
+        dev.off()
+        
+        # PVE (within models -- exercise first)
+        p <- ggplot() +
+                geom_point(data = d, 
+                           aes(x = pve_ec_e, y= pve_ec_c, color = BIN_TYPE), 
+                           alpha = 0.8) +
+                # geom_density_2d_filled(data = d, 
+                #                        aes(x = GAM1_R2, y= SIN1_R2), alpha = 0.5) +
+                # geom_density_2d(data = d, 
+                #                 aes(x = GAM1_R2, y= SIN1_R2), 
+                #                 size = 0.25, colour = "black") +
+                xlim(0,1) + ylim(0,1) +
+                geom_abline(intercept = 0, slope = 1) +
+                geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
+                geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
+                xlab("PVE Exercise") +
+                ylab("PVE Circadian") +
+                ggtitle("Circadian vs. Exercise:\nPVE Comparisons within Model") +
+                theme_bw() +
+                theme(strip.text = element_text(size=18),
+                      axis.text.x = element_text(size = 16),
+                      axis.text.y = element_text(size = 14),
+                      axis.title.x = element_text(size = 20),
+                      axis.title.y = element_text(size = 20),
+                      legend.text = element_text(size = 16)) +
+                facet_wrap(vars(TISSUE)) +
+                scale_color_manual(values = c('Ambiguous_High' = "red",
+                                              'Ambiguous_Low' = "grey",
+                                              'Circadian' = "green",
+                                              'Exercise' = 'blue')) +
+                coord_equal()
+        pdf(paste0(WD,'/plots/20200628_rnaseq-all-tissues-faceted-theoretical-bins-ec_steep.pdf'),width=26,height=14)
+        plot(p)
+        dev.off()
+        
+        #' ## Visualize PVE Plots: Plane Jane Heroine
+        
+        #+ Visualize PVE Plots: Plane Jane Heroine
+        ################################################################################
+        #####     Visualize PVE Plots: Plane Jane Heroine       ##############################
+        ################################################################################
+        dim(bin_df)
         # Single Tissue
         p <- bin_df %>%
                 filter(TISSUE == TISSUE1) %>%
-                filter(MANOVA_PVAL <= 0.05) %>%
-                sample_n(20000) %>%
-                ggplot(aes(x = GAM1_R2, y= SIN1_R2, alpha = 0.005)) +
+                #filter(MANOVA_PVAL <= 0.05) %>%
+                #sample_n(2000) %>%
+                ggplot(aes(x = pve_e2, y= pve_c, alpha = 0.005)) +
                 geom_point() +
                 #scale_fill_gradientn(colours=r, trans = "log") +
                 xlim(0,1) + ylim(0,1) +
                 geom_abline(intercept = 0, slope = 1) +
                 # geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
                 # geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
-                xlab("R^2 Natural Spline Model (Exercise)") +
-                ylab("R^2 SIN/COS Model (Circadian)") +
-                ggtitle(paste0("R2 Comparisons Between Models")) +
+                xlab("PVE Polynomial Model (Exercise)") +
+                ylab("PVE SIN/COS Model (Circadian)") +
+                ggtitle(paste0("PVE Comparisons Between Models")) +
                 #labs(fill = 'Log(Gene Counts)') +
                 theme(legend.position = "none") +
                 coord_equal() +
@@ -580,18 +700,19 @@ TISSUE <- "Kidney"
         # Single Tissue
         p <- bin_df %>%
                 filter(TISSUE == TISSUE1) %>%
-                filter(MANOVA_PVAL <= 0.05) %>%
-                #sample_n(2000) %>%
-                ggplot(aes(x = GAM1_R2, y= SIN1_R2)) +
+                #filter(MANOVA_PVAL <= 0.05) %>%
+                #sample_n(200) %>%
+                ggplot(aes(x = pve_ce2_e, y= pve_ce2_c)) +
                 stat_bin2d(bins = 50) +
                 scale_fill_gradientn(colours=r, trans = "log") +
                 xlim(0,1) + ylim(0,1) +
-                geom_abline(intercept = 0, slope = 1) +
-                geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
-                geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
-                xlab("R^2 Natural Spline Model (Exercise)") +
-                ylab("R^2 SIN/COS Model (Circadian)") +
-                ggtitle(paste0("R2 Comparisons Between Models")) +
+          geom_abline(intercept = 0, slope = 2, linetype = 'dashed') +
+          geom_abline(intercept = 0, slope = 1, linetype = 'dashed') +
+          geom_abline(intercept = 0, slope = 0.5, linetype = 'dashed') +
+          geom_path(data = circleFun(c(0,0),0.40,npoints = 1000), aes(x,y)) +
+                xlab("PVE Exercise") +
+                ylab("PVE Circadian") +
+                ggtitle(paste0("PVE Comparisons within Combined Model")) +
                 labs(fill = 'Log(Gene Counts)') +
                 coord_equal() +
                 facet_wrap( ~ TISSUE)
@@ -599,21 +720,32 @@ TISSUE <- "Kidney"
         plot(p)
         dev.off()
         
+        
+        
         # All Tissues
         p <- bin_df %>%
                 #filter(TISSUE == TISSUE1) %>%
-                filter(MANOVA_PVAL <= 0.05) %>%
+                #filter(MANOVA_PVAL <= 0.05) %>%
                 #sample_n(2000) %>%
-                ggplot(aes(x = GAM1_R2, y= SIN1_R2)) +
+                ggplot(aes(x = pve_ce2_e, y= pve_ce2_c)) +
                 stat_bin2d(bins = 100) +
                 scale_fill_gradientn(colours=r, trans = "log") +
                 xlim(0,1) + ylim(0,1) +
-                geom_abline(intercept = 0, slope = 1) +
-                geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
-                geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
-                xlab("R^2 Natural Spline Model (Exercise)") +
-                ylab("R^2 SIN/COS Model (Circadian)") +
-                ggtitle(paste0("R2 Comparisons Between Models")) +
+          geom_abline(intercept = 0, slope = 2, linetype = 'dashed') +
+          geom_abline(intercept = 0, slope = 1, linetype = 'dashed') +
+          geom_abline(intercept = 0, slope = 0.5, linetype = 'dashed') +
+          geom_path(data = circleFun(c(0,0),0.40,npoints = 1000), aes(x,y)) +
+          xlab("PVE Exercise") +
+          ylab("PVE Circadian") +
+          ggtitle("PVE Comparisons within Joint Model (Exercise + Circadian)") +
+                theme(plot.title = element_text(size = 20),
+                      strip.text = element_text(size=12),
+                       axis.text.x = element_text(size = 10),
+                       axis.text.y = element_text(size = 10),
+                       axis.title.x = element_text(size = 18),
+                       axis.title.y = element_text(size = 18),
+                       legend.text = element_text(size = 10),
+                      legend.title = element_text(size = 18)) +
                 labs(fill = 'Log(Gene Counts)') +
                 coord_equal() +
                 facet_wrap( ~ TISSUE)
@@ -746,153 +878,7 @@ Differentially Expressed Genes (",comp,")")) +
                 dev.off()
         }
 
-        #' ## Visualize R2 Plots: Bin Type
         
-        #+ Visualize R2 Plots: Bin Type
-        ################################################################################
-        #####     Visualize R2 Plots: Bin Type       ###################################
-        ################################################################################
-        # Visualize Bin Type
-        TISSUE1 <- 'Adrenal'
-        # Visualize the clusters (Tissue-specific)
-        d <- bin_df %>%
-                filter(TISSUE == TISSUE1) %>%
-                filter(MANOVA_PVAL <= 0.05) %>%
-                mutate(Gene_Group = case_when(BIN_TYPE == 'Ambiguous' ~ 'Group 2',
-                                              BIN_TYPE == 'Circadian' ~ 'Group 1',
-                                              BIN_TYPE == 'Exercise' ~ 'Group 3')) %>%
-                unique()
-        p <- ggplot() +
-                geom_point(data = d, 
-                           aes(x = GAM1_R2, y= SIN1_R2, color = Gene_Group), 
-                           alpha = 0.1) +
-                # geom_density_2d_filled(data = d, 
-                #                        aes(x = GAM1_R2, y= SIN1_R2), alpha = 0.5) +
-                # geom_density_2d(data = d, 
-                #                 aes(x = GAM1_R2, y= SIN1_R2), 
-                #                 size = 0.25, colour = "black") +
-                xlim(0,1) + ylim(0,1) +
-                geom_abline(intercept = 0, slope = 1) +
-                geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
-                geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
-                xlab("R^2 Natural Spline Model (Exercise)") +
-                ylab("R^2 SIN/COS Model (Circadian)") +
-                ggtitle(paste0("R2 Comparisons Between Models")) +
-                facet_wrap(vars(TISSUE)) +
-                scale_color_manual(values = c('Group 1' = "green",
-                                             'Group 2' = "red",
-                                             'Group 3' = 'blue')) +
-                coord_equal()
-        pdf(paste0(WD,'/plots/20200628_rnaseq-',TISSUE1,'-theoretical-bins_steep.pdf'),width=26,height=14)
-        plot(p)
-        dev.off()
-        
-        # Visualize the clusters across tissues
-        d <- bin_df %>%
-                #filter(TISSUE == TISSUE1) %>%
-                filter(MANOVA_PVAL <= 0.05)
-        
-        # PVE (between models)
-        p <- ggplot() +
-                geom_point(data = d, 
-                           aes(x = pve_e, y= pve_c, color = BIN_TYPE), 
-                           alpha = 0.8) +
-                # geom_density_2d_filled(data = d, 
-                #                        aes(x = GAM1_R2, y= SIN1_R2), alpha = 0.5) +
-                # geom_density_2d(data = d, 
-                #                 aes(x = GAM1_R2, y= SIN1_R2), 
-                #                 size = 0.25, colour = "black") +
-                xlim(0,1) + ylim(0,1) +
-                geom_abline(intercept = 0, slope = 1) +
-                geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
-                geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
-                xlab("PVE Natural Spline Model (Exercise)") +
-                ylab("PVE SIN/COS Model (Circadian)") +
-                ggtitle("Circadian vs. Exercise:\nPVE Comparisons Between Models") +
-                theme_bw() +
-                theme(strip.text = element_text(size=18),
-                      axis.text.x = element_text(size = 16),
-                      axis.text.y = element_text(size = 14),
-                      axis.title.x = element_text(size = 20),
-                      axis.title.y = element_text(size = 20),
-                      legend.text = element_text(size = 16)) +
-                facet_wrap(vars(TISSUE)) +
-                scale_color_manual(values = c('Ambiguous_High' = "red",
-                                             'Ambiguous_Low' = "grey",
-                                             'Circadian' = "green",
-                                             'Exercise' = 'blue')) +
-                coord_equal()
-        pdf(paste0(WD,'/plots/20200628_rnaseq-all-tissues-faceted-theoretical-bins_steep.pdf'),width=26,height=14)
-        plot(p)
-        dev.off()
-        
-        # PVE (within models -- circadian first)
-        p <- ggplot() +
-                geom_point(data = d, 
-                           aes(x = pve_ce_e, y= pve_ce_c, color = BIN_TYPE), 
-                           alpha = 0.8) +
-                # geom_density_2d_filled(data = d, 
-                #                        aes(x = GAM1_R2, y= SIN1_R2), alpha = 0.5) +
-                # geom_density_2d(data = d, 
-                #                 aes(x = GAM1_R2, y= SIN1_R2), 
-                #                 size = 0.25, colour = "black") +
-                xlim(0,1) + ylim(0,1) +
-                geom_abline(intercept = 0, slope = 1) +
-                geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
-                geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
-                xlab("PVE Exercise") +
-                ylab("PVE Circadian") +
-                ggtitle("Circadian vs. Exercise:\nPVE Comparisons within Model") +
-                theme_bw() +
-                theme(strip.text = element_text(size=18),
-                      axis.text.x = element_text(size = 16),
-                      axis.text.y = element_text(size = 14),
-                      axis.title.x = element_text(size = 20),
-                      axis.title.y = element_text(size = 20),
-                      legend.text = element_text(size = 16)) +
-                facet_wrap(vars(TISSUE)) +
-                scale_color_manual(values = c('Ambiguous_High' = "red",
-                                              'Ambiguous_Low' = "grey",
-                                              'Circadian' = "green",
-                                              'Exercise' = 'blue')) +
-                coord_equal()
-        pdf(paste0(WD,'/plots/20200628_rnaseq-all-tissues-faceted-theoretical-bins-ce_steep.pdf'),width=26,height=14)
-        plot(p)
-        dev.off()
-        
-        # PVE (within models -- exercise first)
-        p <- ggplot() +
-                geom_point(data = d, 
-                           aes(x = pve_ec_e, y= pve_ec_c, color = BIN_TYPE), 
-                           alpha = 0.8) +
-                # geom_density_2d_filled(data = d, 
-                #                        aes(x = GAM1_R2, y= SIN1_R2), alpha = 0.5) +
-                # geom_density_2d(data = d, 
-                #                 aes(x = GAM1_R2, y= SIN1_R2), 
-                #                 size = 0.25, colour = "black") +
-                xlim(0,1) + ylim(0,1) +
-                geom_abline(intercept = 0, slope = 1) +
-                geom_abline(intercept = 0.15, slope = 1, linetype = 'dashed') +
-                geom_abline(intercept = -0.15, slope = 1, linetype = 'dashed') +
-                xlab("PVE Exercise") +
-                ylab("PVE Circadian") +
-                ggtitle("Circadian vs. Exercise:\nPVE Comparisons within Model") +
-                theme_bw() +
-                theme(strip.text = element_text(size=18),
-                      axis.text.x = element_text(size = 16),
-                      axis.text.y = element_text(size = 14),
-                      axis.title.x = element_text(size = 20),
-                      axis.title.y = element_text(size = 20),
-                      legend.text = element_text(size = 16)) +
-                facet_wrap(vars(TISSUE)) +
-                scale_color_manual(values = c('Ambiguous_High' = "red",
-                                              'Ambiguous_Low' = "grey",
-                                              'Circadian' = "green",
-                                              'Exercise' = 'blue')) +
-                coord_equal()
-        pdf(paste0(WD,'/plots/20200628_rnaseq-all-tissues-faceted-theoretical-bins-ec_steep.pdf'),width=26,height=14)
-        plot(p)
-        dev.off()
         
         #' ## Tallied Genes by Bin Type
         
@@ -901,14 +887,22 @@ Differentially Expressed Genes (",comp,")")) +
         #####     Tallied Genes by Bin Type       ######################################
         ################################################################################
         
+        bin_df %>%
+                filter(TISSUE == TISSUE1) %>%
+                select(GROUP_ce) %>%
+                table()
+        
+        
         # Tally Genes by Bin Type
         bin_counts_df <- bin_df %>%
-                filter(MANOVA_PVAL <= 0.05) %>%
-                group_by(TISSUE, BIN_TYPE) %>% 
-                mutate(BIN_TYPE_N = n()) %>%
-                mutate(BIN_GENE_N = n_distinct(ENSEMBL_RAT))
+                group_by(TISSUE, GROUP_ce) %>% 
+                mutate(GROUP_N = n()) %>%
+                mutate(GROUP_GENE_N = n_distinct(ENSEMBL_RAT))
+        # bin_counts_df %>% select(TISSUE, GROUP_ce, GROUP_N) %>% 
+        #         filter(TISSUE == 'Kidney') %>%
+        #         unique()
+        
         tissue_counts_df <- bin_df %>%
-                filter(MANOVA_PVAL <= 0.05) %>%
                 group_by(TISSUE) %>% 
                 mutate(TISSUE_N = n()) %>%
                 mutate(TISSUE_GENE_N = n_distinct(ENSEMBL_RAT)) %>% 
@@ -918,25 +912,28 @@ Differentially Expressed Genes (",comp,")")) +
         
         # Tally the genes and proportions
         bin_tally_df <- bin_counts_df %>%
-                select(TISSUE,BIN_TYPE, BIN_GENE_N, TISSUE_GENE_N) %>%
+                select(TISSUE, GROUP_ce, GROUP_GENE_N, TISSUE_GENE_N) %>%
                 group_by(TISSUE) %>% 
                 mutate(TISSUE_N = n()) %>%
-                mutate(BIN_TYPE_FREQ = round(BIN_GENE_N/TISSUE_GENE_N,3)) %>%
-                arrange(TISSUE, BIN_TYPE) %>%
-                filter(BIN_TYPE != 'Ambiguous') %>%
+                mutate(GROUP_TYPE_FREQ = round(GROUP_GENE_N/TISSUE_GENE_N,3)) %>%
+                arrange(TISSUE, GROUP_ce) %>%
                 select(-TISSUE_N) %>%
                 unique()
+
+        bin_tally_df %>% filter(TISSUE == TISSUE1)
+        
+        View(bin_tally_df %>% arrange(GROUP_ce))
         
         # Save the exercise counts
         e_tally_out <- bin_tally_df %>%
-                filter(BIN_TYPE == 'Exercise')
+                filter(GROUP_ce == '4')
         e_tally_file <- 
                 paste0(WD,'/data/20200628_rnaseq-tissue-exercise-gene-tallies_steep.txt')
         write.table(e_tally_out, file=e_tally_file,
                     sep = '\t', quote = FALSE, row.names = FALSE)
         # Save the circadian counts
         c_tally_out <- bin_tally_df %>%
-                filter(BIN_TYPE == 'Circadian')
+                filter(GROUP_ce == '1')
         c_tally_file <- 
                 paste0(WD,'/data/20200628_rnaseq-tissue-circadian-gene-tallies_steep.txt')
         write.table(c_tally_out, file=c_tally_file,
@@ -955,20 +952,241 @@ Differentially Expressed Genes (",comp,")")) +
                 mutate(SYMBOL_RAT = mapIds(org.Rn.eg.db, ENSEMBL_RAT, "SYMBOL", "ENSEMBL"))
         
         # Tally the circadian genes across tissues
-        c_tally_df <- bin_df %>%
-                filter(MANOVA_PVAL <= 0.05) %>%
-                filter(BIN_TYPE == 'Circadian') %>%
+        g0_tally_df <- bin_df %>%
+          #filter(MANOVA_PVAL <= 0.05) %>%
+          filter(GROUP_ce == '0') %>%
+          filter(!is.na(SYMBOL_RAT)) %>%
+          group_by(GROUP_ce,SYMBOL_RAT) %>% 
+          select(TISSUE, GROUP_ce, SYMBOL_RAT) %>%
+          #mutate(GENE_BIN_N = n()) %>%
+          mutate(GENE_TISSUE_N = n_distinct(TISSUE)) %>%
+          select(-TISSUE) %>%
+          unique() %>%
+          #filter(GENE_TISSUE_N >= 8) %>%
+          arrange(desc(GENE_TISSUE_N))
+        g1_tally_df <- bin_df %>%
+                #filter(MANOVA_PVAL <= 0.05) %>%
+                filter(GROUP_ce == '1') %>%
                 filter(!is.na(SYMBOL_RAT)) %>%
-                group_by(BIN_TYPE,SYMBOL_RAT) %>% 
-                select(TISSUE, BIN_TYPE, SYMBOL_RAT) %>%
+                group_by(GROUP_ce,SYMBOL_RAT) %>% 
+                select(TISSUE, GROUP_ce, SYMBOL_RAT, ENSEMBL_RAT) %>%
                 #mutate(GENE_BIN_N = n()) %>%
                 mutate(GENE_TISSUE_N = n_distinct(TISSUE)) %>%
                 select(-TISSUE) %>%
                 unique() %>%
-                filter(GENE_TISSUE_N >= 8) %>%
+                #filter(GENE_TISSUE_N >= 8) %>%
                 arrange(desc(GENE_TISSUE_N))
+        g1_file <- paste0(WD,'/data/20200628_g1-ranked-list-tissue_steep.txt')
+        write.table(g1_tally_df, file=g1_file,
+                    sep = '\t', quote = FALSE, row.names = FALSE)
+        g2_tally_df <- bin_df %>%
+                #filter(MANOVA_PVAL <= 0.05) %>%
+                filter(GROUP_ce == '2') %>%
+                filter(!is.na(SYMBOL_RAT)) %>%
+                group_by(GROUP_ce,SYMBOL_RAT) %>% 
+                select(TISSUE, GROUP_ce, SYMBOL_RAT, ENSEMBL_RAT) %>%
+                #mutate(GENE_BIN_N = n()) %>%
+                mutate(GENE_TISSUE_N = n_distinct(TISSUE)) %>%
+                select(-TISSUE) %>%
+                unique() %>%
+                #filter(GENE_TISSUE_N >= 8) %>%
+                arrange(desc(GENE_TISSUE_N))
+        g2_file <- paste0(WD,'/data/20200628_g2-ranked-list-tissue_steep.txt')
+        write.table(g2_tally_df, file=g2_file,
+                    sep = '\t', quote = FALSE, row.names = FALSE)
+        g3_tally_df <- bin_df %>%
+                #filter(MANOVA_PVAL <= 0.05) %>%
+                filter(GROUP_ce == '3') %>%
+                filter(!is.na(SYMBOL_RAT)) %>%
+                group_by(GROUP_ce,SYMBOL_RAT) %>% 
+                select(TISSUE, GROUP_ce, SYMBOL_RAT, ENSEMBL_RAT) %>%
+                #mutate(GENE_BIN_N = n()) %>%
+                mutate(GENE_TISSUE_N = n_distinct(TISSUE)) %>%
+                select(-TISSUE) %>%
+                unique() %>%
+                #filter(GENE_TISSUE_N >= 8) %>%
+                arrange(desc(GENE_TISSUE_N))
+        g3_file <- paste0(WD,'/data/20200628_g3-ranked-list-tissue_steep.txt')
+        write.table(g3_tally_df, file=g3_file,
+                    sep = '\t', quote = FALSE, row.names = FALSE)
+        g4_tally_df <- bin_df %>%
+                #filter(MANOVA_PVAL <= 0.05) %>%
+                filter(GROUP_ce == '4') %>%
+                filter(!is.na(SYMBOL_RAT)) %>%
+                group_by(GROUP_ce,SYMBOL_RAT) %>% 
+                select(TISSUE, GROUP_ce, SYMBOL_RAT, ENSEMBL_RAT) %>%
+                #mutate(GENE_BIN_N = n()) %>%
+                mutate(GENE_TISSUE_N = n_distinct(TISSUE)) %>%
+                select(-TISSUE) %>%
+                unique() %>%
+                #filter(GENE_TISSUE_N >= 8) %>%
+                arrange(desc(GENE_TISSUE_N))
+        g4_file <- paste0(WD,'/data/20200628_g4-ranked-list-tissue_steep.txt')
+        write.table(g4_tally_df, file=g4_file,
+                    sep = '\t', quote = FALSE, row.names = FALSE)
+        
+        tally_df <- rbind(g1_tally_df, g2_tally_df, g3_tally_df, g4_tally_df) %>%
+          ungroup()
+        
+        # Find mouse orthologs for enrichr
+        orth_df <- tally_df %>%
+          ungroup() %>%
+          select(ENSEMBL_RAT) %>% 
+          unique() %>% as.data.frame() %>%
+          rat_mouse_ortho(column = 'ENSEMBL_RAT', direction = 'rat2mouse') %>%
+          as_tibble()
+        tally_df <- left_join(tally_df, orth_df, by='ENSEMBL_RAT')
+        
+        enrichr_final_df <- data.frame()
+        for(gg in c('1','2','3','4')){
+          # Select the Group 1 Genes
+          df <- tally_df %>%
+            filter(GROUP_ce == gg) %>%
+            filter(GENE_TISSUE_N >= 2)
+          
+          # Pathway Analysis
+          ###############################
+          
+          # Collect gene symbols
+          symbols <- df %>%
+            filter(!is.na(SYMBOL_MOUSE)) %>%
+            select(SYMBOL_MOUSE) %>% unlist() %>% unique() %>% as.character()
+          
+          # Collect the desired pathways to query for enrichment
+          desired <- c('KEGG_2019_Mouse')
+          enriched <- enrichr(symbols, desired)
+          
+          n<-1
+          enrichr_df <- data.frame()
+          for(db in desired){
+            # Collapse the data into flat format
+            if(!is.null(nrow(enriched[[desired]]))){
+              enriched[[n]]$Data.Base <- db
+              enrichr_df <- rbind(enrichr_df,enriched[[n]])
+            }
+            n <- n + 1
+          }
+          # Generate a new column for the number of genes per enriched term
+          if(nrow(enrichr_df) > 0){
+            enrichr_df  <- enrichr_df %>% separate(Overlap, sep = '/', into = c('Overlap.N','Total.N'))
+            enrichr_df$FDR_nlog <- -log(enrichr_df$Adjusted.P.value)
+            # Filter the results
+            enrichr_plot <- enrichr_df %>%
+              filter(Total.N <= 500) %>%
+              filter(Total.N >= 10) %>%
+              filter(Adjusted.P.value <= 0.1) %>%
+              arrange(desc(FDR_nlog)) %>%
+              dplyr::slice(1:10) %>%
+              group_by(Term) %>%
+              arrange(FDR_nlog) %>%
+              ungroup() %>%
+              mutate(Gene_Group = gg)
+            enrichr_final_df <- rbind(enrichr_final_df, enrichr_plot)
+          }
+        }
+          # Create a special column that will allow for proper ordering of Pathways in Plot:
+          # Ordering will have 2 priorities in this order: Up/Down regulation & -Log(FDR)
+          # Visualize results with barplot
+          #pdf(paste0(WD,'/plots/20200426_rnaseq-',TIS,'-pathways-sexmod-C0vsC7_steep.pdf'),
+          #    width = 12, height = 6)
+        names(enrichr_final_df)
+        ggplot(enrichr_final_df, aes(x = reorder(Term, FDR_nlog), y = FDR_nlog, size = Odds.Ratio, col = Gene_Group)) +
+          geom_point() +
+          coord_flip() +
+          ylab('-Log(FDR)') +
+          xlab('') +
+          theme(
+                strip.background = element_blank(),
+                axis.text = element_text(size=12, colour = 'black'),
+                axis.ticks = element_line(colour = 'black'),
+                axis.title=element_text(size=12,face='bold'),
+                strip.text = element_blank())
+        # scale_color_gradient(low = "red",
+        #                        high = "black") 
+        theme(axis.text = element_text(size = rel(1)))
+          p <- ggplot(enrichr_final_df, 
+                      aes(x=reorder(Term, FDR_nlog), y=FDR_nlog, fill = Gene_Group)) +
+            geom_bar(stat='identity') +
+            coord_flip() +
+            ylab('-Log(FDR)') +
+            xlab('') +
+            theme_linedraw() +
+            guides(fill=guide_legend(title='Gene Group')) +
+            theme(panel.background = element_blank(),
+                  plot.background = element_blank(),
+                  strip.background = element_blank(),
+                  axis.text = element_text(size=12, colour = 'black'),
+                  axis.ticks = element_line(colour = 'black'),
+                  axis.title=element_text(size=12,face='bold'),
+                  strip.text = element_blank()) +
+            theme(panel.grid.major = element_blank()) +
+            ggtitle(paste0('Pathway Enrichment of Gene Groups (',desired,')'))
+          pdf(paste0(WD,'/plots/20200628_rnaseq-',TISSUE1,'-',gene_group,'-pathways_steep.pdf'),
+              width = 12, height = 6)
+          plot(p)
+          dev.off()
+        }
+        
+
+
+enrichr_final_df$TISSUE <- as.factor(enrichr_final_df$TISSUE)
+
+# Circadian Plot
+#########################################
+
+enrichr_circ_df <- enrichr_final_df %>%
+  filter(Total.N <= 500) %>%
+  filter(Total.N >= 10) %>%
+  filter(Adjusted.P.value <= 0.1) %>%
+  arrange(desc(FDR_nlog)) %>%
+  filter(BIN_TYPE == 'Circadian') %>%
+  group_by(TISSUE) %>%
+  dplyr::slice(1:10)
+
+enrichr_circ_df %>%
+  filter(BIN_TYPE == 'Circadian') %>%
+  ggplot(aes(x=reorder(Term, FDR_nlog), y=FDR_nlog)) +
+  geom_bar(stat='identity') +
+  coord_flip() +
+  ylab('-Log(FDR)') +
+  xlab('') +
+  theme_linedraw() +
+  guides(fill=guide_legend(title='Gene Expression')) +
+  # theme(panel.background = element_blank(),
+  #        plot.background = element_blank()) +
+  # #       strip.background = element_blank(),
+  # #       axis.text = element_text(size=12, colour = 'black'),
+  # #       axis.ticks = element_line(colour = 'black'),
+  # #       axis.title=element_text(size=12,face='bold'),
+  # #       strip.text = element_blank()) +
+  theme(panel.grid.major = element_blank()) +
+  ggtitle(paste0('Circadian-Modeled Genes
+Pathway Enrichment (',desired,')')) +
+  facet_wrap(vars(TISSUE))
+
+
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
+        
         c_tally_out <- bin_df %>%
-                filter(MANOVA_PVAL <= 0.05) %>%
+                #filter(MANOVA_PVAL <= 0.05) %>%
                 filter(BIN_TYPE == 'Circadian') %>%
                 filter(!is.na(SYMBOL_RAT)) %>%
                 group_by(BIN_TYPE,SYMBOL_RAT) %>% 

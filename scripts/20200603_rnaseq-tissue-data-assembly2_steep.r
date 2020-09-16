@@ -29,11 +29,11 @@ WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
 
 # Load the dependencies
 #source('https://bioconductor.org/biocLite.R')
-#BiocManager::install('ImpulseDE2')
+BiocManager::install('bigstatsr')
 #install.packages('tidyverse')
 
 # Load dependencies
-pacs...man <- c('tidyverse','GenomicRanges', 'DESeq2','devtools','rafalib','GO.db','vsn','hexbin','ggplot2', 'GenomicFeatures','Biostrings','BSgenome','AnnotationHub','plyr','dplyr', 'org.Rn.eg.db','pheatmap','sva','formula.tools','pathview','biomaRt', 'PROPER','SeqGSEA','purrr','BioInstaller','RColorBrewer','lubridate', 'hms','ggpubr', 'ggrepel','genefilter','qvalue','ggfortify','som', 'vsn','org.Mm.eg.db','VennDiagram','EBImage','reshape2','xtable','kohonen','som','caret','enrichR','gplots','tiff','splines','gam','EnhancedVolcano','mvoutlier','multtest','bigutilsr','bigstatsr','magrittr','ImpulseDE2')
+pacs...man <- c('tidyverse','GenomicRanges', 'DESeq2','devtools','rafalib','GO.db','vsn','hexbin','ggplot2', 'GenomicFeatures','Biostrings','BSgenome','AnnotationHub','plyr','dplyr', 'org.Rn.eg.db','pheatmap','sva','formula.tools','pathview','biomaRt', 'PROPER','SeqGSEA','purrr','BioInstaller','RColorBrewer','lubridate', 'hms','ggpubr', 'ggrepel','genefilter','qvalue','ggfortify','som', 'vsn','org.Mm.eg.db','VennDiagram','EBImage','reshape2','xtable','kohonen','som','caret','enrichR','gplots','tiff','splines','gam','EnhancedVolcano','mvoutlier','multtest','bigutilsr','bigstatsr','magrittr')
 lapply(pacs...man, FUN = function(X) {
         do.call('library', list(X)) })
 
@@ -91,7 +91,7 @@ source(paste0(WD,'/functions/cor_outlier2.R'))
 df_tbl <- data.frame(matrix(ncol = 8, nrow = 0))
 names(df_tbl) <- c('Tissue','Tis','Seq_Batch','Misidentified',
                    'Adjusted_Variables','Outliers','Formula')
-for(TISSUE in c('Hippocampus')){
+for(TISSUE in c('Kidney')){
         # for(TISSUE in c('Hypothalamus', 'Kidney', 'Aorta', 'Adrenal', 'Brown Adipose', 'Cortex', 'Gastrocnemius', 'Heart', 'Hippocampus','Lung','Ovaries','Spleen', 'White Adipose','Liver','Testes')){
         # Declare Outliers
         if(TISSUE == 'Kidney'){
@@ -829,7 +829,7 @@ if(TISSUE %in% c('Hippocampus','Testes')){
 ################################################################################
 
 # Find variables associated with PCs
-pc_cor_df <- cor_PC_1_4(rld = rld, ntop = 20000, intgroups = names(tod_cols)) %>%
+pc_cor_df <- cor_PC_1_6(rld = rld, ntop = 20000, intgroups = names(tod_cols)) %>%
   filter(Adjusted_R_Sq > 0.2) %>%
   arrange(PC)
 # Examine Variables of interest for Pcs 1 - 4
@@ -1255,7 +1255,7 @@ for(pri_var in PRI_VAR){
   #pri_var <- PRI_VAR[1]
   print(pri_var)
   # Find variables associated with PCs
-  pc_cor_df <- cor_PC_1_4(rld = rld, ntop = 20000, intgroups = names(colData(rld))) %>%
+  pc_cor_df <- cor_PC_1_6(rld = rld, ntop = 20000, intgroups = names(colData(rld))) %>%
     filter(Adjusted_R_Sq > 0.2) %>%
     arrange(PC)
   # Examine Variables of interest for Pcs 1 and 2
@@ -1595,12 +1595,14 @@ Adjusted p-value <= 0.05; |Log2FC| >= 0.5'))
     
     # Examine the primary variable of interest to see if we've solved our issue
     # Before:
-    p <- DESeq2::plotPCA(rld, intgroup =pri_var) +
-      guides(color=guide_legend(title=pri_var))
+    p <- DESeq2::plotPCA(rld, intgroup = pri_var, ntop = 20000) +
+      guides(color=guide_legend(title='')) + coord_equal() +
+      ggtitle('PCA of Kidney')
     plot(p)
     # After
-    p <- DESeq2::plotPCA(rld_final, intgroup = pri_var, ntop = 500) +
-      guides(color=guide_legend(title=pri_var))
+    p <- DESeq2::plotPCA(rld_final, intgroup = pri_var, ntop = 20000) +
+      guides(color=guide_legend(title='')) + coord_equal() +
+      ggtitle('PCA of Kidney')
     plot(p)
     rld <- rld_final
   }

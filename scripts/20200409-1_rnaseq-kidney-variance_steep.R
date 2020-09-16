@@ -235,7 +235,7 @@ exp(median((log(counts(dds)[,1]) - loggeomeans)[is.finite(loggeomeans)])) == siz
 #' ##### Log2 normalization (with size factor and pseudo count)"
 log_norm_counts <- log2(counts(dds, normalized=TRUE) + 1)
 #' ##### Variance stabilizing transformation (VST) uses a subset of genes and divides each column of the counts matrix by our size factors. It also normalizes with respect to library size.
-vstd <- vst(dds)
+vstd <- vst(dds, blind = F)
 #' Regularized Log (rlog)
 #' The purpose of using the "regularized log" transformation is to shrink together the values of the genes that have very low counts ("shrinkage" technique in statistics). Rlog is close to log2 transform.
 #Time difference of 2.914409 mins (on Macbook pro)
@@ -255,13 +255,18 @@ boxplot(assay(rld)[rs > 0,], cex=0.2, main = "rlog Transform") # Regularized Log
 mypar(1,2)
 boxplot(log2(counts(dds)[rs > 0,] +1), cex=0.2, main = "log2 Transform") # log2 Transform
 boxplot(assay(vstd)[rs > 0,], cex=0.2, main = "VST Transform") # VST Transform
-
+mypar()
 #' ##### Returning to our prior plot of comparing expression of 2 samples, we can see the the variance is now more stable in VST and rlog transforms. However, the VST transform demonstrates a lot of variance in genes with low read counts. For that reason, we will proceed with rlog transform.
 mypar(1,1)
 plot(assay(vstd)[,c(1,2)],
      xlab = "Sample 1 VST Gene Counts", 
      ylab = "Sample 2 VST Gene Counts", 
-     cex = 0.3, main = "VST Transform" )
+     cex = 0.3, main = "VST Transform",
+     xlim=c(5, 25),
+     ylim=c(5, 25))
+
+
+
 plot(assay(rld)[,c(1,2)],
      xlab = "Sample 1 rlog Gene Counts", 
      ylab = "Sample 2 rlog Gene Counts", 
