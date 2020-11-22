@@ -611,7 +611,6 @@ for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Bro
         # Restore the count object
         count_file <- paste0(WD, '/data/20200603_rnaseq-counts-pass1a-stanford-sinai-processed_steep.rds')
         count_data <- readRDS(file = count_file)
-        
         #' #### Retrieve Circadian Genes Associated with Tissue
         #' Data from Supplementary Table 2 from 1. Yan, J., Wang, H., Liu, Y. & Shao, C. Analysis of gene regulatory networks in the mammalian circadian rhythm. PLoS Comput. Biol. 4, (2008).
         #' Downloaded 20200326 by Alec Steep
@@ -1052,7 +1051,7 @@ for(TISSUE in c('Lung','Hypothalamus','Aorta','Liver', 'Kidney', 'Adrenal', 'Bro
         # saveRDS(by_gene_df, file = by_gene_by_tissue_df_file)
         # Save the final output table
         models_file <- paste0(WD,'/data/20200603_rnaseq-',TISSUE1,'-models-pve-table2_steep.txt')
-        write.table(models_df, file = models_file,sep = '\t',row.names = F,quote = F)
+        #write.table(models_df, file = models_file,sep = '\t',row.names = F,quote = F)
 }
 
 
@@ -1281,6 +1280,7 @@ for(mdl in c('sin','poly4','ce2')){
                 pred_list[[model_pred]][[g]] <- grid
         }
         #Add the predictions from the model to an object in the top tibble
+        #by_gene_df$ce2_pred[[1]] %>% dplyr::select('grid_t_exercise_hour_sqrt','grid_t_death_hour','pred')
         by_gene_df <- by_gene_df %>%
                 mutate(!!model_pred := pred_list[[model_pred]])
         # Per gene visualization

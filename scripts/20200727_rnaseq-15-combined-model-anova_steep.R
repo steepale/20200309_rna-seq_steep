@@ -10,6 +10,7 @@
 
 # Set the working directory
 WD <- '/home/acsteep/motrpac/20200309_rna-seq_steep'
+#WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
 #setwd(WD)
 
 # Load the dependencies
@@ -1033,6 +1034,9 @@ for(TISSUE in c('White Adipose')){
                 # select(ENSEMBL_RAT, SYMBOL_RAT,gam_anova,sin_anova,ce_anova,ec_anova,poly4_anova,ec2_anova,ce2_anova)
                 select(ENSEMBL_RAT, SYMBOL_RAT,sin_anova,poly4_anova,ce2_anova)
         # Collect the PVE from models and different aspects of combined models
+        names(by_gene_df$data[[1]])
+        by_gene_df$data[[1]][['specimen.collection.t_death_hour']] %>%
+                as.data.frame() %>% print(row.names = F)
         pve_df <- pve_df %>%
                 # mutate(pve_e = map_dbl(gam_anova, PVE_e)) %>%
                 mutate(pve_e2 = map_dbl(poly4_anova, PVE_e2)) %>%

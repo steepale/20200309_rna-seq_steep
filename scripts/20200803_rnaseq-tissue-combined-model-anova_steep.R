@@ -841,7 +841,7 @@ for(TISSUE in c('White Adipose')){
                 filter(sample_key %in% nona_sams)
         
         # Select the normalized counts
-        tod_counts <- assay(rld) 
+        #tod_counts <- assay(rld) 
         t_counts <- setNames(reshape2::melt(tod_counts), 
                              c('ENSEMBL_RAT', 'sample_key', 'count'))
         

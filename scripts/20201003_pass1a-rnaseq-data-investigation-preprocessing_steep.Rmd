@@ -1,0 +1,1589 @@
+---
+title: "20201003_pass1a-rnaseq-data-investigation-preprocessing_steep"
+author: "Steep"
+date: "10/3/2020"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(warning = FALSE)
+knitr::opts_chunk$set(message = FALSE)
+knitr::opts_chunk$set(cache = FALSE)
+```
+
+## Setup the Environment
+
+```{r Setup Environment, include=FALSE}
+################################################################################
+##### Resources and Dependencies ###############################################
+################################################################################
+
+# Set the working directory
+WD <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep'
+#setwd(WD)
+
+# Load the dependencies
+#source("https://bioconductor.org/biocLite.R")
+#BiocManager::install("ff")
+#install.packages("AppliedPredictiveModeling")
+
+# Load dependencies
+pacs...man <- c("tidyverse","data.table","R.utils","ggpubr","plyr","ROCR","ff","GenomicRanges","BSgenome","rtracklayer","caret","pROC","modelr","ggplot2","AppliedPredictiveModeling","e1071",
+                "edgeR","DESeq2")
+lapply(pacs...man, FUN = function(X) {
+        do.call("library", list(X)) 
+})
+
+############################################################
+##### Functions ############################################
+############################################################
+
+# Resolve conflicts
+################################################################################
+counts <- DESeq2::counts
+map <- purrr::map
+summarize <- dplyr::summarize
+filter <- dplyr::filter
+mutate <- dplyr::mutate
+arrange <- dplyr::arrange
+select <- dplyr::select
+spread <- tidyr::spread
+mean <- base::mean
+sd <- stats::sd
+
+# Global options
+################################################################################
+# print max lines
+options(dplyr.print_max = 30)
+# Disable scientific notation
+options(scipen=999)
+# Number of digits
+options(digits = 3)
+
+# Source the functions
+################################################################################
+source(paste0(WD,'/functions/not_in.R'))
+source(paste0(WD,'/functions/rat_mouse_ortho.R'))
+source(paste0(WD,'/functions/mouse2rat_ortho.R'))
+source(paste0(WD,'/functions/lmp.R'))
+source(paste0(WD,'/functions/cor_PC_1_6.R'))
+source(paste0(WD,'/functions/elbow_finder.R'))
+source(paste0(WD,'/functions/cor_outlier2.R'))
+source(paste0(WD,'/functions/get_upper_tri.R'))
+source(paste0(WD,'/functions/reorder_cormat.R'))
+source(paste0(WD,'/functions/modeav.R'))
+source(paste0(WD,'/functions/count_na.R'))
+source(paste0(WD,'/functions/se_mean.R'))
+source(paste0(WD,'/functions/Mode.R'))
+
+```
+
+## Load & Clean Data (MetaData & Counts)
+
+# In the metadata, there are 2 batches from rna sequencing that did not pass QC standards. Make sure to remove these batches. 
+
+```{r Load the Data}
+
+################################################################################
+#####     Load & Clean Data      ###############################################
+################################################################################
+
+# Set a vector for Exercise/Control Levels and Colors
+ec_levels <- c('Exercise - IPE',
+               'Exercise - 0.5 hr',
+               'Exercise - 1 hr',
+               'Exercise - 4 hr',
+               'Exercise - 7 hr',
+               'Exercise - 24 hr',
+               'Exercise - 48 hr',
+               'Control - IPE',
+               'Control - 7 hr')
+ec_colors <- c('gold',
+               'darkgoldenrod1',
+               'orange',
+               'darkorange',
+               'darkorange2',
+               'darkorange3',
+               'darkorange4',
+               'steelblue1',
+               'steelblue4')
+
+# Restore the count object
+count_file <- paste0(WD, '/data/20200603_rnaseq-counts-pass1a-stanford-sinai-processed_steep.rds')
+count_data <- readRDS(file = count_file)
+
+# Load the metadata information
+rnaseq_meta_annotation_file <- '/Volumes/Frishman_4TB/motrpac/20200309_rna-seq_steep/merged/merged_column_dictionary2019-10-13.txt'
+meta_col_df <- read.table(file = rnaseq_meta_annotation_file, header = T, sep = '\t')
+meta_col_df <- meta_col_df %>% select(Field.Name, Data.Type) %>%
+        mutate(Data.Type = ifelse(Data.Type == "varchar(MAX)", "varchar", Data.Type)) %>%
+        mutate(Data.Type = ifelse(Data.Type == "smallint", 'int', Data.Type))
+
+# Load the metadata
+meta_file <- paste0(WD,'/data/20200603_rnaseq-meta-pass1a-stanford-sinai-proc_steep.rds')
+col_data <- readRDS(file = meta_file)
+
+# Remove Sequencing batches that did not pass BIC QC (these batches were resequenced)
+col_data <- col_data[!(col_data$Tissue=="Gastrocnemius" & col_data$Seq_batch=="Stanford_1"),]
+col_data <- col_data[!(col_data$Tissue=="Lung" & col_data$Seq_batch=="MSSM_2"),]
+
+# Remove batches from the count data
+count_data <- count_data[,as.character(col_data$sample_key)]
+
+# For now we will filter for a certain tissue (TODO apply to all tissues and facet in visualization)
+################################################################################
+col_data <- col_data %>%
+  filter(Tissue == "Gastrocnemius")
+count_data <- count_data[,as.character(col_data$sample_key)]
+
+# For vst and cpm transformations, we will use a dds object (needs to adjust this with base R code in future)
+# Collect tissue specific counts
+row.names(col_data) <- col_data$sample_key
+tod_counts <- count_data[,row.names(col_data)]
+
+#' ##### Sanity Check: Ensure that the metadata rownames are identical to count matrix column names
+all(rownames(col_data) == colnames(tod_counts))
+
+# Create a design formula and load counts and supporting annotation into an S4 object (DESeq infrastructure)
+dds <- DESeqDataSetFromMatrix(countData = tod_counts,
+                               colData = col_data,
+                               design = ~ 1)
+
+
+
+```
+
+# Count Data
+## Examine Normalization Techniques for Count Data
+
+# Create a summary statistics table for each gene count (Raw and Transformed)
+```{r Count Data Summary Statistics Table, warning = FALSE}
+################################################################################
+######### QUANT Columns ########################################################
+################################################################################
+# Collect tissue names
+tissues <- table(col_data$Tissue) %>% names() %>% sort()
+# Collect other features
+ann_features <- c("Tissue", "GET_site", "sample_key")
+# Select the gene names
+features <- row.names(count_data)
+
+# Join annotations from the metadata column to the count df
+gene_counts <- t(count_data) %>% as.data.frame()
+gene_counts$sample_key <- row.names(gene_counts)
+join_df <- col_data %>% select(all_of(ann_features))
+counts_df <- left_join(gene_counts, join_df, by = c("sample_key"))
+
+# Examine the distribution of expected count values for each feature
+e_counts <- count_data[names(counts_df), ] %>% rowMeans()
+names(e_counts) == names(counts_df)
+
+# Dataframe of average counts
+E_counts <- data.frame(GENE = names(e_counts), AVERAGE_COUNT = e_counts)
+
+# Visualize the distribution of raw average counts
+################################################################################
+E_counts %>%
+  filter(AVERAGE_COUNT > 10) %>%
+  ggplot(aes_string(x="AVERAGE_COUNT")) +
+  geom_histogram(bins =200) +
+        labs(title="Average Counts",
+             x="Average Counts",
+             y = "Frequency") +
+        theme(legend.position = "none") +
+  xlim(1,100)
+
+# Randomly select 100 rows with an average count between x and y
+set.seed(123)
+low_genes <- E_counts %>%
+  filter(AVERAGE_COUNT < 1) %>%
+  row.names()
+
+high_genes <- E_counts %>%
+  filter(AVERAGE_COUNT > 10) %>%
+  row.names()
+
+# Gather the dataframe for the desnity plot
+density_df <- counts_df %>%
+  select(sample_key, all_of(features)) %>%
+  gather(all_of(features), key = "gene", value = "count")
+
+# Gather the dataframe from the boxplot
+boxplot_df <- density_df %>%
+  filter(gene %in% rnd_genes)
+
+# Plot Boxplots faceted by randomly selected genes
+################################################################################
+boxplot_df %>%
+  ggplot(aes(x = gene, y = count)) +
+  geom_boxplot(alpha = 0.2) +
+  labs(title="Box Plots of Individual Gene Counts",
+             y = "Raw Counts", x = "Genes") +
+  theme(axis.text.x = element_blank()) +
+  theme(legend.position = "none")
+
+# Plot the density plot for all the gene counts
+################################################################################
+density_df %>%
+  ggplot(aes(x = count)) +
+  geom_density() +
+  labs(title="Density Plot of Raw Counts",
+       x = "Raw Counts",
+       y = "Density") +
+  theme(legend.position = "none")
+
+# Apply different transformations
+################################################################################
+# Log2
+###################
+density_df <- density_df %>%
+  mutate(log2 = log2(count + 1))
+
+# VST
+###################
+rld <- DESeq2::vst(dds, blind = FALSE)
+vst_df <- t(assay(rld)) %>% as.data.frame()
+vst_df$sample_key <- row.names(vst_df)
+
+vst_mat <- assay(rld)
+cpm_mat <- cpm(assay(dds), log = T)
+
+# Gather the dataframe for the join of transformation
+vst_df <- vst_df %>%
+  select(sample_key, all_of(features)) %>%
+  gather(all_of(features), key = "gene", value = "vst")
+
+# Join the dataframes
+density_df <- left_join(density_df, vst_df, by =c("sample_key","gene"))
+
+# CPM
+##################
+cpm_df <- cpm(assay(dds), log = T) %>% t() %>% as.data.frame()
+cpm_df$sample_key <- row.names(cpm_df)
+
+# Gather the dataframe for the join of transformation
+cpm_df <- cpm_df %>%
+  select(sample_key, all_of(features)) %>%
+  gather(all_of(features), key = "gene", value = "cpm")
+
+# Join the dataframes
+transform_df_all <- left_join(density_df, cpm_df, by =c("sample_key","gene"))
+
+# Gather the dataframe
+transform_df <- transform_df_all %>%
+  gather(all_of(c('count','log2','vst','cpm')), key = "transform", value = "value")
+
+
+# Randomly select genes
+rnd_genes <- sample(features,150,replace=FALSE)
+rnd_dens_genes <- sample(features,5000,replace=FALSE)
+
+# Plot Boxplots faceted by randomly selected genes
+################################################################################
+# Compare raw counts to transformed counts
+transform_df %>%
+  filter(gene %in% rnd_genes[1:20]) %>%
+  ggplot(aes(x = gene, y = value)) +
+  geom_boxplot(alpha = 0.2) +
+  labs(title="Box Plots of Gene Counts Faceted by Transformation Technique",
+             y = "Counts", x = "Genes") +
+  theme(axis.text.x = element_blank()) +
+  theme(legend.position = "none") + 
+  facet_wrap(~ transform)
+
+# Show only the transformed counts
+transform_df %>%
+  filter(transform != 'count') %>%
+  filter(gene %in% rnd_genes) %>%
+  ggplot(aes(x = gene, y = value)) +
+  geom_boxplot(alpha = 0.2) +
+  labs(title="Box Plots of Gene Counts Faceted by Transformation Technique",
+             y = "Counts", x = "Genes") +
+  theme(axis.text.x = element_blank()) +
+  theme(legend.position = "none") + 
+  facet_wrap(~ transform, ncol = 1)
+
+# Plot the density plot for all the gene counts
+################################################################################
+# Including raw counts
+transform_df %>%
+  filter(gene %in% rnd_dens_genes) %>%
+  ggplot(aes(x = value)) +
+  geom_density() +
+  labs(title="Density Plot of Raw & Transformed Counts",
+       x = "Counts",
+       y = "Density") +
+  theme(legend.position = "none") +
+  xlim(-6,15) +
+  facet_wrap(~ transform, ncol = 4)
+
+# Excluding Raw Counts
+transform_df %>%
+  filter(gene %in% rnd_dens_genes) %>%
+  filter(transform != 'count') %>%
+  ggplot(aes(x = value)) +
+  geom_density() +
+  labs(title="Density Plot of Transformed Counts",
+       x = "Counts",
+       y = "Density") +
+  theme(legend.position = "none") +
+  facet_wrap(~ transform, ncol = 3)
+
+log2_1 <- transform_df %>%
+  filter(sample_key == "90001015902_SN1") %>%
+  filter(transform == 'log2') %>%
+  select(value) %>% unlist()
+
+cpm_1 <- transform_df %>%
+  filter(sample_key == "90001015902_SN1") %>%
+  filter(transform == 'cpm') %>%
+  select(value) %>% unlist()
+
+vst_1 <- transform_df %>%
+  filter(sample_key == "90001015902_SN1") %>%
+  filter(transform == 'vst') %>%
+  select(value) %>% unlist()
+
+log2_2 <- transform_df %>%
+  filter(sample_key == "90005015902_SN1") %>%
+  filter(transform == 'log2') %>%
+  select(value) %>% unlist()
+
+cpm_2 <- transform_df %>%
+  filter(sample_key == "90005015902_SN1") %>%
+  filter(transform == 'cpm') %>%
+  select(value) %>% unlist()
+
+vst_2 <- transform_df %>%
+  filter(sample_key == "90005015902_SN1") %>%
+  filter(transform == 'vst') %>%
+  select(value) %>% unlist()
+
+gene_gene <- transform_df %>%
+  filter(sample_key == "90005015902_SN1") %>%
+  filter(transform == 'vst') %>%
+  select(gene) %>% unlist()
+
+gene_gene2 <- transform_df %>%
+  filter(sample_key == "90001015902_SN1") %>%
+  filter(transform == 'vst') %>%
+  select(gene) %>% unlist()
+
+all(gene_gene == gene_gene2)
+
+df <- data.frame(gene = gene_gene, log2_1,log2_2,cpm_1,cpm_2,vst_1,vst_2) %>%
+  mutate(delta_log2 = log2_1 - log2_2) %>%
+  mutate(delta_cpm = cpm_1 - cpm_2) %>%
+  mutate(delta_vst = vst_1 - vst_2) %>%
+  mutate(HL = case_when(gene %in% high_genes ~ "H",
+                        gene %in% low_genes ~ "L"))
+
+df %>%
+  ggplot(aes(x = delta_cpm, y = delta_vst, color = HL, alpha = 0.4)) +
+  geom_point() +
+  geom_abline(slope = 1)
+
+h_n <- df %>%
+  filter(HL == "H") %>%
+  nrow()
+
+total <- nrow(df)
+
+h_n
+total
+h_n/total * 100
+
+h_n <- df %>%
+  filter(HL == "H") %>%
+  length()
+
+transform_df$sample_key %>% sort() %>% unique() %>% unlist() %>% length()
+
+cpm_mat[1:4,1:4]
+vst_mat[1:4,1:4]
+dim(cpm_mat) == dim(vst_mat)
+
+all(colnames(cpm_mat) == colnames(vst_mat))
+(rownames(cpm_mat) == rownames(vst_mat)) %>% table()
+
+cor1 <- cor(cbind(cpm_mat, vst_mat), method = "spearman")
+cor2 <- cor(cbind(cpm_mat, vst_mat), method = "pearson")
+
+dim(cor1)
+image(cor2)
+heatmap(cor1)
+# Sample to sample heterogenietiy (super strong diagnol adjacent lines
+# 4 corners: 1,1; 1,2; 2,2; 2,1)
+
+
+```
+
+
+```{r Summary Stats for Transformation Techniques}
+# Generate a summary table to summazrize the density plots resulting from each transfrmation technique
+################################################################################
+# Generate a list of features
+summary_out <- data.frame()
+#length(features)*length(tissues)
+
+# Create a vector of features
+FEATURE <- c()
+TISSUE <- c()
+NA_COUNT <- list()
+NA_FREQ <- list()
+MEAN <- list()
+TRIMMED_MEAN <- list()
+MEDIAN <- list()
+#MODE <- list()
+MAX <- list()
+MIN <- list()
+MID_RANGE <- list()
+VARIANCE <- list()
+STD_DEV <- list()
+SE_MEAN <- list()
+Q1 <- list()
+Q3 <- list()
+IQR <- list()
+KURTOSIS <- list()
+SKEW <- list()
+BC_LAMBDA <- list()
+
+i <- 1
+transformations <- c('count','log2','vst','cpm')
+#f <- transformations[2]
+# Iterate through each tissue to collect tissue-specific statistics
+for(f in transformations){
+        # Add transformations in proper order for FEATURE column
+        # Same with Tissues
+        f_add <- rep(f, length(tissues))
+        f_add <- f
+        FEATURE <- c(FEATURE, f_add)
+        TISSUE <- c(TISSUE, tissues)
+        TISSUE <- "Kidney"
+        # Iterate through each tissue and column to collect the summary statistics
+        
+        #t <- "Kidney"
+        for(t in c("Kidney")){
+                # Subset the df
+                df <- transform_df_all %>%
+                        #filter(Tissue == t) %>%
+                        select(all_of(f))
+                
+                # NA Values
+                ################################################################
+                # The number of NA values
+                NA_COUNT[[i]] <- df %>%
+                        map_dbl(.f = count_na)
+                # The percent NA values
+                NA_FREQ[[i]] <- (df %>%
+                                map_dbl(.f = count_na))/nrow(df)
+                
+                # Central Tendency
+                ################################################################
+                # Calculate the mean for all numeric data
+                MEAN[[i]] <- df %>%
+                        map_dbl(.f = mean, na.rm = TRUE)
+                # Calculate the trimmed mean for all numeric data
+                TRIMMED_MEAN[[i]] <- df %>%
+                        map_dbl(.f = mean, na.rm = TRUE, trim = 0.02)
+                # Calculate the median
+                MEDIAN[[i]] <- df %>%
+                        map_dbl(.f = median, na.rm = TRUE)
+                
+                # Calculate the mode(s)
+                # MODE[[i]] <- df %>%
+                #         map(.f = Mode)
+                # Calculate the min & max
+                MAX[[i]] <- df %>%
+                        map_dbl(.f = max, na.rm = TRUE)
+                MIN[[i]] <- df %>%
+                        map_dbl(.f = min, na.rm = TRUE)
+                # Calculate the midrange
+                MID_RANGE[[i]] <- MAX[[i]] - MIN[[i]]
+
+                # Variability (Spread)
+                ################################################################
+                # Calculate the variance
+                VARIANCE[[i]] <- df %>%
+                        map_dbl(.f = var, na.rm = TRUE)
+                # Calculate the standard deviation
+                STD_DEV[[i]] <- sqrt(VARIANCE[[i]])
+                # Calculate the standard error of the mean
+                SE_MEAN[[i]] <- df %>%
+                        map_dbl(.f = se_mean, na.rm = TRUE)
+                
+                # Relative Standing (Distribution)
+                ################################################################
+                # Calculate the quantiles
+                Q1[[i]] <- df %>%
+                        map_dbl(.f = quantile, na.rm = TRUE, probs = 0.25)
+                Q3[[i]] <- df %>%
+                        map_dbl(.f = quantile, na.rm = TRUE, probs = 0.75)
+                IQR[[i]] <- paste0(Q1[[i]], ' - ', Q3[[i]])
+                # Calculate the skew
+                if(MAX[[i]] == MIN[[i]]){
+                  SKEW[[i]] <- 0
+                }else{
+                  SKEW[[i]] <- df %>%
+                  map_dbl(.f = e1071::skewness, na.rm = TRUE)
+                }
+                KURTOSIS[[i]] <- df %>%
+                        map_dbl(.f = e1071::kurtosis, na.rm = TRUE)
+                
+                # Transformations
+                ################################################################
+                # Lambda from BOXCOX
+                if(!is.null((preProcess(df, method = c("BoxCox", "center", "scale"),
+                                na.remove = TRUE))$bc[[f]]$lambda) ){
+                        BC_LAMBDA[[i]] <- (preProcess(df, 
+                                method = c("BoxCox", "center", "scale"),
+                                na.remove = TRUE))$bc[[f]]$lambda %>% as.character()
+                }else{
+                        BC_LAMBDA[[i]] <- "None"
+                        }
+                
+                # Iteration loop
+                i <- i + 1
+        }
+}
+
+# Lists must be converted to numeric vectors
+NA_COUNT <- unlist(NA_COUNT) %>% unname()
+NA_FREQ <- unlist(NA_FREQ) %>% unname()
+MEAN <- unlist(MEAN) %>% unname()
+TRIMMED_MEAN <- unlist(TRIMMED_MEAN) %>% unname()
+MEDIAN <- unlist(MEDIAN) %>% unname()
+#MODE <- MODE %>% unlist(recursive = F) %>% as.vector() %>% unname() %>% as.character()
+MAX <- unlist(MAX) %>% unname()
+MIN <- unlist(MIN) %>% unname()
+MID_RANGE <- unlist(MID_RANGE) %>% unname()
+VARIANCE <- unlist(VARIANCE) %>% unname()
+STD_DEV <- unlist(STD_DEV) %>% unname()
+SE_MEAN <- unlist(SE_MEAN) %>% unname()
+Q1 <- unlist(Q1) %>% unname()
+Q3 <- unlist(Q3) %>% unname()
+IQR <- unlist(IQR) %>% unname()
+KURTOSIS <- unlist(KURTOSIS) %>% unname()
+SKEW <- unlist(SKEW) %>% unname()
+BC_LAMBDA <- unlist(BC_LAMBDA) %>% unname()
+
+# Create a dataframe form feature lists
+summary_out <- data.frame(FEATURE, TISSUE, NA_COUNT, MEAN, MEDIAN,
+                     MAX, MIN, MID_RANGE, VARIANCE, STD_DEV, SE_MEAN, Q1, Q3,
+                    KURTOSIS, SKEW, BC_LAMBDA) %>%
+        select(FEATURE, TISSUE, NA_COUNT, MEAN, MEDIAN,
+                     MAX, MIN, MID_RANGE, VARIANCE, STD_DEV, SE_MEAN, Q1, Q3,
+                     KURTOSIS, SKEW, BC_LAMBDA)
+
+
+summary_out
+```
+
+
+# Generate a list of features
+df_out <- data.frame()
+#length(features)*length(tissues)
+
+# Create a vector of features
+FEATURE <- c()
+TISSUE <- c()
+NA_COUNT <- list()
+NA_FREQ <- list()
+MEAN <- list()
+TRIMMED_MEAN <- list()
+MEDIAN <- list()
+#MODE <- list()
+MAX <- list()
+MIN <- list()
+MID_RANGE <- list()
+VARIANCE <- list()
+STD_DEV <- list()
+SE_MEAN <- list()
+Q1 <- list()
+Q3 <- list()
+IQR <- list()
+KURTOSIS <- list()
+SKEW <- list()
+BC_LAMBDA <- list()
+
+i <- 1
+#f <- features[i]
+# Iterate through each tissue to collect tissue-specific statistics
+for(f in features){
+        # Add features in proper order for FEATURE column
+        # Same with Tissues
+        f_add <- rep(f, length(tissues))
+        FEATURE <- c(FEATURE, f_add)
+        TISSUE <- c(TISSUE, tissues)
+        # Iterate through each tissue and column to collect the summary statistics
+        
+        #t <- "Ovaries"
+        for(t in tissues){
+                # Subset the df
+                df <- df_quant %>%
+                        filter(Tissue == t) %>%
+                        select(all_of(f))
+                
+                # NA Values
+                ################################################################
+                # The number of NA values
+                NA_COUNT[[i]] <- df %>%
+                        map_dbl(.f = count_na)
+                # The percent NA values
+                NA_FREQ[[i]] <- (df %>%
+                                map_dbl(.f = count_na))/nrow(df)
+                
+                # Central Tendency
+                ################################################################
+                # Calculate the mean for all numeric data
+                MEAN[[i]] <- df %>%
+                        map_dbl(.f = mean, na.rm = TRUE)
+                # Calculate the trimmed mean for all numeric data
+                TRIMMED_MEAN[[i]] <- df %>%
+                        map_dbl(.f = mean, na.rm = TRUE, trim = 0.02)
+                # Calculate the median
+                MEDIAN[[i]] <- df %>%
+                        map_dbl(.f = median, na.rm = TRUE)
+                
+                # Calculate the mode(s)
+                MODE[[i]] <- df %>%
+                        map(.f = Mode)
+                # Calculate the min & max
+                MAX[[i]] <- df %>%
+                        map_dbl(.f = max, na.rm = TRUE)
+                MIN[[i]] <- df %>%
+                        map_dbl(.f = min, na.rm = TRUE)
+                # Calculate the midrange
+                MID_RANGE[[i]] <- MAX[[i]] - MIN[[i]]
+
+                # Variability (Spread)
+                ################################################################
+                # Calculate the variance
+                VARIANCE[[i]] <- df %>%
+                        map_dbl(.f = var, na.rm = TRUE)
+                # Calculate the standard deviation
+                STD_DEV[[i]] <- sqrt(VARIANCE[[i]])
+                # Calculate the standard error of the mean
+                SE_MEAN[[i]] <- df %>%
+                        map_dbl(.f = se_mean, na.rm = TRUE)
+                
+                # Relative Standing (Distribution)
+                ################################################################
+                # Calculate the quantiles
+                Q1[[i]] <- df %>%
+                        map_dbl(.f = quantile, na.rm = TRUE, probs = 0.25)
+                Q3[[i]] <- df %>%
+                        map_dbl(.f = quantile, na.rm = TRUE, probs = 0.75)
+                IQR[[i]] <- paste0(Q1[[i]], ' - ', Q3[[i]])
+                # Calculate the skew
+                if(MAX[[i]] == MIN[[i]]){
+                  SKEW[[i]] <- 0
+                }else{
+                  SKEW[[i]] <- df %>%
+                  map_dbl(.f = e1071::skewness, na.rm = TRUE)
+                }
+                KURTOSIS[[i]] <- df %>%
+                        map_dbl(.f = e1071::kurtosis, na.rm = TRUE)
+                
+                
+                # Transformations
+                ################################################################
+                # Lambda from BOXCOX
+                if(!is.null((preProcess(df, method = c("BoxCox", "center", "scale"),
+                                na.remove = TRUE))$bc[[f]]$lambda) ){
+                        BC_LAMBDA[[i]] <- (preProcess(df, 
+                                method = c("BoxCox", "center", "scale"),
+                                na.remove = TRUE))$bc[[f]]$lambda %>% as.character()
+                }else{
+                        BC_LAMBDA[[i]] <- "None"
+                        }
+                
+                # Iteration loop
+                i <- i + 1
+        }
+}
+
+# Lists must be converted to numeric vectors
+NA_COUNT <- unlist(NA_COUNT) %>% unname()
+NA_FREQ <- unlist(NA_FREQ) %>% unname()
+MEAN <- unlist(MEAN) %>% unname()
+TRIMMED_MEAN <- unlist(TRIMMED_MEAN) %>% unname()
+MEDIAN <- unlist(MEDIAN) %>% unname()
+#MODE <- MODE %>% unlist(recursive = F) %>% as.vector() %>% unname() %>% as.character()
+MAX <- unlist(MAX) %>% unname()
+MIN <- unlist(MIN) %>% unname()
+MID_RANGE <- unlist(MID_RANGE) %>% unname()
+VARIANCE <- unlist(VARIANCE) %>% unname()
+STD_DEV <- unlist(STD_DEV) %>% unname()
+SE_MEAN <- unlist(SE_MEAN) %>% unname()
+Q1 <- unlist(Q1) %>% unname()
+Q3 <- unlist(Q3) %>% unname()
+IQR <- unlist(IQR) %>% unname()
+KURTOSIS <- unlist(KURTOSIS) %>% unname()
+SKEW <- unlist(SKEW) %>% unname()
+BC_LAMBDA <- unlist(BC_LAMBDA) %>% unname()
+
+# Create a dataframe form feature lists
+df_out <- data.frame(FEATURE, TISSUE, NA_COUNT, NA_FREQ, MEAN, TRIMMED_MEAN, MEDIAN,
+                     MAX, MIN, MID_RANGE, VARIANCE, STD_DEV, SE_MEAN, Q1, Q3,
+                     IQR, KURTOSIS, SKEW, BC_LAMBDA) %>%
+        mutate(GET_approx = ifelse(TISSUE %in% 
+                                c("Adrenal","Aorta","Gastrocnemius",
+                                "Heart","Kidney","Lung","Ovaries",
+                                "PaxGene","Testes"), "MSSM", "Stanford")) %>%
+        select(FEATURE, TISSUE, GET_approx, NA_COUNT, NA_FREQ, MEAN, TRIMMED_MEAN, MEDIAN,
+                     MAX, MIN, MID_RANGE, VARIANCE, STD_DEV, SE_MEAN, Q1, Q3,
+                     IQR, KURTOSIS, SKEW, BC_LAMBDA)
+
+
+df_out
+
+
+```
+
+
+
+# MetaData
+
+## Determine Data Types for Features
+```{r Feature Types}
+################################################################################
+####### Determine Data Types of Metadata Features ##############################
+################################################################################
+
+# Create a vector of the qualitative columns
+nums <- unlist(lapply(col_data, is.numeric))
+qual_cols <- names(col_data[, !nums]) %>% unique()
+
+# Qualitative Columns (to keep)
+################################################################################
+qual_keep <- c('GET_site','RNA_extr_plate_ID','RNA_extr_date','Lib_prep_date','Lib_robot',
+               'Lib_kit_id','Lib_batch_ID','Seq_date','Seq_machine_ID','Seq_flowcell_ID',
+               'Seq_flowcell_run','Seq_flowcell_lane','acute.test.d_visit',
+               'acute.test.d_start','acute.test.t_start','acute.test.contactshock',
+               'acute.test.comments','animal.familiarization.d_visit',
+               'animal.familiarization.d_treadmillbegin','animal.familiarization.d_treadmillcomplete',
+               'animal.key.batch','animal.key.intervention',
+               'animal.key.anirandgroup','animal.registration.d_visit','animal.registration.ratid',
+               'animal.registration.d_arrive','animal.registration.batchnumber',
+               'animal.registration.d_reverselight','animal.registration.d_birth',
+               'animal.registration.sex','animal.registration.cagenumber',
+               'specimen.collection.d_visit','specimen.collection.t_anesthesia',
+               'specimen.collection.bloodcomplete','specimen.collection.t_bloodstart',
+               'specimen.collection.t_bloodstop','specimen.collection.t_edtafill',
+               'specimen.collection.t_death','specimen.collection.deathtype','bid',
+               'specimen.processing.samplenumber','specimen.processing.t_collection',
+               'specimen.processing.t_freeze','shiptositeid','animal.key.is_control',
+               'Seq_batch','animal.key.exvsctrl','animal.key.exlt4',
+               'animal.key.anirandgroup.bins.1','specimen.collection.t_death_bins.type')
+
+# All NA columns
+all_na <- c("specimen.processing.t_edtaspin")
+
+
+# Adjust the date & time columns to be both numeric and leave the originals to be one hot encoded
+################################################################################
+# Determine date and time columns that should be converted to both numeric and categorical
+date_to_num <- c("acute.test.d_start","animal.familiarization.d_treadmillbegin",
+                 "animal.registration.d_visit","animal.registration.d_reverselight",
+                 "specimen.collection.d_visit","acute.test.d_visit","animal.familiarization.d_visit",
+                 "animal.familiarization.d_treadmillcomplete","animal.registration.d_arrive",
+                 "animal.registration.d_birth")
+time_to_num <- c("acute.test.t_complete","specimen.collection.t_bloodstart",
+                 "specimen.collection.t_edtafill","specimen.processing.t_collection",
+                 "specimen.processing.t_freeze","calculated.variables.time_death_to_collect_min",
+                 "acute.test.t_start","specimen.collection.t_anesthesia",
+                 "specimen.collection.t_bloodstop","specimen.collection.t_death",
+                 "calculated.variables.time_collect_to_freeze_min","animal_time_last_fed")
+# Create numeric versions of all date and time columns
+for(C in c(date_to_num,time_to_num)){
+        ( C_num <- as.symbol(paste0(C,'_numeric')) )
+        col_data[[sym(C_num)]] <- as.numeric(col_data[[sym(C)]])
+}
+
+# Create a vector of numeric (discrete) columns
+nums <- unlist(lapply(col_data, is.numeric))
+quant_cols <- names(col_data[, nums]) %>% unique()
+
+# Create a vector of the qualitative columns
+qual_cols <- names(col_data[, !nums]) %>% unique()
+
+```
+
+## Important Take-Aways
+
+# Observations:
+- Cortex Samples have low RIN scores (between 6 and 7)
+
+# Visulaization Ideas:
+- Univariant Plots with outlier samples labeled
+        -RIN, r_260_280, r_260_230
+
+# Missing Values:
+- Variables missing from Standford GET:
+  --RNA_extr_conc..ng.uL.
+
+# Technical Notes:
+- Vectors (AKA feature subsets of a given tissue) with all the same numeric values do not undergo transformation.
+
+# Vectors that were not centered and scaled
+
+
+# Create a summary statistics table for each metadata feature (Raw)
+```{r MetaData Summary Statistics Table, warning = FALSE}
+################################################################################
+######### QUANT Columns ########################################################
+################################################################################
+# Collect tissue names
+tissues <- table(col_data$Tissue) %>% names() %>% sort()
+# Collect other features
+ann_features <- c("Tissue", "GET_site")
+# Select just the qunatitative columns
+df_quant <- col_data %>%
+        select(all_of(quant_cols), all_of(ann_features))
+# Collect feature names
+features <- names(df_quant)[names(df_quant) %!in% ann_features]
+
+# Generate a list of features
+df_out <- data.frame()
+#length(features)*length(tissues)
+
+# Create a vector of features
+FEATURE <- c()
+TISSUE <- c()
+NA_COUNT <- list()
+NA_FREQ <- list()
+MEAN <- list()
+TRIMMED_MEAN <- list()
+MEDIAN <- list()
+#MODE <- list()
+MAX <- list()
+MIN <- list()
+MID_RANGE <- list()
+VARIANCE <- list()
+STD_DEV <- list()
+SE_MEAN <- list()
+Q1 <- list()
+Q3 <- list()
+IQR <- list()
+KURTOSIS <- list()
+SKEW <- list()
+BC_LAMBDA <- list()
+
+i <- 1
+#f <- features[i]
+# Iterate through each tissue to collect tissue-specific statistics
+for(f in features){
+        # Add features in proper order for FEATURE column
+        # Same with Tissues
+        f_add <- rep(f, length(tissues))
+        FEATURE <- c(FEATURE, f_add)
+        TISSUE <- c(TISSUE, tissues)
+        # Iterate through each tissue and column to collect the summary statistics
+        
+        #t <- "Ovaries"
+        for(t in tissues){
+                # Subset the df
+                df <- df_quant %>%
+                        filter(Tissue == t) %>%
+                        select(all_of(f))
+                
+                # NA Values
+                ################################################################
+                # The number of NA values
+                NA_COUNT[[i]] <- df %>%
+                        map_dbl(.f = count_na)
+                # The percent NA values
+                NA_FREQ[[i]] <- (df %>%
+                                map_dbl(.f = count_na))/nrow(df)
+                
+                # Central Tendency
+                ################################################################
+                # Calculate the mean for all numeric data
+                MEAN[[i]] <- df %>%
+                        map_dbl(.f = mean, na.rm = TRUE)
+                # Calculate the trimmed mean for all numeric data
+                TRIMMED_MEAN[[i]] <- df %>%
+                        map_dbl(.f = mean, na.rm = TRUE, trim = 0.02)
+                # Calculate the median
+                MEDIAN[[i]] <- df %>%
+                        map_dbl(.f = median, na.rm = TRUE)
+                
+                # Calculate the mode(s)
+                MODE[[i]] <- df %>%
+                        map(.f = Mode)
+                # Calculate the min & max
+                MAX[[i]] <- df %>%
+                        map_dbl(.f = max, na.rm = TRUE)
+                MIN[[i]] <- df %>%
+                        map_dbl(.f = min, na.rm = TRUE)
+                # Calculate the midrange
+                MID_RANGE[[i]] <- MAX[[i]] - MIN[[i]]
+
+                # Variability (Spread)
+                ################################################################
+                # Calculate the variance
+                VARIANCE[[i]] <- df %>%
+                        map_dbl(.f = var, na.rm = TRUE)
+                # Calculate the standard deviation
+                STD_DEV[[i]] <- sqrt(VARIANCE[[i]])
+                # Calculate the standard error of the mean
+                SE_MEAN[[i]] <- df %>%
+                        map_dbl(.f = se_mean, na.rm = TRUE)
+                
+                # Relative Standing (Distribution)
+                ################################################################
+                # Calculate the quantiles
+                Q1[[i]] <- df %>%
+                        map_dbl(.f = quantile, na.rm = TRUE, probs = 0.25)
+                Q3[[i]] <- df %>%
+                        map_dbl(.f = quantile, na.rm = TRUE, probs = 0.75)
+                IQR[[i]] <- paste0(Q1[[i]], ' - ', Q3[[i]])
+                # Calculate the skew
+                if(MAX[[i]] == MIN[[i]]){
+                  SKEW[[i]] <- 0
+                }else{
+                  SKEW[[i]] <- df %>%
+                  map_dbl(.f = e1071::skewness, na.rm = TRUE)
+                }
+                KURTOSIS[[i]] <- df %>%
+                        map_dbl(.f = e1071::kurtosis, na.rm = TRUE)
+                
+                
+                # Transformations
+                ################################################################
+                # Lambda from BOXCOX
+                if(!is.null((preProcess(df, method = c("BoxCox", "center", "scale"),
+                                na.remove = TRUE))$bc[[f]]$lambda) ){
+                        BC_LAMBDA[[i]] <- (preProcess(df, 
+                                method = c("BoxCox", "center", "scale"),
+                                na.remove = TRUE))$bc[[f]]$lambda %>% as.character()
+                }else{
+                        BC_LAMBDA[[i]] <- "None"
+                        }
+                
+                # Iteration loop
+                i <- i + 1
+        }
+}
+
+# Lists must be converted to numeric vectors
+NA_COUNT <- unlist(NA_COUNT) %>% unname()
+NA_FREQ <- unlist(NA_FREQ) %>% unname()
+MEAN <- unlist(MEAN) %>% unname()
+TRIMMED_MEAN <- unlist(TRIMMED_MEAN) %>% unname()
+MEDIAN <- unlist(MEDIAN) %>% unname()
+#MODE <- MODE %>% unlist(recursive = F) %>% as.vector() %>% unname() %>% as.character()
+MAX <- unlist(MAX) %>% unname()
+MIN <- unlist(MIN) %>% unname()
+MID_RANGE <- unlist(MID_RANGE) %>% unname()
+VARIANCE <- unlist(VARIANCE) %>% unname()
+STD_DEV <- unlist(STD_DEV) %>% unname()
+SE_MEAN <- unlist(SE_MEAN) %>% unname()
+Q1 <- unlist(Q1) %>% unname()
+Q3 <- unlist(Q3) %>% unname()
+IQR <- unlist(IQR) %>% unname()
+KURTOSIS <- unlist(KURTOSIS) %>% unname()
+SKEW <- unlist(SKEW) %>% unname()
+BC_LAMBDA <- unlist(BC_LAMBDA) %>% unname()
+
+# Create a dataframe form feature lists
+df_out <- data.frame(FEATURE, TISSUE, NA_COUNT, NA_FREQ, MEAN, TRIMMED_MEAN, MEDIAN,
+                     MAX, MIN, MID_RANGE, VARIANCE, STD_DEV, SE_MEAN, Q1, Q3,
+                     IQR, KURTOSIS, SKEW, BC_LAMBDA) %>%
+        mutate(GET_approx = ifelse(TISSUE %in% 
+                                c("Adrenal","Aorta","Gastrocnemius",
+                                "Heart","Kidney","Lung","Ovaries",
+                                "PaxGene","Testes"), "MSSM", "Stanford")) %>%
+        select(FEATURE, TISSUE, GET_approx, NA_COUNT, NA_FREQ, MEAN, TRIMMED_MEAN, MEDIAN,
+                     MAX, MIN, MID_RANGE, VARIANCE, STD_DEV, SE_MEAN, Q1, Q3,
+                     IQR, KURTOSIS, SKEW, BC_LAMBDA)
+
+# Calculate the number of outliers
+# OUTLIER_UPPER_N <- col_data %>%
+#         select(all_of(quant_cols), -all_of(NA_100)) %>%
+#         map(.f = count_outliers, DIR = 'up')
+# count_outliers <- function(x, DIR = 'up'){
+#         # collect variables greater than threshold
+#         thresh_n <- function(v, t, na.rm = TRUE, dir = DIR){
+#                 if(na.rm == TRUE){
+#                 v <- v[!is.na(v)]}
+#                 if(dir == 'up'){
+#                        length(v[v>=t]) 
+#                 }else if(dir == 'down'){
+#                        length(v[v<=t]) 
+#                 }}
+#         # Calculates standard deviation
+#         SD <- x %>%
+#                 map_dbl(.f = var, na.rm = TRUE) %>%
+#                 sqrt()
+#         MEAN <- x %>%
+#                 map_dbl(.f = mean, na.rm = TRUE)
+#         if(DIR == 'up'){
+#               THRESH <- MEAN + 2*SD
+#               n <- x %>%
+#                 map_dbl(.f = thresh_n, na.rm = TRUE, t = THRESH, dir = 'up')
+#         }else if(DIR == 'down'){
+#                 THRESH <- MEAN - 2*SD
+#                 n <- x %>%
+#                 map_dbl(.f = thresh_n, na.rm = TRUE, t = THRESH, dir = 'down')
+#         }
+#         n
+# }
+
+# TO ADD
+################################################################################
+# Data type
+# Methodology for dealing with NA values
+# Numeric Mode
+# Qualitative Mode
+# Modality
+# Flagged suspicious outliers (Number)
+# Choice of normalization technique
+
+df_out
+
+# MODE[[i]]
+# Mode(df$RIN)
+# 
+# (( x <- df$RIN ))
+# (( ta <- table(x) ))
+# (( tam = max(ta) ))
+# (( tam = rev(sort(ta))[1] ))
+# as.numeric(names(ta)[ta == tam])
+# 
+# Mode_num = function(x){
+#      ta = table(x)
+#      tam = max(ta)
+#      if(all(ta == tam)){
+#        mod = NA
+#      }else if(is.numeric(x)){
+#          mod = as.numeric(names(ta)[ta == tam])
+#      }else{
+#        mod = names(ta)[ta == tam]
+#      }
+#      mod
+#  }
+```
+
+# Examine just the feature of interest
+
+```{r Quick Exam}
+df_out %>%
+        filter(FEATURE == features[1])
+```
+
+# Conditonally transform the data
+```{r Conditionally Transform, warnings = FALSE}
+# Conditionally transform subsets of data
+
+#f_name <- features[1]
+df_trans_out <- data.frame(sample_key = col_data$sample_key)
+
+# Features with custom transforms
+other_features <- c("RIN")
+
+for(f_name in features){
+        df_join <- df_out %>% filter(FEATURE == f_name) %>%
+        select(TISSUE,SKEW,BC_LAMBDA,GET_approx)
+        names(df_join)[1] <- "Tissue"
+        df_left <- col_data %>% select("sample_key", f_name, "Tissue")
+        df_trans <- left_join(df_left, df_join, by = c("Tissue"))
+        f_trans <- paste0(f_name,"_trans")
+        
+        # Consider custom formatting for groups if centering and scaling are used
+        if(f_name %in% other_features){
+          res_df <- df_trans %>% group_by(Tissue) %>% 
+             dplyr::mutate(!!sym(f_trans) := !!sym(f_name)) %>%
+                ungroup()
+        }else{
+          res_df <- df_trans %>% group_by(Tissue) %>% 
+             dplyr::mutate(!!sym(f_trans) := 
+                case_when(SKEW > 0.5 & (BC_LAMBDA >= -0.2 & BC_LAMBDA <= 0.2) ~
+                log(!!sym(f_name)) %>% scale(center = T, scale = T),
+                SKEW < -0.5 & (BC_LAMBDA >= 1.8 & BC_LAMBDA <= 2.2) ~
+                (!!sym(f_name))^2 %>% scale(center = T, scale = T),
+                SKEW >= -0.5 & SKEW <= 0.5 ~
+                !!sym(f_name) %>% scale(center = T, scale = T))) %>%
+                ungroup()
+        }
+        # Ensure the samples are identical
+        if(all(df_trans_out$sample_key == res_df$sample_key)){
+                v_add <- res_df[[f_trans]]
+                df_trans_out <- df_trans_out %>%
+                        mutate(!!sym(f_trans) := v_add)
+        }else{
+                print("Sample keys do not match!")
+        }
+}
+df_trans_out$Tissue <- df_trans$Tissue
+df_trans_out$SKEW <- df_trans$SKEW
+df_trans_out <- df_trans_out %>%
+  mutate(!!sym(f_name) := df_trans[[f_name]])
+
+df_trans_out
+```
+
+# Create a summary statistics table for each metadata feature (Transformed)
+```{r MetaData Summary Statistics Table, warning = FALSE}
+################################################################################
+######### QUANT Columns ########################################################
+################################################################################
+# Examine the feature
+i <- 1
+
+# Collect tissue names
+tissues <- table(col_data$Tissue) %>% names() %>% sort()
+# Collect other features
+ann_features <- c("Tissue", "GET_approx")
+# Collect feature names
+features <- names(df_quant)[names(df_quant) %!in% ann_features]
+features_trans <- paste0(features, "_trans")
+
+# Select just the qunatitative columns
+df_quant_trans <- res_df %>%
+        select(all_of(features_trans[i]), all_of(ann_features))
+
+# Generate a list of features
+df_out_trans <- data.frame()
+#length(features)*length(tissues)
+
+# Create a vector of features
+FEATURE <- c()
+TISSUE <- c()
+NA_COUNT <- list()
+NA_FREQ <- list()
+TRIMMED_MEAN <- list()
+MEDIAN <- list()
+MAX <- list()
+MIN <- list()
+MID_RANGE <- list()
+VARIANCE <- list()
+STD_DEV <- list()
+SE_MEAN <- list()
+Q1 <- list()
+Q3 <- list()
+IQR <- list()
+KURTOSIS <- list()
+SKEW <- list()
+BC_LAMBDA <- list()
+
+#f <- features_trans[i]
+# Iterate through each tissue to collect tissue-specific statistics
+for(f in features_trans){
+        # Add features in proper order for FEATURE column
+        # Same with Tissues
+        f_add <- rep(f, length(tissues))
+        FEATURE <- c(FEATURE, f_add)
+        TISSUE <- c(TISSUE, tissues)
+        # Iterate through each tissue and column to collect the summary statistics
+        
+        #t <- "Gastrocnemius"
+        for(t in tissues){
+                # Subset the df
+                df <- df_quant_trans %>%
+                        ungroup() %>%
+                        filter(Tissue == t) %>%
+                        select(all_of(f))
+                
+                # NA Values
+                ################################################################
+                # The number of NA values
+                NA_COUNT[[i]] <- df %>%
+                        map_dbl(.f = count_na)
+                # The percent NA values
+                NA_FREQ[[i]] <- (df %>%
+                                map_dbl(.f = count_na))/nrow(df)
+                
+                # Central Tendency
+                ################################################################
+                # Calculate the mean for all numeric data
+                MEAN[[i]] <- df %>%
+                        map_dbl(.f = mean, na.rm = TRUE)
+                # Calculate the trimmed mean for all numeric data
+                TRIMMED_MEAN[[i]] <- df %>%
+                        map_dbl(.f = mean, na.rm = TRUE, trim = 0.02)
+                # Calculate the median
+                MEDIAN[[i]] <- df %>%
+                        map_dbl(.f = median, na.rm = TRUE)
+                # Calculate the min & max
+                MAX[[i]] <- df %>%
+                        map_dbl(.f = max, na.rm = TRUE)
+                MIN[[i]] <- df %>%
+                        map_dbl(.f = min, na.rm = TRUE)
+                # Calculate the midrange
+                MID_RANGE[[i]] <- MAX[[i]] - MIN[[i]]
+                # Calculate the mode(s)
+                # MODE_QUANT <- col_data %>%
+                #         select(all_of(quant_cols), -all_of(NA_100)) %>%
+                #         map(.f = modeav, method = "modes", na.rm = TRUE)
+                
+                # Variability (Spread)
+                ################################################################
+                # Calculate the variance
+                VARIANCE[[i]] <- df %>%
+                        map_dbl(.f = var, na.rm = TRUE)
+                # Calculate the standard deviation
+                STD_DEV[[i]] <- sqrt(VARIANCE[[i]])
+                # Calculate the standard error of the mean
+                SE_MEAN[[i]] <- df %>%
+                        map_dbl(.f = se_mean, na.rm = TRUE)
+                
+                # Relative Standing (Distribution)
+                ################################################################
+                # Calculate the quantiles
+                Q1[[i]] <- df %>%
+                        map_dbl(.f = quantile, na.rm = TRUE, probs = 0.25)
+                Q3[[i]] <- df %>%
+                        map_dbl(.f = quantile, na.rm = TRUE, probs = 0.75)
+                IQR[[i]] <- paste0(Q1[[i]], ' - ', Q3[[i]])
+                # Calculate the skew
+                SKEW[[i]] <- df %>%
+                        map_dbl(.f = e1071::skewness, na.rm = TRUE)
+                KURTOSIS[[i]] <- df %>%
+                        map_dbl(.f = e1071::kurtosis, na.rm = TRUE)
+                
+                
+                # Transformations
+                ################################################################
+                # Recommended Transformation from BOXCOX
+                if(!is.null((preProcess(df, method = c("BoxCox"),
+                                na.remove = TRUE))$bc[[f]]$lambda) ){
+                        BC_LAMBDA[[i]] <- (preProcess(df, 
+                                method = c("BoxCox"),
+                                na.remove = TRUE))$bc[[f]]$lambda %>% as.character()
+                }else{
+                        BC_LAMBDA[[i]] <- "None"
+                        }
+                
+                # Iteration loop
+                i <- i + 1
+        }
+}
+
+# Lists must be converted to numeric vectors
+NA_COUNT <- unlist(NA_COUNT) %>% unname()
+NA_FREQ <- unlist(NA_FREQ) %>% unname()
+TRIMMED_MEAN <- unlist(TRIMMED_MEAN) %>% unname()
+MEDIAN <- unlist(MEDIAN) %>% unname()
+MAX <- unlist(MAX) %>% unname()
+MIN <- unlist(MIN) %>% unname()
+MID_RANGE <- unlist(MID_RANGE) %>% unname()
+VARIANCE <- unlist(VARIANCE) %>% unname()
+STD_DEV <- unlist(STD_DEV) %>% unname()
+SE_MEAN <- unlist(SE_MEAN) %>% unname()
+Q1 <- unlist(Q1) %>% unname()
+Q3 <- unlist(Q3) %>% unname()
+IQR <- unlist(IQR) %>% unname()
+KURTOSIS <- unlist(KURTOSIS) %>% unname()
+SKEW <- unlist(SKEW) %>% unname()
+BC_LAMBDA <- unlist(BC_LAMBDA) %>% unname()
+
+# Create a dataframe form feature lists
+df_out_trans <- data.frame(FEATURE, TISSUE, NA_COUNT, NA_FREQ, TRIMMED_MEAN, MEDIAN,
+                     MAX, MIN, MID_RANGE, VARIANCE, STD_DEV, SE_MEAN, Q1, Q3,
+                     IQR, KURTOSIS, SKEW, BC_LAMBDA) %>%
+        mutate(GET_approx = ifelse(TISSUE %in% 
+                                c("Adrenal","Aorta","Gastrocnemius",
+                                "Heart","Kidney","Lung","Ovaries",
+                                "PaxGene","Testes"), "MSSM", "Stanford")) 
+# %>%
+#         select(FEATURE, TISSUE, GET_approx, NA_COUNT, NA_FREQ, TRIMMED_MEAN, MEDIAN,
+#                      MAX, MIN, MID_RANGE, VARIANCE, STD_DEV, SE_MEAN, Q1, Q3,
+#                      IQR, KURTOSIS, SKEW, BC_LAMBDA)
+
+df_out_trans %>% dplyr::select(c(-"TRIMMED_MEAN", -"IQR"))
+
+```
+# Visualize the features by Tissue (Raw & Transformed)
+```{r Univariant Visualization, message=FALSE, warning=FALSE}
+################################################################################
+######### QUANT Columns ########################################################
+################################################################################
+i <- 1
+
+# Select just the qunatitative columns
+df_quant <- col_data %>%
+        select(all_of(quant_cols), Tissue)
+# Collect tissue names
+tissues <- table(col_data$Tissue) %>% names() %>% sort()
+
+# Collect the name of the column of interest
+f_name <- features[i]
+print(f_name)
+f_name_trans <- paste0(f_name, "_trans")
+print(f_name_trans)
+
+df_f <- df_quant %>% select(all_of(f_name), Tissue) %>% arrange(Tissue)
+
+# Plot Histograms Facetted by Tissue (Raw)
+################################################################################
+col_data %>%
+        #filter(GET_site == "MSSM") %>%
+        select(f_name, Tissue) %>%
+        ggplot(aes_string(x=f_name, color = "Tissue", fill = "Tissue")) +
+        geom_histogram(bins =200) +
+        labs(title="Frequency",
+             x=f_name,
+             y = "Frequency") +
+        facet_wrap(~Tissue) +
+        theme(legend.position = "none")
+# Plot Histograms Facetted by Tissue (Transformed)
+################################################################################
+res_df %>%
+        ggplot(aes_string(x=f_name_trans, color = "Tissue", fill = "Tissue")) +
+        geom_histogram(bins =200) +
+        labs(title="Frequency",
+             x=f_name,
+             y = "Frequency") +
+        facet_wrap(~Tissue) +
+        theme(legend.position = "none")
+
+# Plot Boxplots Facetted by Tissue (Raw)
+################################################################################
+col_data %>%
+        #filter(GET_site == "MSSM") %>%
+        select(f_name, Tissue) %>%
+        ggplot(aes_string(x="Tissue", y = f_name, color = "Tissue")) +
+        geom_boxplot() +
+        labs(title="Frequency",
+             y = f_name) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+        theme(legend.position = "none")
+# Plot Boxplots Facetted by Tissue (Transformed)
+################################################################################
+res_df %>%
+        ggplot(aes_string(x="Tissue", y = f_name_trans, color = "Tissue")) +
+        geom_boxplot() +
+        labs(title="Frequency",
+             y = f_name) +
+        theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+        theme(legend.position = "none")
+
+# Plot a Quantile Plots Facetted by Tissue (Raw)
+################################################################################
+df <- col_data %>%
+        #filter(GET_site == "MSSM") %>%
+        select(f_name, Tissue) %>%
+        arrange(Tissue, !!sym(f_name))
+# calculate the normal theoretical quantiles per group
+df2 <- ddply(.data = df, .variables = .(f_name, Tissue), function(dat){
+        n <- nrow(dat)
+        qx <- (1:n - 1)/(n - 1)
+        dat$xq <- qx
+        dat})
+# Plot the qunatile plots
+ggplot(data = df2, aes_string(x = "xq", y = f_name, color = "Tissue")) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  xlab("Theoretical") +
+  ylab(f_name) +
+  facet_wrap(~ Tissue, ncol = 4) +
+        theme(aspect.ratio = 1) +
+        theme(legend.position = "none")
+# Plot a Quantile Plots Facetted by Tissue (Transformed)
+################################################################################
+df <- res_df %>%
+        select(f_name_trans, Tissue) %>%
+        arrange(Tissue, !!sym(f_name_trans))
+# calculate the normal theoretical quantiles per group
+df2 <- ddply(.data = df, .variables = .(f_name_trans, Tissue), function(dat){
+        n <- nrow(dat)
+        qx <- (1:n - 1)/(n - 1)
+        dat$xq <- qx
+        dat})
+# Plot the qunatile plots
+ggplot(data = df2, aes_string(x = "xq", y = f_name_trans, color = "Tissue")) +
+  geom_point(alpha = 0.5) +
+  geom_smooth(method = "lm", se = FALSE, color = "black") +
+  xlab("Theoretical") +
+  ylab(f_name_trans) +
+  facet_wrap(~ Tissue, ncol = 4) +
+        theme(aspect.ratio = 1) +
+        theme(legend.position = "none")
+
+col_data %>% select(Tissue, GET_site) %>% table()
+
+```
+
+
+```{r EDA}
+col_data %>% filter(Tissue == "Ovaries") %>%
+  select(RIN)
+```
+
+
+
+
+# Create a summary statistics table for each gene in RNASeq
+
+
+
+
+
+
+# 0. Create a list of columns that are removed in process
+################################################################################
+# as.numeric(PC_cor2$acute.test.d_start)
+# length(qual_cols)
+# for(i in 141:150){
+#         print(paste0('COLUMN ',i))
+#         print(qual_cols[i])
+#         print(table(as.character(PC_cor2[,qual_cols[i]])))
+#         print(table(as.character(col_data[,qual_cols[i]])))
+# }
+# summary(col_data$animal.key.intervention)
+# table(col_data$animal.familiarization.versionguid)
+
+
+# Reason 1: Columns are not of interest, all value unique
+remove_1 <- names(col_data)[apply(col_data, 2, function(x) length(unique(x)) == nrow(col_data))]
+
+# Reason 2: All values are NA
+remove_2 <- names(PC_cor2)[apply(PC_cor2, 2, function(x)all(is.na(x)))]
+
+# Reason 3: Manual investigation
+remove_3 <- c('sample_key','vial_label','X2D_barcode','Species','BID','PID','Tissue',
+             'Sample_category','Lib_barcode_well','Lib_index_1','Lib_index_2',
+             'labelid','pid','acute.test.participantguid','acute.test.formname',
+             'animal.familiarization.participantguid','animal.familiarization.formname',
+             'Lib_UMI_cycle_num','animal.familiarization.fat','animal.familiarization.lean',
+             'animal.familiarization.comments','animal.key.participantguid','animal.key.protocol',
+             'animal.key.agegroup','animal.key.sitename','animal.registration.participantguid',
+             'animal.registration.staffid','animal.registration.siteguid',
+             'animal.registration.siteid','animal.registration.formguid','acute.test.formguid',
+             'acute.test.siteid','Lib_vendor','Lib_type','Lib_adapter_1','Lib_adapter_2',
+             'Seq_platform','Seq_flowcell_type','Seq_end_type','acute.test.staffid',
+             'acute.test.siteguid','acute.test.versionguid','acute.test.versionnbr',
+             'animal.familiarization.staffid','animal.familiarization.siteguid',
+             'animal.familiarization.siteid','animal.familiarization.versionguid',
+             'animal.familiarization.versionnbr','animal.familiarization.compliant',
+             'animal.registration.staffid','animal.registration.siteguid',
+             'animal.registration.siteid','animal.registration.formguid',
+             'animal.registration.formname','animal.registration.versionguid',
+             'animal.registration.versionnbr','animal.registration.comments',
+             'specimen.collection.participantguid','specimen.collection.siteguid',
+             'specimen.collection.formguid','specimen.collection.formname',
+             'specimen.collection.versionguid','specimen.collection.anesthesiacomments',
+             'specimen.collection.bloodtype','specimen.collection.bloodtube',
+             'specimen.collection.bloodtechid','specimen.collection.bloodcomments',
+             'specimen.collection.uterustype','specimen.collection.uterustechid',
+             'specimen.collection.uteruscomplete','specimen.collection.t_uterusstart',
+             'specimen.collection.t_uterusstop','specimen.collection.uterusweight',
+             'specimen.collection.uteruscomments','specimen.processing.formguid',
+             'specimen.processing.versionguid','specimen.processing.versionnbr',
+             'specimen.processing.formname','specimen.processing.siteguid',
+             'specimen.processing.siteid','specimen.processing.participantguid',
+             'specimen.processing.labelguid','specimen.processing.sampletypedescription',
+             'specimen.processing.sampletypeguid','specimen.processing.aliquotdescription',
+             'specimen.processing.aliquotguid','specimen.processing.volume',
+             'specimen.processing.partialamt','specimen.processing.hemolyzed',
+             'specimen.processing.comments','specimen.processing.t_edtaspin',
+             'specimen.processing.techid','barcode','receivedcas','receivestatuscas')
+
+# Determine which columns ahve no variance
+remove_4 <- names(which(apply(PC_cor2, 2, var) == 0))
+remove_4 <- c(remove_4, 'acute.test.intenseinitial')
+
+PC_cor2 <- PC_cor %>% select(-all_of(c(remove_1,remove_2,remove_3,remove_4)))
+
+# 2. Process columns with NA values
+################################################################################
+# Find columns with missing values
+NA_cols <- colnames(PC_cor2)[ apply(PC_cor2, 2, anyNA) ]
+# Most NAs associated with controls (confounded) or RNA quality measures
+
+# 3. Asjust the date & time columns to be both numeric and leave the originals to be one hot encoded
+################################################################################
+# Determine date and time columns that should be converted to both numeric and categorical
+date_to_num <- c("acute.test.d_start","animal.familiarization.d_treadmillbegin",
+                 "animal.registration.d_visit","animal.registration.d_reverselight",
+                 "specimen.collection.d_visit","acute.test.d_visit","animal.familiarization.d_visit",
+                 "animal.familiarization.d_treadmillcomplete","animal.registration.d_arrive",
+                 "animal.registration.d_birth")
+time_to_num <- c("acute.test.t_complete","specimen.collection.t_bloodstart",
+                 "specimen.collection.t_edtafill","specimen.processing.t_collection",
+                 "specimen.processing.t_freeze","calculated.variables.time_death_to_collect_min",
+                 "acute.test.t_start","specimen.collection.t_anesthesia",
+                 "specimen.collection.t_bloodstop","specimen.collection.t_death",
+                 "calculated.variables.time_collect_to_freeze_min","animal_time_last_fed")
+# Create numeric versions of all date and time columns
+for(C in c(date_to_num,time_to_num)){
+        ( C_num <- as.symbol(paste0(C,'_numeric')) )
+        PC_cor2[[sym(C_num)]] <- as.numeric(PC_cor2[[sym(C)]])
+}
+
+# 4. Impute additional numeric columns to have Gaussian distributions
+################################################################################
+nums <- unlist(lapply(PC_cor2, is.numeric))
+quant_cols <- names(PC_cor2[, nums]) %>% unique()
+
+# Examine each predictor and determine if it demonstrates skewness. If so, correct for skewness via transformation. (e1071 package)
+
+# All columns are numeric so we can apply the skewness function to all columns
+skew_vals <- lapply(PC_cor2[,quant_cols], e1071::skewness) %>% unlist()
+
+r_skew_names <- names(skew_vals)[skew_vals > 1]
+r_skewed <- r_skew_names[!is.na(r_skew_names)]
+mypar(2,2)
+for(i in 1:4){
+        hist(PC_cor2[[r_skewed[i]]], breaks = 50)
+}
+l_skew_names <- names(skew_vals)[skew_vals < -1]
+l_skewed <- l_skew_names[!is.na(l_skew_names)]
+mypar(2,2)
+for(i in 1:4){
+        hist(PC_cor2[[l_skewed[i]]], breaks = 50)
+}
+
+# The BoxCoxTrans function in the caret package can be used to determine which sort of transformation to use (cite Box & Cox, 1964).
+trans <- preProcess(PC_cor2[, quant_cols],
+                    method = c("BoxCox", "center", "scale"))
+# Visualize the results
+trans
+# Apply the transformations:
+PC_cor3 <- predict(trans, PC_cor2)
+# We can revisualize the columns
+mypar(2,2)
+for(i in 1:4){
+        hist(PC_cor3[[r_skewed[i]]], breaks = 50)
+}
+for(i in 1:4){
+        hist(PC_cor3[[l_skewed[i]]], breaks = 50)
+}
+
+# We can add suffixes to columns
+colnames(PC_cor3) <- paste(colnames(PC_cor3), "bxcs", sep = "_")
+
+# Add columns 
+PC_cor4 <- cbind(PC_cor2, PC_cor3)
+
+# 5. One hot encode the qualitative variables (dummify)
+################################################################################
+# Update the columns we have choosen to keep (we need to filter out some zerovar columns)
+qual_keep <- qual_keep[qual_keep %in% names(PC_cor4)]
+# Convert all quantitative variables to factors
+qual_keep2 <- c()
+for(C in qual_keep){
+        PC_cor4[[C]] <- as.character(PC_cor4[[C]])
+        PC_cor4[[C]] <- as.factor(PC_cor4[[C]])
+        if(nlevels(PC_cor4[[C]]) >= 2){
+                qual_keep2 <- c(qual_keep2,C)
+        }
+}
+# Dummify the qualitative variables with more than 2 levels
+dmy <- dummyVars(" ~ .", data = PC_cor4[, qual_keep2])
+PC_cor5 <- data.frame(predict(dmy, newdata = PC_cor4[, qual_keep2]))
+PC_cor4 <- PC_cor4 %>% select(-all_of(qual_keep))
+PC_cor4 <- cbind(PC_cor4, PC_cor5)
+
+# Remove columns without at least 2 unique values
+PC_cor4 <- PC_cor4[, sapply(PC_cor4, function(col) length(unique(col))) > 1]
+
+
+
+
+
+
+
